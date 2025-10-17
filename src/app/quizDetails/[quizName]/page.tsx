@@ -55,7 +55,7 @@ const handleGenerateQuiz = async () => {
     const form = new FormData();
     form.append("message", prompt);
 
-    const res = await fetch("/api/chatGPT", {
+    const res = await fetch("/api/AI", {
       method: "POST",
       body: form,
     });
