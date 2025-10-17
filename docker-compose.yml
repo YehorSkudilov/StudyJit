@@ -1,6 +1,42 @@
 version: "3.9"
 
 services:
+  # 🧠 Ollama (DeepSeek / LLaMA / Mistral)
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ${OLLAMA_NAME}
+    restart: always
+    ports:
+      - "${OLLAMA_PORT}:11434"
+    volumes:
+      - ollama:/root/.ollama
+    networks:
+      - next-network
+    environment:
+      - OLLAMA_NO_GPU=${OLLAMA_NO_GPU}
+      - OLLAMA_KEEP_ALIVE=${OLLAMA_KEEP_ALIVE}
+
+  # 🌐 Next.js app
+  app:
+    build: .
+    container_name: ${APP_NAME}
+    restart: always
+    ports:
+      - "${APP_PORT}:3000"
+    depends_on:
+      - db
+      - ollama
+    environment:
+      - NODE_ENV=production
+      - OLLAMA_API_URL=http://${OLLAMA_NAME}:${OLLAMA_PORT}
+      - DB_HOST=${DB_HOST}
+      - DB_USER=root
+      - DB_PASS=${DB_PASS}
+      - DB_NAME=${DB_NAME}
+    networks:
+      - next-network
+
+  # 🗄️ MySQL database
   db:
     image: mysql:8.0
     container_name: ${DB_HOST}
@@ -13,19 +49,9 @@ services:
     networks:
       - next-network
 
-  app:
-    build: .
-    container_name: ${APP_NAME}
-    restart: always
-    ports:
-      - "${APP_PORT}:3000"
-    depends_on:
-      - db
-    networks:
-      - next-network
-
 volumes:
   mysql-data:
+  ollama:
 
 networks:
   next-network:

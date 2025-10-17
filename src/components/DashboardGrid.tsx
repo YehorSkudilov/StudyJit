@@ -51,14 +51,13 @@ function SortableItem({
     transform: CSS.Transform.toString(transform),
     transition,
     cursor: isDragging ? "grabbing" : "grab",
-    outline: "none", // ✅ disable focus ring
+    outline: "none",
+    height: "100%", // ✅ allow full height stretching
   };
 
   const handlePointerDown = (e: React.PointerEvent) => {
-    // prevent white border focus on Shift/Ctrl or drag
     e.preventDefault();
     if (e.button === 0) {
-      e.currentTarget.blur();
       document.body.style.userSelect = "none";
     }
   };
@@ -70,8 +69,8 @@ function SortableItem({
   return (
     <div
       ref={setNodeRef}
-      tabIndex={-1} // ✅ removes keyboard focus highlight
       style={style}
+      className="h-full" // ✅ stretch vertically inside grid cell
       onPointerDown={handlePointerDown}
       onPointerUp={handlePointerUp}
       {...attributes}
@@ -115,9 +114,7 @@ export default function DashboardGrid({
   }, [visibleItems]);
 
   const sensors = useSensors(
-    useSensor(PointerSensor, {
-      activationConstraint: { distance: 6 },
-    }),
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
     useSensor(KeyboardSensor)
   );
 
@@ -131,26 +128,18 @@ export default function DashboardGrid({
     setItems(newOrder);
     onReorder?.(newOrder);
 
-    // remove lingering browser focus ring
     document.activeElement instanceof HTMLElement && document.activeElement.blur();
   };
 
   return (
-    <DndContext
-      sensors={sensors}
-      collisionDetection={closestCenter}
-      onDragEnd={handleDragEnd}
-    >
-      <SortableContext
-        items={items.map((i) => i.name)}
-        strategy={rectSortingStrategy}
-      >
+    <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+      <SortableContext items={items.map((i) => i.name)} strategy={rectSortingStrategy}>
         <div
-          className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 items-stretch"
+          className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 items-stretch [grid-auto-rows:1fr]"
           style={{
             userSelect: "none",
             outline: "none",
-            WebkitTapHighlightColor: "transparent", // ✅ disables mobile highlight
+            WebkitTapHighlightColor: "transparent",
           }}
         >
           {items.map((item, idx) => (

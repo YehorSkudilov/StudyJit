@@ -5,6 +5,7 @@ import Header from "@/components/DashboardHeader";
 import DashboardGrid from "@/components/DashboardGrid";
 import FloatingAddButton from "@/components/FloatingAddButton";
 import CreateItemPopup from "@/components/CreateItemPopup";
+import { useRouter } from "next/navigation";
 
 type Quiz = {
   name: string;
@@ -18,6 +19,7 @@ type Folder = {
 };
 
 export default function DashboardPage() {
+  const router = useRouter();
   const [quizzes, setQuizzes] = useState<Quiz[]>([
     { name: "Math 101 Quiz", score: 90, folder: "Math Notes" },
     { name: "Physics Chapter 3", score: 85, folder: "Physics Notes" },
@@ -117,7 +119,7 @@ export default function DashboardPage() {
           selectedItems={selectedItems}
           onItemClick={handleItemClick}
           onFolderDoubleClick={(name) => setActiveFolder(name)}
-          onQuizDoubleClick={(name) => alert(`Open Quiz: ${name}`)}
+          onQuizDoubleClick={(quizName) => router.push(`/quizDetails/${encodeURIComponent(quizName)}`)}
           quizzes={quizzes}
           activeFolder={activeFolder}
           onReorder={(newOrder) => console.log("New order:", newOrder)}
