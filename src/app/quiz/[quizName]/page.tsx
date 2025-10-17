@@ -11,41 +11,91 @@ import {
 } from "lucide-react";
 import AlertPopup from "@/components/AlertPopup";
 
+interface Question {
+  id: number;
+  question: string;
+  options: string[];
+  correct: string; // Correct answer is now a letter (e.g., "A", "B", "C", "D")
+}
+
 export default function QuizPage() {
   const router = useRouter();
   const { quizName } = useParams();
   const decodedQuizName = decodeURIComponent(quizName as string);
 
-  const [questions] = useState([
-    { id: 1, question: "What is the capital of France?", options: ["Berlin", "Madrid", "Paris", "Lisbon"], correct: "Paris" },
-    { id: 2, question: "Which planet is known as the Red Planet?", options: ["Earth", "Mars", "Jupiter", "Venus"], correct: "Mars" },
-    { id: 3, question: "What is 12 × 8?", options: ["88", "96", "84", "100"], correct: "96" },
-  ]);
+  const [quizId, setQuizId] = useState<number | null>(null);
+  const [questions, setQuestions] = useState<Question[]>([]);
+  const [description, setDescription] = useState("");
+  const [loading, setLoading] = useState(true);
 
   const [answers, setAnswers] = useState<Record<number, string>>({});
   const [submitted, setSubmitted] = useState(false);
   const [score, setScore] = useState<number | null>(null);
-  const [showPopup, setShowPopup] = useState(false); // ⬅️ New state
+  const [showPopup, setShowPopup] = useState(false);
 
+  // ✅ Fetch quiz data from DB
   useEffect(() => {
-    window.scrollTo(0, 0);
-  }, []);
+    const storedId = sessionStorage.getItem("selectedQuizId");
+    if (!storedId) {
+      setShowPopup(true);
+      setTimeout(() => router.push("/dashboard"), 2000);
+      return;
+    }
+
+    const id = Number(storedId);
+    setQuizId(id);
+
+    const fetchQuiz = async () => {
+      try {
+        const res = await fetch(`/api/db/getQuiz/${id}`);
+        const data = await res.json();
+
+        if (!res.ok) throw new Error(data.error || "Failed to load quiz");
+
+        setQuestions(data.questions || []);
+        setDescription(data.description || "");
+      } catch (err) {
+        console.error("❌ Error fetching quiz:", err);
+        setShowPopup(true);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchQuiz();
+  }, [router]);
 
   const selectAnswer = (qid: number, option: string) => {
     if (submitted) return;
     setAnswers({ ...answers, [qid]: option });
   };
 
+  const getCorrectAnswerIndex = (correctAnswer: string): number => {
+    // Convert letter to index (A -> 0, B -> 1, C -> 2, D -> 3)
+    const answerIndexMap: Record<string, number> = { A: 0, B: 1, C: 2, D: 3 };
+    return answerIndexMap[correctAnswer.toUpperCase()] ?? -1; // If not found, return -1 (invalid)
+  };
+
   const handleSubmit = () => {
     if (Object.keys(answers).length < questions.length) {
-      setShowPopup(true); // ⬅️ Show popup instead of alert
+      setShowPopup(true);
       return;
     }
 
     let total = 0;
     questions.forEach((q) => {
-      if (answers[q.id] === q.correct) total++;
+      const correctIndex = getCorrectAnswerIndex(q.correct); // Convert correct letter to index
+      const selectedIndex = q.options.indexOf(answers[q.id]); // Find the index of the selected answer
+
+      // Log the comparison for debugging
+      console.log(`Comparing question ${q.id}:`);
+      console.log(`Selected answer index: "${selectedIndex}"`);
+      console.log(`Correct answer index: "${correctIndex}"`);
+
+      // Compare the selected index with the correct index
+      if (selectedIndex === correctIndex) total++;
     });
+
     setScore(total);
     setSubmitted(true);
   };
@@ -56,9 +106,24 @@ export default function QuizPage() {
     setScore(null);
   };
 
+  if (loading) {
+    return (
+      <div className="flex justify-center items-center min-h-screen text-lg text-gray-700 dark:text-gray-200">
+        Loading quiz...
+      </div>
+    );
+  }
+
+  if (questions.length === 0) {
+    return (
+      <div className="flex justify-center items-center min-h-screen text-lg text-gray-700 dark:text-gray-200">
+        ❌ No questions found for this quiz.
+      </div>
+    );
+  }
+
   return (
     <>
-      {/* Popup Overlay */}
       {showPopup && (
         <AlertPopup
           message="Please answer all questions before submitting."
@@ -82,6 +147,11 @@ export default function QuizPage() {
               <BookOpen className="w-6 h-6" />
               {decodedQuizName}
             </h1>
+            {description && (
+              <p className="mt-2 text-gray-600 dark:text-gray-300 text-center">
+                {description}
+              </p>
+            )}
           </header>
 
           {/* Quiz Body */}
@@ -102,7 +172,7 @@ export default function QuizPage() {
                 <div className="grid sm:grid-cols-2 gap-3">
                   {q.options.map((opt) => {
                     const isSelected = answers[q.id] === opt;
-                    const isCorrect = opt === q.correct;
+                    const isCorrect = opt === q.options[getCorrectAnswerIndex(q.correct)]; // Correct answer comparison
                     const showCorrect =
                       submitted &&
                       ((isCorrect && isSelected) || (!isSelected && isCorrect));

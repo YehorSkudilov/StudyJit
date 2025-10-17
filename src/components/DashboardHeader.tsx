@@ -3,8 +3,7 @@ import { ChevronLeft, Folder as FolderIcon, BookOpen, Trash2, Move, CheckSquare,
 interface DashboardHeaderProps {
   activeFolder: string | null;
   goBack: () => void;
-  selectedFolders: string[];
-  selectedQuizzes: string[];
+  selectedItems: string[]; // Combined array for selected folders and quizzes
   onDeleteSelected: () => void;
   onSelectAll: () => void;
   onDeselectAll: () => void;
@@ -13,25 +12,24 @@ interface DashboardHeaderProps {
 export default function DashboardHeader({
   activeFolder,
   goBack,
-  selectedFolders,
-  selectedQuizzes,
+  selectedItems,
   onDeleteSelected,
   onSelectAll,
   onDeselectAll,
 }: DashboardHeaderProps) {
-  const hasSelection = selectedFolders.length > 0 || selectedQuizzes.length > 0;
+  const hasSelection = selectedItems.length > 0;
 
   return (
     <section className="px-6 sm:px-20 py-10 relative">
       <div className="relative w-full flex items-center justify-center">
         {/* Back button on the left */}
         {activeFolder && (
-                 <button
-          onClick={goBack}
-          className="mr-4 p-2 text-gray-600 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600 hover:text-gray-900 dark:hover:text-white rounded-full transition-colors cursor-pointer z-10"
-        >
-          <ChevronLeft className="w-5 h-5" />
-        </button>
+          <button
+            onClick={goBack}
+            className="mr-4 p-2 text-gray-600 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600 hover:text-gray-900 dark:hover:text-white rounded-full transition-colors cursor-pointer z-10"
+          >
+            <ChevronLeft className="w-5 h-5" />
+          </button>
         )}
 
         {/* Centered Title */}
@@ -43,8 +41,6 @@ export default function DashboardHeader({
           )}
           {activeFolder || "Learning Space"}
         </h1>
-
-
 
         {/* Action buttons on the right */}
         <div className="absolute right-0 flex gap-3">

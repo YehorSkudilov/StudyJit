@@ -4,31 +4,13 @@ import { RowDataPacket } from "mysql2";
 
 /**
  * GET /api/db/getQuiz/[id]
- * Fetches a single quiz by ID (with its questions).
- *
- * Example:
- *   /api/db/getQuiz/1
- *
- * Example response:
- * {
- *   "id": 1,
- *   "name": "Math 101 Quiz",
- *   "description": "Basic algebra and arithmetic",
- *   "questions": [
- *     {
- *       "id": 5,
- *       "question": "What is 2+2?",
- *       "options": ["3", "4", "5", "6"],
- *       "correct": "4"
- *     }
- *   ]
- * }
+ * Fetches a single quiz by ID (with its description, prompt, generation status, and questions).
  */
 export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const { id } = await params; // 👈 must await the promise now
+  const { id } = await params;
 
   try {
     const quizId = Number(id);
@@ -38,8 +20,11 @@ export async function GET(
 
     const db = await getConnection();
 
+    // ✅ Include prompt + generation_status
     const [quizRows] = await db.query<RowDataPacket[]>(
-      `SELECT id, name, description FROM quizzes WHERE id = ?`,
+      `SELECT id, name, description, prompt, generation_status
+       FROM quizzes
+       WHERE id = ?`,
       [quizId]
     );
 
@@ -50,9 +35,11 @@ export async function GET(
 
     const quiz = quizRows[0];
 
+    // ✅ Fetch questions
     const [questionRows] = await db.query<RowDataPacket[]>(
       `SELECT id, question, option_a, option_b, option_c, option_d, correct_answer
-       FROM quiz_questions WHERE quiz_id = ?`,
+       FROM quiz_questions
+       WHERE quiz_id = ?`,
       [quizId]
     );
 
@@ -74,4 +61,3 @@ export async function GET(
     );
   }
 }
-

@@ -12,12 +12,16 @@ type Quiz = {
   name: string;
   description: string;
   folder?: string;
+  generation_status?: "pending" | "success" | "failed" | null; // ✅ new field
 };
 
 type Folder = {
   name: string;
   parent?: string;
 };
+
+// ✅ Define lightweight type for double-click payload
+type QuizPreview = { id: number; name: string };
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -29,39 +33,39 @@ export default function DashboardPage() {
   const [isPopupOpen, setPopupOpen] = useState(false);
 
   // ✅ Fetch quizzes from backend
-useEffect(() => {
-  const fetchQuizzes = async () => {
-    try {
-      const res = await fetch("/api/db/getQuizzes");
-      if (!res.ok) throw new Error("Failed to load quizzes");
+  useEffect(() => {
+    const fetchQuizzes = async () => {
+      try {
+        const res = await fetch("/api/db/getQuizzes");
+        if (!res.ok) throw new Error("Failed to load quizzes");
 
-      const data = await res.json();
+        const data = await res.json();
 
-      const derivedFolders: Folder[] = [];
-      data.forEach((quiz: Quiz) => {
-        if (quiz.description?.includes("folder")) {
-          const match = quiz.description.match(/folder "(.*?)"/);
-          if (match && !derivedFolders.some((f) => f.name === match[1])) {
-            derivedFolders.push({ name: match[1] });
+        // Generate folders dynamically from descriptions
+        const derivedFolders: Folder[] = [];
+        data.forEach((quiz: Quiz) => {
+          if (quiz.description?.includes("folder")) {
+            const match = quiz.description.match(/folder "(.*?)"/);
+            if (match && !derivedFolders.some((f) => f.name === match[1])) {
+              derivedFolders.push({ name: match[1] });
+            }
           }
-        }
-      });
+        });
 
-      // ✅ Remove "root" folder
-      const cleanedFolders = derivedFolders.filter(
-        (f) => f.name.toLowerCase() !== "root"
-      );
+        // ✅ Remove "root" folder if present
+        const cleanedFolders = derivedFolders.filter(
+          (f) => f.name.toLowerCase() !== "root"
+        );
 
-      setQuizzes(data);
-      setFolders(cleanedFolders);
-    } catch (err) {
-      console.error("❌ Failed to load quizzes:", err);
-    }
-  };
+        setQuizzes(data);
+        setFolders(cleanedFolders);
+      } catch (err) {
+        console.error("❌ Failed to load quizzes:", err);
+      }
+    };
 
-  fetchQuizzes();
-}, []);
-
+    fetchQuizzes();
+  }, []);
 
   const folderQuizzes = quizzes.filter((q) => q.folder === activeFolder);
   const subfolders = folders.filter(
@@ -69,6 +73,7 @@ useEffect(() => {
   );
 
   // --- Handlers ---
+
   const handleCreateQuiz = async (title: string, folder?: string) => {
     try {
       const response = await fetch("/api/db/createQuiz", {
@@ -91,7 +96,7 @@ useEffect(() => {
         return;
       }
 
-      // ✅ Refresh quizzes from backend
+      // ✅ Refresh quizzes
       const updated = await fetch("/api/db/getQuizzes");
       setQuizzes(await updated.json());
       setPopupOpen(false);
@@ -108,11 +113,18 @@ useEffect(() => {
     setPopupOpen(false);
   };
 
-  const handleItemClick = (name: string, type: "folder" | "quiz", index: number, e: React.MouseEvent) => {
+  const handleItemClick = (
+    name: string,
+    type: "folder" | "quiz",
+    index: number,
+    e: React.MouseEvent
+  ) => {
     const visibleItems = [
       ...subfolders.map((f) => f.name),
       ...folderQuizzes.map((q) => q.name),
-      ...(!activeFolder ? quizzes.filter((q) => !q.folder).map((q) => q.name) : []),
+      ...(!activeFolder
+        ? quizzes.filter((q) => !q.folder).map((q) => q.name)
+        : []),
     ];
 
     let startIndex = lastIndex !== null ? lastIndex : index;
@@ -122,13 +134,17 @@ useEffect(() => {
       const rangeEnd = Math.max(startIndex, index);
       const rangeItems = visibleItems.slice(rangeStart, rangeEnd + 1);
 
-      setSelectedItems((prev) => Array.from(new Set([...prev, ...rangeItems])));
+      setSelectedItems((prev) =>
+        Array.from(new Set([...prev, ...rangeItems]))
+      );
       setLastIndex(index);
       return;
     }
 
     setSelectedItems((prev) =>
-      prev.includes(name) ? prev.filter((n) => n !== name) : [...prev, name]
+      prev.includes(name)
+        ? prev.filter((n) => n !== name)
+        : [...prev, name]
     );
     setLastIndex(index);
   };
@@ -144,7 +160,9 @@ useEffect(() => {
     const visibleItems = [
       ...subfolders.map((f) => f.name),
       ...folderQuizzes.map((q) => q.name),
-      ...(!activeFolder ? quizzes.filter((q) => !q.folder).map((q) => q.name) : []),
+      ...(!activeFolder
+        ? quizzes.filter((q) => !q.folder).map((q) => q.name)
+        : []),
     ];
     setSelectedItems(visibleItems);
   };
@@ -157,10 +175,11 @@ useEffect(() => {
       <Header
         activeFolder={activeFolder}
         goBack={() =>
-          setActiveFolder(folders.find((f) => f.name === activeFolder)?.parent || null)
+          setActiveFolder(
+            folders.find((f) => f.name === activeFolder)?.parent || null
+          )
         }
-        selectedFolders={selectedItems.filter((n) => folders.map((f) => f.name).includes(n))}
-        selectedQuizzes={selectedItems.filter((n) => quizzes.map((q) => q.name).includes(n))}
+        selectedItems={selectedItems} // Pass single selectedItems array
         onDeleteSelected={handleDeleteSelected}
         onSelectAll={handleSelectAll}
         onDeselectAll={handleDeselectAll}
@@ -173,11 +192,11 @@ useEffect(() => {
           selectedItems={selectedItems}
           onItemClick={handleItemClick}
           onFolderDoubleClick={(name) => setActiveFolder(name)}
-          onQuizDoubleClick={(quiz) =>
-  router.push(
-    `/quizDetails/${encodeURIComponent(quiz.name)}`,
-    { state: { id: quiz.id } } // 👈 securely passed
-  )          }
+          // ✅ Now matches the Grid prop exactly
+          onQuizDoubleClick={(quiz: QuizPreview) => {
+            sessionStorage.setItem("selectedQuizId", quiz.id.toString());
+            router.push(`/quizDetails/${encodeURIComponent(quiz.name)}`);
+          }}
           quizzes={quizzes}
           activeFolder={activeFolder}
           onReorder={(newOrder) => console.log("New order:", newOrder)}

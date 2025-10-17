@@ -9,6 +9,8 @@ import Image from 'next/image';
 
 const tabs = [
   { href: '/dashboard', label: 'Dashboard' },
+  { href: '/files', label: 'Files' },
+
 ];
 
 export default function Navbar() {

@@ -30,8 +30,8 @@ interface DashboardGridProps {
     e: React.MouseEvent
   ) => void;
   onFolderDoubleClick: (name: string) => void;
-  onQuizDoubleClick: (name: string) => void;
-  quizzes: { name: string; folder?: string }[];
+  onQuizDoubleClick: (quiz: { id: number; name: string }) => void;
+  quizzes: { id: number; name: string; folder?: string }[];
   activeFolder: string | null;
   onReorder?: (newOrder: { type: "folder" | "quiz"; name: string }[]) => void;
 }
@@ -57,9 +57,7 @@ function SortableItem({
 
   const handlePointerDown = (e: React.PointerEvent) => {
     e.preventDefault();
-    if (e.button === 0) {
-      document.body.style.userSelect = "none";
-    }
+    if (e.button === 0) document.body.style.userSelect = "none";
   };
 
   const handlePointerUp = () => {
@@ -159,7 +157,10 @@ export default function DashboardGrid({
                   quizName={item.name}
                   selected={selectedItems.includes(item.name)}
                   onClick={(e) => onItemClick(item.name, "quiz", idx, e)}
-                  onDoubleClick={() => onQuizDoubleClick(item.name)}
+                  onDoubleClick={() => {
+                    const quiz = quizzes.find((q) => q.name === item.name);
+                    if (quiz) onQuizDoubleClick(quiz); // ✅ send { id, name }
+                  }}
                 />
               )}
             </SortableItem>
