@@ -1,0 +1,31 @@
+version: "3.9"
+
+services:
+  db:
+    image: mysql:8.0
+    container_name: ${DB_HOST}
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_PASS}
+      MYSQL_DATABASE: ${DB_NAME}
+    volumes:
+      - mysql-data:/var/lib/mysql
+    networks:
+      - next-network
+
+  app:
+    build: .
+    container_name: ${APP_NAME}
+    restart: always
+    ports:
+      - "${APP_PORT}:3000"
+    depends_on:
+      - db
+    networks:
+      - next-network
+
+volumes:
+  mysql-data:
+
+networks:
+  next-network:
