@@ -21,7 +21,7 @@ import { CSS } from "@dnd-kit/utilities";
 
 interface DashboardGridProps {
   subfolders: { name: string }[];
-  folderQuizzes: { name: string; score: number }[];
+  folderQuizzes: { name: string }[];
   selectedItems: string[];
   onItemClick: (
     name: string,
@@ -31,7 +31,7 @@ interface DashboardGridProps {
   ) => void;
   onFolderDoubleClick: (name: string) => void;
   onQuizDoubleClick: (name: string) => void;
-  quizzes: { name: string; score: number; folder?: string }[];
+  quizzes: { name: string; folder?: string }[];
   activeFolder: string | null;
   onReorder?: (newOrder: { type: "folder" | "quiz"; name: string }[]) => void;
 }
@@ -52,7 +52,7 @@ function SortableItem({
     transition,
     cursor: isDragging ? "grabbing" : "grab",
     outline: "none",
-    height: "100%", // ✅ allow full height stretching
+    height: "100%",
   };
 
   const handlePointerDown = (e: React.PointerEvent) => {
@@ -70,7 +70,7 @@ function SortableItem({
     <div
       ref={setNodeRef}
       style={style}
-      className="h-full" // ✅ stretch vertically inside grid cell
+      className="h-full"
       onPointerDown={handlePointerDown}
       onPointerUp={handlePointerUp}
       {...attributes}
@@ -128,7 +128,9 @@ export default function DashboardGrid({
     setItems(newOrder);
     onReorder?.(newOrder);
 
-    document.activeElement instanceof HTMLElement && document.activeElement.blur();
+    if (document.activeElement instanceof HTMLElement) {
+      document.activeElement.blur();
+    }
   };
 
   return (
@@ -155,11 +157,6 @@ export default function DashboardGrid({
               ) : (
                 <QuizCard
                   quizName={item.name}
-                  score={
-                    folderQuizzes.find((q) => q.name === item.name)?.score ??
-                    quizzes.find((q) => q.name === item.name)?.score ??
-                    0
-                  }
                   selected={selectedItems.includes(item.name)}
                   onClick={(e) => onItemClick(item.name, "quiz", idx, e)}
                   onDoubleClick={() => onQuizDoubleClick(item.name)}

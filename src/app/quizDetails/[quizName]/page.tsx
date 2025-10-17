@@ -54,32 +54,63 @@ const handleGenerateQuiz = async () => {
 
     const form = new FormData();
     form.append("message", prompt);
+    form.append("quizName", decodedQuizName);
+    form.append("description", description);
 
-    const res = await fetch("/api/AI", {
+    const res = await fetch("/api/ai/generateQuiz", {
       method: "POST",
       body: form,
     });
 
     const data = await res.json();
-
-    // 🧠 Add this line:
     console.log("📦 API Response:", data);
 
-    if (data.questions) {
-      localStorage.setItem(`quiz_${decodedQuizName}`, JSON.stringify(data.questions));
+    // 🔹 Handle success
+    if (res.ok && data.success) {
       setQuizStatus(true);
-      setAlertMessage("✅ Quiz generated successfully!");
-    } else {
-      throw new Error("Invalid response format");
+      setAlertMessage(`✅ Quiz "${decodedQuizName}" generated and saved!`);
+      setShowAlert(true);
+
+      // Optionally store quiz metadata locally
+      localStorage.setItem(
+        `quiz_${decodedQuizName}`,
+        JSON.stringify({
+          quizId: data.quizId,
+          questionCount: data.questionCount,
+          description,
+        })
+      );
+      return;
     }
+
+    // 🔹 Handle specific failure steps
+    if (!data.success) {
+      const reason =
+        data.error ||
+        (data.step === "ollama"
+          ? "Model failed to generate quiz."
+          : data.step === "database"
+          ? "Failed to save quiz to database."
+          : "Unknown error during quiz generation.");
+
+      setQuizStatus(false);
+      setAlertMessage(`❌ ${reason}`);
+      setShowAlert(true);
+      return;
+    }
+
+    // 🔹 Catch-all: invalid response
+    setQuizStatus(false);
+    setAlertMessage("❌ Unexpected response from server.");
+    setShowAlert(true);
   } catch (err) {
     console.error("❌ Error generating quiz:", err);
     setQuizStatus(false);
     setAlertMessage("❌ Failed to generate quiz. Try again.");
-  } finally {
     setShowAlert(true);
   }
 };
+
 
 
 

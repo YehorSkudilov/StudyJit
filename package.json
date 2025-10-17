@@ -13,6 +13,7 @@
     "@dnd-kit/modifiers": "^9.0.0",
     "@dnd-kit/sortable": "^10.0.0",
     "lucide-react": "^0.546.0",
+    "mysql2": "^3.15.2",
     "next": "15.5.5",
     "next-auth": "^4.24.11",
     "openai": "^6.4.0",
