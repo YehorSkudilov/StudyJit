@@ -69,7 +69,6 @@ export default function DashboardPage() {
       return;
     }
 
-    // Toggle selection
     setSelectedItems(prev =>
       prev.includes(name) ? prev.filter(n => n !== name) : [...prev, name]
     );
@@ -83,16 +82,33 @@ export default function DashboardPage() {
     setLastIndex(null);
   };
 
+  // --- New Select/Deselect Functions ---
+  const handleSelectAll = () => {
+    const visibleItems = [
+      ...subfolders.map(f => f.name),
+      ...folderQuizzes.map(q => q.name),
+      ...(!activeFolder ? quizzes.filter(q => !q.folder).map(q => q.name) : []),
+    ];
+    setSelectedItems(visibleItems);
+  };
+
+  const handleDeselectAll = () => {
+    setSelectedItems([]);
+  };
+
   // --- JSX ---
   return (
     <div className="min-h-screen flex flex-col bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 relative">
-      <Header
-        activeFolder={activeFolder}
-        goBack={() => setActiveFolder(folders.find(f => f.name === activeFolder)?.parent || null)}
-        selectedFolders={selectedItems.filter(n => folders.map(f => f.name).includes(n))}
-        selectedQuizzes={selectedItems.filter(n => quizzes.map(q => q.name).includes(n))}
-        onDeleteSelected={handleDeleteSelected}
-      />
+    <Header
+      activeFolder={activeFolder}
+      goBack={() => setActiveFolder(folders.find(f => f.name === activeFolder)?.parent || null)}
+      selectedFolders={selectedItems.filter(n => folders.map(f => f.name).includes(n))}
+      selectedQuizzes={selectedItems.filter(n => quizzes.map(q => q.name).includes(n))}
+      onDeleteSelected={handleDeleteSelected}
+      onSelectAll={handleSelectAll}           // ⬅ added
+      onDeselectAll={handleDeselectAll}       // ⬅ added
+    />
+
 
       <main className="px-6 sm:px-20 pb-20">
         <DashboardGrid
@@ -104,6 +120,7 @@ export default function DashboardPage() {
           onQuizDoubleClick={(name) => alert(`Open Quiz: ${name}`)}
           quizzes={quizzes}
           activeFolder={activeFolder}
+          onReorder={(newOrder) => console.log("New order:", newOrder)}
         />
       </main>
 

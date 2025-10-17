@@ -1,4 +1,4 @@
-import { ArrowLeft, Folder as FolderIcon, BookOpen, Trash2, Move } from "lucide-react";
+import { ArrowLeft, Folder as FolderIcon, BookOpen, Trash2, Move, CheckSquare, XSquare } from "lucide-react";
 
 interface DashboardHeaderProps {
   activeFolder: string | null;
@@ -6,6 +6,8 @@ interface DashboardHeaderProps {
   selectedFolders: string[];
   selectedQuizzes: string[];
   onDeleteSelected: () => void;
+  onSelectAll: () => void;
+  onDeselectAll: () => void;
 }
 
 export default function DashboardHeader({
@@ -14,6 +16,8 @@ export default function DashboardHeader({
   selectedFolders,
   selectedQuizzes,
   onDeleteSelected,
+  onSelectAll,
+  onDeselectAll,
 }: DashboardHeaderProps) {
   const hasSelection = selectedFolders.length > 0 || selectedQuizzes.length > 0;
 
@@ -42,24 +46,41 @@ export default function DashboardHeader({
         )}
 
         {/* Action buttons on the right */}
-        {hasSelection && (
-          <div className="absolute right-0 flex gap-3">
-            <button
-              onClick={onDeleteSelected}
-              className="p-3 bg-red-500 text-white rounded-full shadow hover:bg-red-600 transition"
-              title="Delete Selected"
-            >
-              <Trash2 className="w-5 h-5" />
-            </button>
-            <button
-              onClick={() => alert("Move feature not implemented")}
-              className="p-3 bg-blue-500 text-white rounded-full shadow hover:bg-blue-600 transition"
-              title="Move Selected"
-            >
-              <Move className="w-5 h-5" />
-            </button>
-          </div>
-        )}
+        <div className="absolute right-0 flex gap-3">
+          {hasSelection && (
+            <>
+              <button
+                onClick={onDeleteSelected}
+                className="p-3 bg-red-500 text-white rounded-full shadow hover:bg-red-600 transition"
+                title="Delete Selected"
+              >
+                <Trash2 className="w-5 h-5" />
+              </button>
+              <button
+                onClick={() => alert('Move feature not implemented')}
+                className="p-3 bg-blue-500 text-white rounded-full shadow hover:bg-blue-600 transition"
+                title="Move Selected"
+              >
+                <Move className="w-5 h-5" />
+              </button>
+            </>
+          )}
+          {/* Always visible select/deselect buttons */}
+          <button
+            onClick={onSelectAll}
+            className="p-3 bg-green-500 text-white rounded-full shadow hover:bg-green-600 transition"
+            title="Select All"
+          >
+            <CheckSquare className="w-5 h-5" />
+          </button>
+          <button
+            onClick={onDeselectAll}
+            className="p-3 bg-gray-400 text-white rounded-full shadow hover:bg-gray-500 transition"
+            title="Deselect All"
+          >
+            <XSquare className="w-5 h-5" />
+          </button>
+        </div>
       </div>
     </section>
   );

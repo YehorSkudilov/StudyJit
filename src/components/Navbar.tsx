@@ -8,11 +8,7 @@ import AccountMenu from '@/components/AccountMenu';
 import Image from 'next/image';
 
 const tabs = [
-  { href: '/goals', label: 'Goals' },
-  { href: '/budget', label: 'Budget' },
-  { href: '/home', label: 'Home' },
-  { href: '/banks', label: 'Banks' },
-  { href: '/transactions', label: 'Transactions' },
+  { href: '/dashboard', label: 'Dashboard' },
 ];
 
 export default function Navbar() {
