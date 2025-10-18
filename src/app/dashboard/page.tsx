@@ -99,32 +99,39 @@ const handleDeleteSelected = async () => {
 };
 
 
-  // ✅ Create new quiz using /api/db/createQuiz
-  const handleCreateQuiz = async (quizName: string, description = "") => {
-    try {
-      const res = await fetch("/api/db/createQuiz", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          quizName,
-          description,
-        }),
-      });
-
-      const data = await res.json();
-      if (res.ok && data.success) {
-        console.log(`✅ Quiz created with ID: ${data.quizId}`);
-        // 👇 Refresh quizzes from DB so generation_status = 'pending' appears
-        await fetchQuizzes();
-      } else {
-        console.error("❌ Failed to create quiz:", data.error);
-      }
-    } catch (err) {
-      console.error("❌ Error creating quiz:", err);
-    } finally {
-      setPopupOpen(false);
+// ✅ Create new quiz using /api/db/createQuiz
+const handleCreateQuiz = async (quizName: string, description = "") => {
+  try {
+    if (!quizName.trim()) {
+      console.error("❌ Quiz name is required");
+      return;
     }
-  };
+
+    const res = await fetch("/api/db/createQuiz", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: quizName.trim(),      // ✅ FIXED: backend expects "name"
+        description,                // optional
+        prompt: "",                 // optional
+        numQuestions: 10,           // optional default
+      }),
+    });
+
+    const data = await res.json();
+    if (res.ok && data.success) {
+      console.log(`✅ Quiz created with ID: ${data.quizId}`);
+      await fetchQuizzes(); // refresh list
+    } else {
+      console.error("❌ Failed to create quiz:", data.error);
+    }
+  } catch (err) {
+    console.error("❌ Error creating quiz:", err);
+  } finally {
+    setPopupOpen(false);
+  }
+};
+
 
   // ✅ Local folder creation
   const handleCreateFolder = (folderName: string) => {
