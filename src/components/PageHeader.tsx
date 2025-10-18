@@ -67,6 +67,7 @@ export default function PageHeader({
             </button>
           )}
 
+          {/* 🔹 Original title + icon sizes restored */}
           <h1 className="text-2xl sm:text-4xl font-extrabold flex items-center gap-2 sm:gap-3 leading-tight">
             {Icon && (
               <Icon

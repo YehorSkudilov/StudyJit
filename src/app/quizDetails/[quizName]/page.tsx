@@ -56,20 +56,20 @@ export default function QuizDetailsPage() {
     const id = Number(storedId);
     setQuizId(id);
 
-   const fetchQuiz = async () => {
-  try {
-    const res = await fetch(`/api/db/getQuiz/${id}`);
-    const data = await res.json();
-    setQuizTitle(data.name);
-    setDescription(data.description);
-    setPrompt(data.prompt || "");
-    setGenerationStatus(data.generation_status || null);
-    setNumQuestions(data.num_questions || 10); // ✅ <-- added
-  } catch {
-    setAlertMessage("❌ Failed to load quiz details.");
-    setShowAlert(true);
-  }
-};
+    const fetchQuiz = async () => {
+      try {
+        const res = await fetch(`/api/db/getQuiz/${id}`);
+        const data = await res.json();
+        setQuizTitle(data.name);
+        setDescription(data.description);
+        setPrompt(data.prompt || "");
+        setGenerationStatus(data.generation_status || null);
+        setNumQuestions(data.num_questions || 10);
+      } catch {
+        setAlertMessage("❌ Failed to load quiz details.");
+        setShowAlert(true);
+      }
+    };
 
     fetchQuiz();
   }, [router]);
@@ -91,7 +91,6 @@ export default function QuizDetailsPage() {
     fetchDocuments();
   }, [quizId]);
 
-  // ✅ Local add/remove (no DB until save)
   const handleAddFile = (file: DocumentItem) => {
     setStagedDocuments((prev) => [...prev, file]);
   };
@@ -99,124 +98,91 @@ export default function QuizDetailsPage() {
     setStagedDocuments((prev) => prev.filter((f) => f.id !== fileId));
   };
 
-  // ✅ Save & Generate (update DB + status only)
-const handleSaveAndGenerate = async () => {
-  if (!quizId) return;
-
-  try {
-    // 🧩 1. Update quiz basic info
-    const updateRes = await fetch("/api/db/updateQuiz", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        id: quizId,
-        name: quizTitle.trim(),
-        description,
-        prompt,
-        numQuestions,
-      }),
-    });
-
-    if (!updateRes.ok) {
-      throw new Error("Failed to update quiz info.");
-    }
-
-    // ✅ Refresh to reflect latest name/description/numQuestions
-    router.refresh();
-
-    // 🧩 2. Sync added/removed files
-    const added = stagedDocuments.filter(
-      (f) => !originalDocuments.some((o) => o.id === f.id)
-    );
-    const removed = originalDocuments.filter(
-      (o) => !stagedDocuments.some((f) => f.id === o.id)
-    );
-
-    for (const file of added) {
-      await fetch("/api/db/quizFiles/add", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ quizId, fileId: file.id }),
-      });
-    }
-
-    for (const file of removed) {
-      await fetch("/api/db/quizFiles/remove", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ quiz_id: quizId, file_id: file.id }),
-      });
-    }
-
-    setOriginalDocuments(stagedDocuments);
-
-    // 🟡 3. Set status to pending immediately
-    setGenerationStatus("pending");
-    await fetch("/api/db/quizStatus/update", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id: quizId, status: "pending" }),
-    });
-
-    // 🟢 4. Generate quiz
-    const form = new FormData();
-    form.append("message", prompt);
-    form.append("quizName", quizTitle);
-    form.append("description", description);
-    form.append("quizId", String(quizId));
-    form.append("numQuestions", String(numQuestions));
-
-    console.log("🧠 Sending generation request to /api/ai/generateQuiz...");
-    const res = await fetch("/api/ai/generateQuiz", { method: "POST", body: form });
-    console.log("📩 Received response:", res.status);
-
-    let data: any = null;
+  // ✅ Save & Generate
+  const handleSaveAndGenerate = async () => {
+    if (!quizId) return;
     try {
-      data = await res.json();
-      console.log("📊 Response:", data);
-    } catch (err) {
-      console.error("❌ JSON parse error:", err);
-    }
-
-    if (res.ok && data?.success) {
-      console.log(`✅ Quiz #${quizId} generated successfully.`);
-      setGenerationStatus("success");
-      await fetch("/api/db/quizStatus/update", {
+      const updateRes = await fetch("/api/db/updateQuiz", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: quizId, status: "success" }),
+        body: JSON.stringify({
+          id: quizId,
+          name: quizTitle.trim(),
+          description,
+          prompt,
+          numQuestions,
+        }),
       });
-    } else {
-      console.error("❌ Quiz generation failed:", data);
-      setGenerationStatus("failed");
-      await fetch("/api/db/quizStatus/update", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: quizId, status: "failed" }),
-      });
-      setAlertMessage("❌ Quiz generation failed.");
-          setShowAlert(true);
-
-    }
-
-
-    // ✅ Refresh again to reflect final generation_status + num_questions
-    setTimeout(() => {
+      if (!updateRes.ok) throw new Error("Failed to update quiz info.");
       router.refresh();
-    }, 800);
-  } catch (err) {
-    console.error("❌ Generation error:", err);
-    setGenerationStatus("failed");
-    await fetch("/api/db/quizStatus/update", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id: quizId, status: "failed" }),
-    });
-    setAlertMessage("❌ Failed to save or generate quiz.");
-    setShowAlert(true);
-    setTimeout(() => router.refresh(), 800);
-  }
-};
+
+      const added = stagedDocuments.filter(
+        (f) => !originalDocuments.some((o) => o.id === f.id)
+      );
+      const removed = originalDocuments.filter(
+        (o) => !stagedDocuments.some((f) => f.id === o.id)
+      );
+
+      for (const file of added) {
+        await fetch("/api/db/quizFiles/add", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ quizId, fileId: file.id }),
+        });
+      }
+      for (const file of removed) {
+        await fetch("/api/db/quizFiles/remove", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ quiz_id: quizId, file_id: file.id }),
+        });
+      }
+
+      setOriginalDocuments(stagedDocuments);
+      setGenerationStatus("pending");
+
+      await fetch("/api/db/quizStatus/update", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: quizId, status: "pending" }),
+      });
+
+      const form = new FormData();
+      form.append("message", prompt);
+      form.append("quizName", quizTitle);
+      form.append("description", description);
+      form.append("quizId", String(quizId));
+      form.append("numQuestions", String(numQuestions));
+
+      const res = await fetch("/api/ai/generateQuiz", { method: "POST", body: form });
+      const data = await res.json().catch(() => null);
+
+      if (res.ok && data?.success) {
+        setGenerationStatus("success");
+        await fetch("/api/db/quizStatus/update", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id: quizId, status: "success" }),
+        });
+      } else {
+        setGenerationStatus("failed");
+        await fetch("/api/db/quizStatus/update", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id: quizId, status: "failed" }),
+        });
+        setAlertMessage("❌ Quiz generation failed.");
+        setShowAlert(true);
+      }
+
+      setTimeout(() => router.refresh(), 800);
+    } catch (err) {
+      setGenerationStatus("failed");
+      setAlertMessage("❌ Failed to save or generate quiz.");
+      setShowAlert(true);
+      setTimeout(() => router.refresh(), 800);
+    }
+  };
 
   const getStatusIndicator = () => {
     switch (generationStatus) {
@@ -235,46 +201,52 @@ const handleSaveAndGenerate = async () => {
     <>
       {showAlert && <AlertPopup message={alertMessage} onClose={() => setShowAlert(false)} />}
 
-      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 flex flex-col px-6 sm:px-20 py-10 gap-8">
-        <div className="relative p-8 bg-white dark:bg-gray-800 rounded-xl shadow flex flex-col gap-6 max-w-4xl w-full mx-auto">
-          {/* 🔙 Back */}
+      {/* Responsive layout */}
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 flex flex-col px-3 sm:px-8 md:px-20 py-6 sm:py-10 gap-6">
+        <div className="relative p-4 sm:p-8 bg-white dark:bg-gray-800 rounded-xl shadow flex flex-col gap-6 max-w-4xl w-full mx-auto">
+
+          {/* Back Button */}
           <button
             onClick={() => router.push("/dashboard")}
-            className="absolute top-4 left-4 p-2 text-gray-600 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600 rounded-full transition"
+            className="absolute top-3 left-3 sm:top-4 sm:left-4 p-2 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-full transition"
           >
             <ChevronLeft className="w-5 h-5" />
           </button>
 
           {/* Title + Status */}
-          <header className="text-center">
-            <div className="flex justify-center items-center gap-2 mb-1">
-              <BookOpen className="w-6 h-6 text-blue-500" />
-              {editingName ? (
-                <input
-                  type="text"
-                  value={quizTitle}
-                  onChange={(e) => setQuizTitle(e.target.value)}
-                  className="text-3xl font-bold bg-gray-50 dark:bg-gray-700 rounded px-2 py-1 border border-gray-300 dark:border-gray-600 text-blue-600 dark:text-blue-400 focus:ring-2 focus:ring-blue-500"
-                />
-              ) : (
-                <h1 className="text-3xl font-bold text-blue-600 dark:text-blue-400">{quizTitle}</h1>
-              )}
-              <button
-                onClick={() => setEditingName((prev) => !prev)}
-                className={`p-1 rounded-full transition-colors ${
-                  editingName
-                    ? "text-green-600 hover:bg-green-500 hover:text-white"
-                    : "text-gray-600 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600"
-                }`}
-              >
-                {editingName ? <Check className="w-4 h-4" /> : <Edit2 className="w-4 h-4" />}
-              </button>
+          <header className="text-center mt-2 sm:mt-0">
+            <div className="flex flex-col sm:flex-row justify-center sm:items-center gap-2 mb-2">
+              <div className="flex items-center justify-center gap-2">
+                <BookOpen className="w-5 h-5 sm:w-6 sm:h-6 text-blue-500" />
+                {editingName ? (
+                  <input
+                    type="text"
+                    value={quizTitle}
+                    onChange={(e) => setQuizTitle(e.target.value)}
+                    className="text-2xl sm:text-3xl font-bold bg-gray-50 dark:bg-gray-700 rounded px-2 py-1 border border-gray-300 dark:border-gray-600 text-blue-600 dark:text-blue-400 focus:ring-2 focus:ring-blue-500"
+                  />
+                ) : (
+                  <h1 className="text-2xl sm:text-3xl font-bold text-blue-600 dark:text-blue-400 truncate max-w-[85vw]">
+                    {quizTitle}
+                  </h1>
+                )}
+                <button
+                  onClick={() => setEditingName((prev) => !prev)}
+                  className={`p-1 rounded-full transition-colors ${
+                    editingName
+                      ? "text-green-600 hover:bg-green-500 hover:text-white"
+                      : "text-gray-600 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600"
+                  }`}
+                >
+                  {editingName ? <Check className="w-4 h-4" /> : <Edit2 className="w-4 h-4" />}
+                </button>
+              </div>
+              <div className="mt-1 sm:mt-0">{getStatusIndicator()}</div>
             </div>
-            <div className="mt-2">{getStatusIndicator()}</div>
           </header>
 
           {/* Description */}
-          <section className="flex flex-col gap-2 relative">
+          <section className="flex flex-col gap-2">
             <h2 className="text-sm font-medium text-gray-500 dark:text-gray-400 uppercase flex items-center gap-2">
               Description
               <button
@@ -288,28 +260,27 @@ const handleSaveAndGenerate = async () => {
                 {editingDescription ? <Check className="w-4 h-4" /> : <Edit2 className="w-4 h-4" />}
               </button>
             </h2>
-
             {editingDescription ? (
-              <input
-                type="text"
-                className="w-full p-2 rounded border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-700"
+              <textarea
+                className="w-full p-2 rounded border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-sm sm:text-base"
                 value={description}
+                rows={2}
                 onChange={(e) => setDescription(e.target.value)}
               />
             ) : (
-              <p className="text-gray-700 dark:text-gray-200 text-lg">
+              <p className="text-gray-700 dark:text-gray-200 text-base sm:text-lg break-words">
                 {description || "No description available."}
               </p>
             )}
           </section>
 
           {/* Documents */}
-          <section className="flex flex-col gap-2 mt-4">
+          <section className="flex flex-col gap-2">
             <h2 className="text-sm font-medium text-gray-500 dark:text-gray-400 uppercase">Documents</h2>
-            <div className="flex gap-2 overflow-x-auto py-2">
+            <div className="flex gap-2 overflow-x-auto py-1">
               <div
                 className="flex-shrink-0 flex flex-col items-center justify-center rounded-lg bg-gray-200 dark:bg-gray-600 
-                text-gray-700 dark:text-gray-200 cursor-pointer hover:bg-gray-300 dark:hover:bg-gray-500 transition w-20 h-20"
+                text-gray-700 dark:text-gray-200 cursor-pointer hover:bg-gray-300 dark:hover:bg-gray-500 transition w-16 h-16 sm:w-20 sm:h-20"
                 onClick={() => setShowFilePopup(true)}
               >
                 <Plus className="w-5 h-5 mb-1" />
@@ -320,30 +291,30 @@ const handleSaveAndGenerate = async () => {
                 <div
                   key={doc.id}
                   className="relative flex-shrink-0 flex flex-col items-center justify-center rounded-lg shadow transition-colors 
-                    w-20 h-20 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 cursor-pointer"
+                    w-16 h-16 sm:w-20 sm:h-20 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600"
                 >
                   <FileText className="w-5 h-5 mb-1" />
-                  <span className="text-xs text-center truncate w-full px-1">{doc.name}</span>
+                  <span className="text-[10px] sm:text-xs text-center truncate w-full px-1">{doc.name}</span>
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
                       handleRemoveFile(doc.id);
                     }}
-                    className="absolute top-1 right-1 p-1 text-red-500 hover:bg-red-500 hover:text-white rounded-full transition"
+                    className="absolute top-0.5 right-0.5 sm:top-1 sm:right-1 p-1 text-red-500 hover:bg-red-500 hover:text-white rounded-full transition"
                   >
-                    <Trash2 className="w-4 h-4" />
+                    <Trash2 className="w-3 h-3 sm:w-4 sm:h-4" />
                   </button>
                 </div>
               ))}
             </div>
           </section>
 
-          {/* Number of Questions Slider */}
-          <section className="flex flex-col gap-2 mt-4">
+          {/* Number of Questions */}
+          <section className="flex flex-col gap-2">
             <h2 className="text-sm font-medium text-gray-500 dark:text-gray-400 uppercase">
               Number of Questions
             </h2>
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-3 sm:gap-4">
               <input
                 type="range"
                 min="1"
@@ -352,36 +323,36 @@ const handleSaveAndGenerate = async () => {
                 onChange={(e) => setNumQuestions(Number(e.target.value))}
                 className="flex-1 h-2 bg-gray-200 dark:bg-gray-700 rounded-lg appearance-none cursor-pointer accent-blue-600"
               />
-              <span className="text-2xl font-bold text-blue-600 dark:text-blue-400 min-w-[3rem] text-center">
+              <span className="text-xl sm:text-2xl font-bold text-blue-600 dark:text-blue-400 min-w-[3rem] text-center">
                 {numQuestions}
               </span>
             </div>
-            <p className="text-xs text-gray-500 dark:text-gray-400">
+            <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400">
               Drag the slider to select between 1 and 50 questions
             </p>
           </section>
 
-          {/* Prompt + Save */}
-          <section className="flex flex-col gap-2 mt-4">
+          {/* Prompt + Buttons */}
+          <section className="flex flex-col gap-3">
             <h2 className="text-sm font-medium text-gray-500 dark:text-gray-400 uppercase">Prompt</h2>
             <textarea
-              className="w-full p-4 rounded border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 
-                text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500"
+              className="w-full p-3 sm:p-4 rounded border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 
+                text-gray-900 dark:text-gray-100 text-sm sm:text-base focus:ring-2 focus:ring-blue-500"
               rows={5}
               value={prompt}
               onChange={(e) => setPrompt(e.target.value)}
               placeholder="Enter a prompt for this quiz..."
             />
 
-            <div className="flex gap-3 mt-2">
+            <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 mt-1">
               <button
-                className="px-6 py-3 bg-blue-600 text-white rounded hover:bg-blue-700 transition flex-1"
+                className="px-5 py-3 bg-blue-600 text-white rounded hover:bg-blue-700 transition flex-1 text-sm sm:text-base"
                 onClick={handleSaveAndGenerate}
               >
                 Save & Generate
               </button>
               <button
-                className={`px-6 py-3 rounded flex-1 transition ${
+                className={`px-5 py-3 rounded flex-1 text-sm sm:text-base transition ${
                   generationStatus === "success"
                     ? "bg-green-600 text-white hover:bg-green-700"
                     : "bg-gray-400 text-gray-200 cursor-not-allowed"
@@ -389,8 +360,6 @@ const handleSaveAndGenerate = async () => {
                 onClick={() => {
                   if (generationStatus === "success" && quizId) {
                     sessionStorage.setItem("selectedQuizId", String(quizId));
-                    console.log("🚀 Navigating to quiz:", quizTitle);
-
                     router.push(`/quiz/${encodeURIComponent(quizTitle)}`);
                   } else {
                     setAlertMessage("Quiz not ready. Please generate it first!");
@@ -405,7 +374,7 @@ const handleSaveAndGenerate = async () => {
         </div>
       </div>
 
-      {/* 📁 Add File Popup */}
+      {/* File Popup */}
       <QuizAddFilePopup
         isOpen={showFilePopup}
         onClose={() => setShowFilePopup(false)}
