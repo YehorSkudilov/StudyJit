@@ -37,7 +37,7 @@ export default function AccountMenu() {
 
       {open && (
 <div
-  className="fixed right-4 top-16 w-52 rounded-xl border border-gray-700/40 dark:border-gray-300/30
+  className="fixed right-8 top-19 w-52 rounded-xl border border-gray-700/40 dark:border-gray-300/30
              bg-white dark:bg-gray-900 shadow-[0_4px_18px_rgba(0,0,0,0.2)] overflow-hidden z-[3000]"
 >
 

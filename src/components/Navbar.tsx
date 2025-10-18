@@ -19,15 +19,17 @@ export default function Navbar() {
 
   return (
     <nav className="w-full bg-[#0C1323] border-b border-gray-700 shadow-sm text-white z-[5000]">
-      <div className="max-w-7xl mx-auto h-16 px-6 flex items-center justify-between">
-        {/* Left: Logo */}
-        <Link href="/" className="flex items-center gap-2">
-          <Image src="/images/logo.png" alt="Logo" width={38} height={38} />
-          <span className="text-xl font-bold text-white">Study Jit</span>
-        </Link>
+      <div className="relative mx-auto h-16 px-6 flex items-center justify-between">
+        {/* Logo - Far Left */}
+        <div className="absolute left-6 flex items-center gap-2">
+          <Link href="/" className="flex items-center gap-2">
+            <Image src="/images/logo.png" alt="Logo" width={38} height={38} />
+            <span className="text-xl font-bold text-white">Study Jit</span>
+          </Link>
+        </div>
 
-        {/* Center: Tabs */}
-        <ul className="hidden md:flex gap-2 font-medium">
+        {/* Center Tabs */}
+        <ul className="hidden md:flex gap-2 font-medium mx-auto">
           {tabs.map((tab) => (
             <li key={tab.href}>
               <Link
@@ -44,10 +46,9 @@ export default function Navbar() {
           ))}
         </ul>
 
-        {/* Right: Account + Menu */}
-        <div className="flex items-center gap-4">
-          <AccountMenu />
-
+        {/* Right - Profile + Mobile Menu */}
+        <div className="absolute right-6 flex items-center gap-4">
+                      <AccountMenu />
           <button
             className="md:hidden text-gray-300 hover:text-white transition"
             onClick={() => setMenuOpen(!menuOpen)}
@@ -57,7 +58,7 @@ export default function Navbar() {
         </div>
       </div>
 
-      {/* Mobile menu */}
+      {/* Mobile Menu */}
       {menuOpen && (
         <ul className="md:hidden px-4 pb-4 space-y-2 font-medium bg-[#0C1323] border-t border-gray-700">
           {tabs.map((tab) => (

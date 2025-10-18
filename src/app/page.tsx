@@ -1,4 +1,4 @@
-import { UploadCloud, FileText, BarChart2 } from "lucide-react";
+import { UploadCloud, FileText, Brain } from "lucide-react";
 import Link from "next/link";
 
 export default function Home() {
@@ -58,21 +58,17 @@ export default function Home() {
             </p>
           </div>
 
-          {/* Feature 3: Track Progress */}
+          {/* Feature 3: GPT Intelligence */}
           <div className="flex flex-col items-center text-center p-6 bg-white dark:bg-gray-800 rounded-xl shadow hover:shadow-lg transition">
-            <BarChart2 className="w-16 h-16 text-blue-600 dark:text-blue-400" />
-            <h4 className="mt-4 font-semibold text-xl">Track Progress</h4>
+            <Brain className="w-16 h-16 text-blue-600 dark:text-blue-400" />
+            <h4 className="mt-4 font-semibold text-xl">Powered by GPT</h4>
             <p className="mt-2 text-gray-600 dark:text-gray-300">
-              Monitor your learning, review quiz results, and improve retention.
+              Leverages GPT-based intelligence to understand your notes deeply
+              and craft meaningful, high-quality quizzes in seconds.
             </p>
           </div>
         </div>
       </section>
-
-      {/* Footer */}
-      <footer className="py-6 text-center text-sm text-gray-600 dark:text-gray-400 border-t border-gray-200 dark:border-gray-700">
-        Powered by <span className="font-semibold text-blue-600">GPT-4o-mini</span>
-      </footer>
     </div>
   );
 }
