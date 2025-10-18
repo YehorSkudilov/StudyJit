@@ -3,8 +3,10 @@ import { authOptions } from "@/lib/authOptions";
 import { RowDataPacket } from "mysql2";
 import db from "@/lib/db";
 
+// ✅ Fetch profile (GET)
 export async function GET(req: Request) {
   const session = await getServerSession(authOptions);
+
   if (!session?.user?.id) {
     return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401 });
   }
@@ -15,7 +17,6 @@ export async function GET(req: Request) {
   );
 
   const user = rows[0];
-
   if (!user) {
     return new Response(JSON.stringify({ error: "User not found" }), { status: 404 });
   }
@@ -23,8 +24,10 @@ export async function GET(req: Request) {
   return new Response(JSON.stringify(user), { status: 200 });
 }
 
+// ✅ Update profile (PATCH)
 export async function PATCH(req: Request) {
   const session = await getServerSession(authOptions);
+
   if (!session?.user?.id) {
     return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401 });
   }
@@ -33,7 +36,9 @@ export async function PATCH(req: Request) {
   const { name, email, bio } = body;
 
   if (!name || !email) {
-    return new Response(JSON.stringify({ error: "Name and email are required" }), { status: 400 });
+    return new Response(JSON.stringify({ error: "Name and email are required" }), {
+      status: 400,
+    });
   }
 
   try {
@@ -44,7 +49,9 @@ export async function PATCH(req: Request) {
 
     return new Response(JSON.stringify({ success: true }), { status: 200 });
   } catch (err) {
-    console.error(err);
-    return new Response(JSON.stringify({ error: "Failed to update profile" }), { status: 500 });
+    console.error("Profile update error:", err);
+    return new Response(JSON.stringify({ error: "Failed to update profile" }), {
+      status: 500,
+    });
   }
 }
