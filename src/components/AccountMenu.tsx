@@ -37,8 +37,8 @@ export default function AccountMenu() {
 
       {open && (
         <div
-          className="absolute right-0 top-full mt-3 w-52 rounded-xl border border-gray-200 dark:border-gray-700
-                     bg-white dark:bg-gray-900 shadow-[0_4px_18px_rgba(0,0,0,0.15)] overflow-hidden z-[1100]"
+          className="absolute right-0 top-full mt-3 w-52 rounded-xl border border-gray-700/40 dark:border-gray-300/30
+                     bg-white dark:bg-gray-900 shadow-[0_4px_18px_rgba(0,0,0,0.2)] overflow-hidden z-[1100]"
         >
           <div className="py-1 text-sm">
             <MenuItem href="/profile" icon={<UserCircle size={18} />} text="Profile" />
@@ -46,7 +46,8 @@ export default function AccountMenu() {
             <MenuItem href="/contact" icon={<Mail size={18} />} text="Contact" />
             <MenuItem href="/about" icon={<Info size={18} />} text="About" />
 
-            <hr className="border-gray-200 dark:border-gray-700 my-1" />
+            {/* Divider uses same tone as text */}
+            <hr className="border-gray-700/40 dark:border-gray-300/30 my-1" />
 
             <button
               onClick={handleLogout}
