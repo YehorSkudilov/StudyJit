@@ -1,24 +1,6 @@
 version: "3.9"
 
 services:
-  # 🧠 Ollama (AI inference backend)
-  # ❌ Disabled because we now use OpenAI's ChatGPT API instead
-  # ollama:
-  #   image: ollama/ollama:latest
-  #   container_name: ${OLLAMA_NAME}
-  #   restart: always
-  #   ports:
-  #     - "${OLLAMA_PORT}:11434"
-  #   volumes:
-  #     - ollama:/root/.ollama
-  #     - ./entrypoint.sh:/entrypoint.sh:ro   # startup script
-  #   networks:
-  #     - next-network
-  #   environment:
-  #     - OLLAMA_NO_GPU=${OLLAMA_NO_GPU}
-  #     - OLLAMA_KEEP_ALIVE=${OLLAMA_KEEP_ALIVE}
-  #     - OLLAMA_MODEL=${OLLAMA_MODEL:-deepseek-r1:7b}
-  #   entrypoint: ["/bin/sh", "/entrypoint.sh"]
 
   # 🌐 Next.js app
   app:
@@ -29,11 +11,9 @@ services:
       - "${APP_PORT}:3000"
     depends_on:
       - db
-      # - ollama   # ❌ no longer needed
     environment:
       - NODE_ENV=production
-      # - OLLAMA_API_URL=http://${OLLAMA_NAME}:${OLLAMA_PORT}  # ❌ removed
-      - OPENAI_API_KEY=${OPENAI_API_KEY} # ✅ use OpenAI instead
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
       - DB_HOST=${DB_HOST}
       - DB_USER=root
       - DB_PASS=${DB_PASS}
@@ -62,7 +42,6 @@ services:
 # ✅ Persistent volumes
 volumes:
   mysql-data:
-  # ollama:          # ❌ no longer used
   db-files:
 
 # ✅ Shared Docker network
