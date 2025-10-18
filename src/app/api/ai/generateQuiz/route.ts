@@ -40,6 +40,8 @@ async function processQuiz(req: NextRequest): Promise<NextResponse> {
       return NextResponse.json({ error: "Missing quizId" }, { status: 400 });
     }
 
+    console.log(`📝 Generating quiz: ${quizName} (${numQuestions} questions)`);
+
     // 🟡 Mark quiz as pending
     await db.execute(`UPDATE quizzes SET generation_status = 'pending' WHERE id = ?`, [quizId]);
 
@@ -80,47 +82,57 @@ async function processQuiz(req: NextRequest): Promise<NextResponse> {
       console.log(`✅ Uploaded ${fileIds.length} files`);
     }
 
-    // Create assistant with file_search tool if files exist
+    // Create assistant with improved instructions
     const assistant = await openai.beta.assistants.create({
       model: "gpt-4o",
       name: "Quiz Generator",
-      instructions: `
-You are a quiz generator. Your job is to:
+      instructions: `You are a quiz generator. Generate multiple-choice quiz questions based on the provided content.
 
-1. Read any uploaded documents (if provided)
-2. Understand their subject matter and topics
-3. Create quiz questions about what the content teaches
-4. If no files or message are provided, generate general-knowledge quiz questions
+CRITICAL: You MUST respond with ONLY valid JSON in this exact format:
+{
+  "questions": [
+    {
+      "id": 1,
+      "question": "What is...?",
+      "options": ["A", "B", "C", "D"],
+      "correct": "A"
+    }
+  ]
+}
 
-❌ Do NOT create questions about:
-- File metadata, formatting, or technical details
-
-✅ Create questions about:
-- The educational content and subject matter
-- Facts, definitions, and key ideas someone should learn.`,
+Rules:
+- Do NOT include any text before or after the JSON
+- Do NOT wrap the JSON in markdown code blocks
+- Each question must have exactly 4 options
+- The "correct" field must match one of the options exactly
+- Generate questions about the actual content/subject matter, not file metadata
+- If no files provided, generate general knowledge questions`,
       tools: hasFiles ? [{ type: "file_search" }] : [],
     });
 
     console.log(`✅ Created assistant: ${assistant.id}`);
 
     // Compose message
-    const userMessage =
-      hasPrompt || hasFiles
-        ? `Generate EXACTLY ${numQuestions} multiple-choice quiz questions.
-${hasPrompt ? `Prompt/Instructions: ${message}` : ""}
-${hasFiles ? "Use the uploaded files as source material." : ""}
-Return valid JSON with the following structure:
+    const userMessage = hasPrompt || hasFiles
+      ? `Generate EXACTLY ${numQuestions} multiple-choice quiz questions.
+
+${hasPrompt ? `Topic/Instructions: ${message}` : ""}
+${hasFiles ? "Base questions on the uploaded files." : ""}
+
+RESPOND WITH ONLY THE JSON OBJECT. NO EXPLANATIONS. NO MARKDOWN.
+
+Format:
 {
   "questions": [
     {
       "id": 1,
-      "question": "Your question here?",
-      "options": ["Option A", "Option B", "Option C", "Option D"],
-      "correct": "Option A"
+      "question": "Your question?",
+      "options": ["A", "B", "C", "D"],
+      "correct": "A"
     }
   ]
 }`
-        : `Generate ${numQuestions} general knowledge quiz questions in JSON format (same structure as above).`;
+      : `Generate ${numQuestions} general knowledge quiz questions. Respond with ONLY the JSON object, no other text.`;
 
     // Create thread
     const thread = await openai.beta.threads.create({
@@ -161,39 +173,95 @@ Return valid JSON with the following structure:
       if (block.type === "text") text += block.text.value;
     }
     text = text.trim();
+    
+    console.log("📩 Raw assistant response:");
+    console.log(text.substring(0, 500)); // Log first 500 chars for debugging
+    
     if (!text) throw new Error("Assistant returned empty response");
 
-    // Try to parse JSON
+    // Enhanced JSON extraction
     let parsed: any = null;
+    
+    // Try direct parse first
     try {
       parsed = JSON.parse(text);
-    } catch {
-      const jsonMatch = text.match(/```json\s*([\s\S]*?)\s*```/) || text.match(/```\s*([\s\S]*?)\s*```/);
-      if (jsonMatch) {
-        parsed = JSON.parse(jsonMatch[1]);
-      } else {
-        const objectMatch = text.match(/\{[\s\S]*\}/);
-        if (objectMatch) parsed = JSON.parse(objectMatch[0]);
+      console.log("✅ Direct JSON parse successful");
+    } catch (e) {
+      console.log("⚠️ Direct parse failed, trying extraction...");
+      
+      // Try to extract from markdown code blocks (```json or ```)
+      const codeBlockPatterns = [
+        /```json\s*([\s\S]*?)\s*```/,
+        /```\s*([\s\S]*?)\s*```/,
+        /`([\s\S]*?)`/
+      ];
+      
+      for (const pattern of codeBlockPatterns) {
+        const match = text.match(pattern);
+        if (match) {
+          try {
+            parsed = JSON.parse(match[1].trim());
+            console.log("✅ Extracted from code block");
+            break;
+          } catch (e2) {
+            continue;
+          }
+        }
+      }
+      
+      // Try to find JSON object in text
+      if (!parsed) {
+        const jsonMatch = text.match(/\{[\s\S]*"questions"[\s\S]*\}/);
+        if (jsonMatch) {
+          try {
+            parsed = JSON.parse(jsonMatch[0]);
+            console.log("✅ Extracted JSON object from text");
+          } catch (e3) {
+            console.error("❌ Failed to parse extracted JSON");
+          }
+        }
       }
     }
 
-    if (!parsed?.questions || !Array.isArray(parsed.questions)) {
+    // Validate parsed data
+    if (!parsed) {
+      throw new Error("Failed to extract valid JSON from response");
+    }
+
+    if (!parsed.questions || !Array.isArray(parsed.questions)) {
+      console.error("❌ Invalid response structure:", parsed);
       throw new Error("Response missing 'questions' array");
     }
 
-    const formattedQuestions = parsed.questions.map((q: any, i: number) => ({
-      id: q.id || i + 1,
-      question: q.question || "",
-      options: Array.isArray(q.options) ? q.options : [],
-      correct: q.correct || q.answer || "",
-    }));
+    if (parsed.questions.length === 0) {
+      throw new Error("Response contains empty questions array");
+    }
+
+    // Format and validate questions
+    const formattedQuestions = parsed.questions.map((q: any, i: number) => {
+      if (!q.question || !Array.isArray(q.options) || !q.correct) {
+        console.warn(`⚠️ Invalid question at index ${i}:`, q);
+      }
+      
+      return {
+        id: q.id || i + 1,
+        question: q.question || `Question ${i + 1}`,
+        options: Array.isArray(q.options) && q.options.length >= 2 
+          ? q.options 
+          : ["Option A", "Option B", "Option C", "Option D"],
+        correct: q.correct || q.answer || (q.options?.[0] || "Option A"),
+      };
+    });
 
     console.log(`✅ Formatted ${formattedQuestions.length} questions`);
 
-    // Cleanup
+    // Cleanup OpenAI resources
     try {
       await openai.beta.assistants.delete(assistant.id);
-      for (const fileId of fileIds) await openai.files.delete(fileId);
+      for (const fileId of fileIds) {
+        await openai.files.delete(fileId);
+      }
+      console.log("✅ Cleanup completed");
     } catch (err) {
       console.warn("⚠️ Cleanup warning:", err);
     }
@@ -202,17 +270,25 @@ Return valid JSON with the following structure:
     const result = await addQuestionsToQuiz(quizId, formattedQuestions);
     await db.execute(`UPDATE quizzes SET generation_status = 'success' WHERE id = ?`, [quizId]);
 
+    console.log(`✅ Quiz generation complete: ${result.questionCount} questions saved`);
+
     return NextResponse.json({
       success: true,
       quizId,
       questionCount: result.questionCount,
     });
   } catch (error: any) {
-    console.error("❌ Error:", error);
+    console.error("❌ Error during quiz generation:", error);
+    console.error("Stack trace:", error.stack);
+    
     if (quizId > 0) {
       await db.execute(`UPDATE quizzes SET generation_status = 'failed' WHERE id = ?`, [quizId]);
     }
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    
+    return NextResponse.json({ 
+      error: error.message,
+      details: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    }, { status: 500 });
   } finally {
     await db.end();
   }
@@ -222,7 +298,7 @@ Return valid JSON with the following structure:
 export async function POST(req: NextRequest): Promise<NextResponse> {
   return new Promise<NextResponse>((resolve) => {
     queue.push(async () => {
-      console.log(`🚀 Starting queued job`);
+      console.log(`🚀 Starting queued quiz generation job`);
       const response = await processQuiz(req);
       console.log("✅ Job finished");
       resolve(response);
