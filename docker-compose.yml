@@ -2,22 +2,23 @@ version: "3.9"
 
 services:
   # 🧠 Ollama (AI inference backend)
-  ollama:
-    image: ollama/ollama:latest
-    container_name: ${OLLAMA_NAME}
-    restart: always
-    ports:
-      - "${OLLAMA_PORT}:11434"
-    volumes:
-      - ollama:/root/.ollama
-      - ./entrypoint.sh:/entrypoint.sh:ro   # startup script
-    networks:
-      - next-network
-    environment:
-      - OLLAMA_NO_GPU=${OLLAMA_NO_GPU}
-      - OLLAMA_KEEP_ALIVE=${OLLAMA_KEEP_ALIVE}
-      - OLLAMA_MODEL=${OLLAMA_MODEL:-deepseek-r1:7b}
-    entrypoint: ["/bin/sh", "/entrypoint.sh"]
+  # ❌ Disabled because we now use OpenAI's ChatGPT API instead
+  # ollama:
+  #   image: ollama/ollama:latest
+  #   container_name: ${OLLAMA_NAME}
+  #   restart: always
+  #   ports:
+  #     - "${OLLAMA_PORT}:11434"
+  #   volumes:
+  #     - ollama:/root/.ollama
+  #     - ./entrypoint.sh:/entrypoint.sh:ro   # startup script
+  #   networks:
+  #     - next-network
+  #   environment:
+  #     - OLLAMA_NO_GPU=${OLLAMA_NO_GPU}
+  #     - OLLAMA_KEEP_ALIVE=${OLLAMA_KEEP_ALIVE}
+  #     - OLLAMA_MODEL=${OLLAMA_MODEL:-deepseek-r1:7b}
+  #   entrypoint: ["/bin/sh", "/entrypoint.sh"]
 
   # 🌐 Next.js app
   app:
@@ -28,16 +29,16 @@ services:
       - "${APP_PORT}:3000"
     depends_on:
       - db
-      - ollama
+      # - ollama   # ❌ no longer needed
     environment:
       - NODE_ENV=production
-      - OLLAMA_API_URL=http://${OLLAMA_NAME}:${OLLAMA_PORT}
+      # - OLLAMA_API_URL=http://${OLLAMA_NAME}:${OLLAMA_PORT}  # ❌ removed
+      - OPENAI_API_KEY=${OPENAI_API_KEY} # ✅ use OpenAI instead
       - DB_HOST=${DB_HOST}
       - DB_USER=root
       - DB_PASS=${DB_PASS}
       - DB_NAME=${DB_NAME}
     volumes:
-      # ✅ shared volume for uploaded files
       - db-files:/shared-files
     networks:
       - next-network
@@ -47,14 +48,11 @@ services:
     image: mysql:8.0
     container_name: ${DB_HOST}
     restart: always
-    # ports:
-    #   - "3306:3306"
     environment:
       MYSQL_ROOT_PASSWORD: ${DB_PASS}
       MYSQL_DATABASE: ${DB_NAME}
     volumes:
       - mysql-data:/var/lib/mysql
-      # ✅ shared volume for file storage, accessible to both DB and app
       - db-files:/var/lib/mysql-files
     networks:
       - next-network
@@ -62,8 +60,8 @@ services:
 # ✅ Persistent volumes
 volumes:
   mysql-data:
-  ollama:
-  db-files:          # shared file-storage volume
+  # ollama:          # ❌ no longer used
+  db-files:
 
 # ✅ Shared Docker network
 networks:
