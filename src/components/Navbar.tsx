@@ -48,13 +48,15 @@ export default function Navbar() {
 
         {/* Right - Profile + Mobile Menu */}
         <div className="absolute right-6 flex items-center gap-4">
-                      <AccountMenu />
+                      
           <button
             className="md:hidden text-gray-300 hover:text-white transition"
             onClick={() => setMenuOpen(!menuOpen)}
           >
             {menuOpen ? <X size={26} /> : <Menu size={26} />}
           </button>
+
+<AccountMenu />
         </div>
       </div>
 
