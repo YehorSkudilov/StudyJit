@@ -1,48 +1,58 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getConnection } from "@/lib/db";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/authOptions"; // ✅ correct path
+import db from "@/lib/db";
 import { RowDataPacket } from "mysql2";
 
 /**
  * GET /api/db/getQuizzes
- * Retrieves all quizzes with their questions.
- *
- * Example response:
- * [
- *   {
- *     id: 1,
- *     name: "Math 101 Quiz",
- *     description: "Basic algebra and arithmetic",
- *     questions: [
- *       {
- *         id: 5,
- *         question: "What is 2+2?",
- *         options: ["3", "4", "5", "6"],
- *         correct: "4"
- *       }
- *     ]
- *   }
- * ]
+ * Returns all quizzes and their questions belonging to the logged-in user.
  */
-export async function GET(req: NextRequest) {
+export async function GET(_req: NextRequest) {
+  // 🔒 Require authentication
+  const session = await getServerSession(authOptions);
+  if (!session?.user?.id) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const userId = session.user.id;
+
   try {
-    const db = await getConnection();
-
-    // ✅ Get all quizzes
+    // ✅ Fetch quizzes for this user only
     const [quizRows] = await db.query<RowDataPacket[]>(
-      `SELECT id, name, description FROM quizzes ORDER BY id DESC`
+      `
+      SELECT id, name, description, generation_status, num_questions
+      FROM quizzes
+      WHERE user_id = ?
+      ORDER BY id DESC
+      `,
+      [userId]
     );
 
-    // ✅ Get all questions
+    if (quizRows.length === 0) {
+      return NextResponse.json([]); // Return empty list if none
+    }
+
+    // ✅ Fetch all questions for these quizzes
+    const quizIds = quizRows.map((q) => q.id);
+    const placeholders = quizIds.map(() => "?").join(", ");
+
     const [questionRows] = await db.query<RowDataPacket[]>(
-      `SELECT id, quiz_id, question, option_a, option_b, option_c, option_d, correct_answer
-       FROM quiz_questions`
+      `
+      SELECT id, quiz_id, question, option_a, option_b, option_c, option_d, correct_answer
+      FROM quiz_questions
+      WHERE quiz_id IN (${placeholders})
+      `,
+      quizIds
     );
 
-    // ✅ Combine quizzes with their questions
+    // ✅ Combine quizzes with their respective questions
     const quizzes = quizRows.map((quiz) => ({
       id: quiz.id,
       name: quiz.name,
       description: quiz.description,
+      generation_status: quiz.generation_status,
+      num_questions: quiz.num_questions,
       questions: questionRows
         .filter((q) => q.quiz_id === quiz.id)
         .map((q) => ({
@@ -52,8 +62,6 @@ export async function GET(req: NextRequest) {
           correct: q.correct_answer,
         })),
     }));
-
-    await db.end();
 
     return NextResponse.json(quizzes);
   } catch (err: any) {

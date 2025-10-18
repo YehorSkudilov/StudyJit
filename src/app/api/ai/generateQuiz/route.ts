@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/authOptions";
 import { addQuestionsToQuiz } from "@/lib/addQuestionsToQuiz";
-import { getConnection } from "@/lib/db";
+import db from "@/lib/db"; // ✅ Use pool directly
 import fs from "fs";
 import OpenAI from "openai";
 
@@ -24,15 +26,24 @@ async function runNext() {
 
 // Supported file extensions for file_search (documents only)
 const SUPPORTED_EXTENSIONS = [
-  '.pdf', '.txt', '.doc', '.docx', '.ppt', '.pptx',
-  '.csv', '.json', '.md', '.html', '.xml', '.rtf'
+  ".pdf", ".txt", ".doc", ".docx", ".ppt", ".pptx",
+  ".csv", ".json", ".md", ".html", ".xml", ".rtf",
 ];
 
 // Image extensions that require vision
-const IMAGE_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.gif', '.webp'];
+const IMAGE_EXTENSIONS = [".jpg", ".jpeg", ".png", ".gif", ".webp"];
+
+// Audio extensions that require transcription
+const AUDIO_EXTENSIONS = [".mp3", ".mp4", ".mpeg", ".mpga", ".m4a", ".wav", ".webm"];
 
 async function processQuiz(req: NextRequest): Promise<NextResponse> {
-  const db = await getConnection();
+  // 🔐 Check authentication
+  const session = await getServerSession(authOptions);
+  if (!session?.user?.id) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const userId = Number(session.user.id);
   const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY! });
   let quizId = 0;
 
@@ -45,39 +56,51 @@ async function processQuiz(req: NextRequest): Promise<NextResponse> {
     const numQuestions = Number(form.get("numQuestions")) || 10;
 
     if (!quizId) {
-      await db.end();
       return NextResponse.json({ error: "Missing quizId" }, { status: 400 });
     }
 
-    console.log(`📝 Generating quiz: ${quizName} (${numQuestions} questions)`);
+    console.log(`📝 Generating quiz for user ${userId}: ${quizName} (${numQuestions} questions)`);
+
+    // 🔒 Validate ownership of quiz
+    const [quizRows]: any = await db.query(
+      "SELECT id, user_id FROM quizzes WHERE id = ?",
+      [quizId]
+    );
+    
+    if (!quizRows.length || quizRows[0].user_id !== userId) {
+      return NextResponse.json({ error: "Forbidden: You do not own this quiz" }, { status: 403 });
+    }
 
     // 🟡 Mark quiz as pending
-    await db.execute(`UPDATE quizzes SET generation_status = 'pending' WHERE id = ?`, [quizId]);
+    await db.execute(
+      `UPDATE quizzes SET generation_status = 'pending' WHERE id = ? AND user_id = ?`,
+      [quizId, userId]
+    );
 
-    // 📂 Fetch linked files from DB
+    // 📂 Fetch linked files (only user-owned files)
     const [fileRows]: any = await db.query(
       `
       SELECT f.id, f.name, f.path
       FROM quiz_files qf
       JOIN files f ON qf.file_id = f.id
-      WHERE qf.quiz_id = ?
+      WHERE qf.quiz_id = ? AND f.user_id = ?
       `,
-      [quizId]
+      [quizId, userId]
     );
 
     // Separate files by type
     const documentFiles: any[] = [];
     const imageFiles: any[] = [];
+    const audioFiles: any[] = [];
     const unsupportedFiles: any[] = [];
 
     for (const file of fileRows) {
-      const ext = file.name.substring(file.name.lastIndexOf('.')).toLowerCase();
-      
-      if (SUPPORTED_EXTENSIONS.includes(ext)) {
-        documentFiles.push(file);
-      } else if (IMAGE_EXTENSIONS.includes(ext)) {
-        imageFiles.push(file);
-      } else {
+      const ext = file.name.substring(file.name.lastIndexOf(".")).toLowerCase();
+
+      if (SUPPORTED_EXTENSIONS.includes(ext)) documentFiles.push(file);
+      else if (IMAGE_EXTENSIONS.includes(ext)) imageFiles.push(file);
+      else if (AUDIO_EXTENSIONS.includes(ext)) audioFiles.push(file);
+      else {
         unsupportedFiles.push(file);
         console.warn(`⚠️ Unsupported file type: ${file.name}`);
       }
@@ -87,9 +110,11 @@ async function processQuiz(req: NextRequest): Promise<NextResponse> {
     const hasImages = imageFiles.length > 0;
     const hasPrompt = message.trim().length > 0;
 
-    console.log(`📊 Files: ${documentFiles.length} docs, ${imageFiles.length} images, ${unsupportedFiles.length} unsupported`);
+    console.log(
+      `📊 Files: ${documentFiles.length} docs, ${imageFiles.length} images, ${audioFiles.length} audio, ${unsupportedFiles.length} unsupported`
+    );
 
-    if (!hasDocuments && !hasImages && !hasPrompt) {
+    if (!hasDocuments && !hasImages && !audioFiles.length && !hasPrompt) {
       console.warn("⚠️ No valid files or prompt provided. Using general fallback.");
     }
 
@@ -112,7 +137,7 @@ async function processQuiz(req: NextRequest): Promise<NextResponse> {
       console.log(`✅ Uploaded ${documentFileIds.length} documents`);
     }
 
-    // 📸 Upload images for vision (also as assistant files)
+    // 📸 Upload images for vision
     const imageFileIds: string[] = [];
     if (hasImages) {
       console.log(`📸 Uploading ${imageFiles.length} image(s) for vision...`);
@@ -131,11 +156,28 @@ async function processQuiz(req: NextRequest): Promise<NextResponse> {
       console.log(`✅ Uploaded ${imageFileIds.length} images`);
     }
 
+    // 🎙️ Transcribe audio files using Whisper
+    let audioTranscriptions = "";
+    if (audioFiles.length > 0) {
+      console.log(`🎙️ Transcribing ${audioFiles.length} audio file(s)...`);
+      for (const file of audioFiles) {
+        try {
+          const transcription = await openai.audio.transcriptions.create({
+            file: fs.createReadStream(file.path),
+            model: "whisper-1",
+          });
+          audioTranscriptions += `\n\n--- Transcription from ${file.name} ---\n${transcription.text}`;
+          console.log(`✅ Transcribed ${file.name}`);
+        } catch (err: any) {
+          console.warn(`⚠️ Failed to transcribe ${file.name}:`, err.message);
+        }
+      }
+      console.log(`✅ Completed ${audioFiles.length} transcriptions`);
+    }
+
     // Create assistant with appropriate tools
     const tools: any[] = [];
-    if (hasDocuments) {
-      tools.push({ type: "file_search" });
-    }
+    if (hasDocuments) tools.push({ type: "file_search" });
 
     const assistant = await openai.beta.assistants.create({
       model: "gpt-4o",
@@ -162,6 +204,7 @@ Rules:
 - Generate questions about the actual content/subject matter
 - For images: analyze the content and create questions about what's shown
 - For documents: create questions about the information and concepts
+- For audio: create questions about the spoken content from transcriptions
 - If no files provided, generate general knowledge questions`,
       tools: tools.length > 0 ? tools : undefined,
     });
@@ -170,14 +213,16 @@ Rules:
 
     // Compose message content
     const messageContent: any[] = [];
-    
-    // Add text instruction
-    const textInstruction = hasPrompt || hasDocuments || hasImages
-      ? `Generate EXACTLY ${numQuestions} multiple-choice quiz questions.
+    const hasAudioTranscriptions = audioTranscriptions.length > 0;
+    const textInstruction =
+      hasPrompt || hasDocuments || hasImages || hasAudioTranscriptions
+        ? `Generate EXACTLY ${numQuestions} multiple-choice quiz questions.
 
 ${hasPrompt ? `Topic/Instructions: ${message}` : ""}
 ${hasDocuments ? "Base questions on the uploaded documents." : ""}
 ${hasImages ? "Analyze the images and create questions about their content." : ""}
+${hasAudioTranscriptions ? "Use the audio transcriptions below to create questions about the spoken content." : ""}
+${audioTranscriptions ? audioTranscriptions : ""}
 
 RESPOND WITH ONLY THE JSON OBJECT. NO EXPLANATIONS. NO MARKDOWN.
 
@@ -192,11 +237,11 @@ Format:
     }
   ]
 }`
-      : `Generate ${numQuestions} general knowledge quiz questions. Respond with ONLY the JSON object, no other text.`;
+        : `Generate ${numQuestions} general knowledge quiz questions. Respond with ONLY the JSON object, no other text.`;
 
     messageContent.push({
       type: "text",
-      text: textInstruction
+      text: textInstruction,
     });
 
     // Add image file references for vision
@@ -204,7 +249,7 @@ Format:
       for (const fileId of imageFileIds) {
         messageContent.push({
           type: "image_file",
-          image_file: { file_id: fileId }
+          image_file: { file_id: fileId },
         });
       }
     }
@@ -215,18 +260,20 @@ Format:
       for (const fileId of documentFileIds) {
         attachments.push({
           file_id: fileId,
-          tools: [{ type: "file_search" }]
+          tools: [{ type: "file_search" }],
         });
       }
     }
 
     // Create thread with message
     const thread = await openai.beta.threads.create({
-      messages: [{
-        role: "user",
-        content: messageContent,
-        attachments: attachments.length > 0 ? attachments : undefined,
-      }],
+      messages: [
+        {
+          role: "user",
+          content: messageContent,
+          attachments: attachments.length > 0 ? attachments : undefined,
+        },
+      ],
     });
 
     console.log(`✅ Created thread: ${thread.id}`);
@@ -252,28 +299,25 @@ Format:
       if (block.type === "text") text += block.text.value;
     }
     text = text.trim();
-    
+
     console.log("📩 Raw assistant response:");
-    console.log(text.substring(0, 500)); // Log first 500 chars for debugging
-    
+    console.log(text.substring(0, 500));
+
     if (!text) throw new Error("Assistant returned empty response");
 
     // Enhanced JSON extraction
     let parsed: any = null;
-    
-    // Try direct parse first
+
     try {
       parsed = JSON.parse(text);
       console.log("✅ Direct JSON parse successful");
-    } catch (e) {
+    } catch {
       console.log("⚠️ Direct parse failed, trying extraction...");
-      
-      // Try to extract from markdown code blocks
       const codeBlockPatterns = [
         /```json\s*([\s\S]*?)\s*```/,
         /```\s*([\s\S]*?)\s*```/,
       ];
-      
+
       for (const pattern of codeBlockPatterns) {
         const match = text.match(pattern);
         if (match) {
@@ -286,8 +330,7 @@ Format:
           }
         }
       }
-      
-      // Try to find JSON object in text
+
       if (!parsed) {
         const jsonMatch = text.match(/\{[\s\S]*"questions"[\s\S]*\}/);
         if (jsonMatch) {
@@ -301,7 +344,6 @@ Format:
       }
     }
 
-    // Validate parsed data
     if (!parsed) {
       throw new Error("Failed to extract valid JSON from response");
     }
@@ -315,21 +357,15 @@ Format:
       throw new Error("Response contains empty questions array");
     }
 
-    // Format and validate questions
-    const formattedQuestions = parsed.questions.map((q: any, i: number) => {
-      if (!q.question || !Array.isArray(q.options) || !q.correct) {
-        console.warn(`⚠️ Invalid question at index ${i}:`, q);
-      }
-      
-      return {
-        id: q.id || i + 1,
-        question: q.question || `Question ${i + 1}`,
-        options: Array.isArray(q.options) && q.options.length >= 2 
-          ? q.options 
+    const formattedQuestions = parsed.questions.map((q: any, i: number) => ({
+      id: q.id || i + 1,
+      question: q.question || `Question ${i + 1}`,
+      options:
+        Array.isArray(q.options) && q.options.length >= 2
+          ? q.options
           : ["Option A", "Option B", "Option C", "Option D"],
-        correct: q.correct || q.answer || (q.options?.[0] || "Option A"),
-      };
-    });
+      correct: q.correct || q.answer || q.options?.[0] || "Option A",
+    }));
 
     console.log(`✅ Formatted ${formattedQuestions.length} questions`);
 
@@ -344,11 +380,13 @@ Format:
       console.warn("⚠️ Cleanup warning:", err);
     }
 
-    // Save to DB
-    const result = await addQuestionsToQuiz(quizId, formattedQuestions);
-    await db.execute(`UPDATE quizzes SET generation_status = 'success' WHERE id = ?`, [quizId]);
-
-    console.log(`✅ Quiz generation complete: ${result.questionCount} questions saved`);
+    // Save to DB (with userId for security)
+    const result = await addQuestionsToQuiz(quizId, formattedQuestions, userId);
+    await db.execute(
+      `UPDATE quizzes SET generation_status = 'success' WHERE id = ? AND user_id = ?`,
+      [quizId, userId]
+    );
+    console.log(`✅ Quiz generation complete: ${result.questionCount} questions saved for user ${userId}`);
 
     return NextResponse.json({
       success: true,
@@ -360,16 +398,21 @@ Format:
     console.error("Stack trace:", error.stack);
     
     if (quizId > 0) {
-      await db.execute(`UPDATE quizzes SET generation_status = 'failed' WHERE id = ?`, [quizId]);
+      await db.execute(
+        `UPDATE quizzes SET generation_status = 'failed' WHERE id = ? AND user_id = ?`,
+        [quizId, userId]
+      );
     }
     
-    return NextResponse.json({ 
-      error: error.message,
-      details: process.env.NODE_ENV === 'development' ? error.stack : undefined
-    }, { status: 500 });
-  } finally {
-    await db.end();
+    return NextResponse.json(
+      {
+        error: error.message,
+        details: process.env.NODE_ENV === "development" ? error.stack : undefined,
+      },
+      { status: 500 }
+    );
   }
+  // ✅ NO db.end() - pool manages connections automatically
 }
 
 // 🧱 Main endpoint (queued)

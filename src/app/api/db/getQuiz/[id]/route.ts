@@ -1,49 +1,57 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getConnection } from "@/lib/db";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/authOptions"; // ✅ Correct import
+import db from "@/lib/db";
 import { RowDataPacket } from "mysql2";
 
 /**
  * GET /api/db/getQuiz/[id]
- * Fetches a single quiz by ID (with its description, prompt, num_questions, generation status, and questions).
+ * Fetch a single quiz with its details and questions.
+ * Only accessible to the quiz owner.
  */
 export async function GET(
-  req: NextRequest,
+  _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
+  const quizId = Number(id);
+
+  // 🔒 Require authentication
+  const session = await getServerSession(authOptions);
+  if (!session?.user?.id) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const userId = session.user.id;
 
   try {
-    const quizId = Number(id);
     if (isNaN(quizId)) {
       return NextResponse.json({ error: "Invalid quiz ID" }, { status: 400 });
     }
 
-    const db = await getConnection();
-
-    // ✅ Include num_questions + prompt + generation_status
+    // ✅ Fetch quiz only if it belongs to this user
     const [quizRows] = await db.query<RowDataPacket[]>(
       `
       SELECT 
-        id, 
-        name, 
-        description, 
-        prompt, 
-        num_questions, 
+        id,
+        name,
+        description,
+        prompt,
+        num_questions,
         generation_status
       FROM quizzes
-      WHERE id = ?
+      WHERE id = ? AND user_id = ?
       `,
-      [quizId]
+      [quizId, userId]
     );
 
     if (quizRows.length === 0) {
-      await db.end();
       return NextResponse.json({ error: "Quiz not found" }, { status: 404 });
     }
 
     const quiz = quizRows[0];
 
-    // ✅ Fetch questions
+    // ✅ Fetch related questions
     const [questionRows] = await db.query<RowDataPacket[]>(
       `
       SELECT id, question, option_a, option_b, option_c, option_d, correct_answer
@@ -59,8 +67,6 @@ export async function GET(
       options: [q.option_a, q.option_b, q.option_c, q.option_d],
       correct: q.correct_answer,
     }));
-
-    await db.end();
 
     return NextResponse.json(quiz);
   } catch (err: any) {

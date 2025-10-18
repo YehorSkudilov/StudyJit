@@ -1,6 +1,6 @@
-import type { Metadata } from "next";
+"use client";
 import { Geist, Geist_Mono } from "next/font/google";
-import Link from "next/link";
+import { usePathname } from "next/navigation";
 import "./globals.css";
 import Navbar from "@/components/Navbar";
 
@@ -14,21 +14,29 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
-export const metadata: Metadata = {
-  title: "StudyJit",
-  description: "StudyJit",
-};
+// Pages where Navbar should NOT be shown
+const NAVBAR_EXCLUDED_PAGES = [
+  "/login",
+  "/",
+];
 
 export default function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const pathname = usePathname();
+  
+  // Check if current page should hide navbar
+  const shouldShowNavbar = !NAVBAR_EXCLUDED_PAGES.some(
+    (excludedPath) => pathname === excludedPath || pathname?.startsWith(`${excludedPath}/`)
+  );
+
   return (
     <html lang="en">
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
-        {/* Full-width Header */}
-        <Navbar/>
+        {/* Conditionally render Navbar */}
+        {shouldShowNavbar && <Navbar />}
 
         {children}
       </body>

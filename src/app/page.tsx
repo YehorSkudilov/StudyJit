@@ -61,9 +61,9 @@ export default function Home() {
           {/* Feature 3: GPT-4o mini Intelligence */}
           <div className="flex flex-col items-center text-center p-6 bg-white dark:bg-gray-800 rounded-xl shadow hover:shadow-lg transition">
             <Brain className="w-16 h-16 text-blue-600 dark:text-blue-400" />
-            <h4 className="mt-4 font-semibold text-xl">Powered by GPT-4o mini</h4>
+            <h4 className="mt-4 font-semibold text-xl">Powered by GPT-4o</h4>
             <p className="mt-2 text-gray-600 dark:text-gray-300">
-              Leverages GPT-4o mini intelligence to understand your notes deeply
+              Leverages GPT-4o intelligence to understand your notes deeply
               and craft meaningful, high-quality quizzes in seconds.
             </p>
           </div>

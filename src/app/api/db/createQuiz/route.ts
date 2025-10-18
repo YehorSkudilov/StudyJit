@@ -1,69 +1,54 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getConnection } from "@/lib/db";
-import { ResultSetHeader, RowDataPacket } from "mysql2";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/authOptions";
+import db from "@/lib/db";
 
 export async function POST(req: NextRequest) {
-  try {
-    const body = await req.json();
-    const { quizName, description, questions } = body;
+  const session = await getServerSession(authOptions);
 
-    if (!quizName) {
+  // 🔒 Require logged-in user
+  if (!session?.user?.id) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const userId = session.user.id;
+
+  try {
+    const { name, description = "", prompt = "", numQuestions = 10 } = await req.json();
+
+    // 🧩 Basic validation
+    if (!name?.trim()) {
       return NextResponse.json({ error: "Quiz name is required" }, { status: 400 });
     }
 
-    const db = await getConnection();
+    const validNumQuestions = Math.min(Math.max(Number(numQuestions), 1), 50); // clamp 1–50
 
-    // ✅ Create quiz with "never_generated" instead of "pending"
-    const [quizResult] = await db.execute<ResultSetHeader>(
-      `
-      INSERT INTO quizzes (name, description, generation_status)
-      VALUES (?, ?, 'never_generated')
-      ON DUPLICATE KEY UPDATE
-        description = VALUES(description)
-      `,
-      [quizName, description || null]
+    // 🛡️ Check if quiz name already exists for this user
+    const [existing]: any = await db.query(
+      `SELECT id FROM quizzes WHERE name = ? AND user_id = ?`,
+      [name.trim(), userId]
     );
 
-    // ✅ Determine quizId
-    let quizId = quizResult.insertId;
-    if (!quizId) {
-      const [rows] = await db.query<RowDataPacket[]>(
-        `SELECT id FROM quizzes WHERE name = ?`,
-        [quizName]
+    if (existing.length > 0) {
+      return NextResponse.json(
+        { error: "You already have a quiz with this name" },
+        { status: 409 }
       );
-      quizId = rows.length ? rows[0].id : null;
     }
 
-    if (!quizId) {
-      await db.end();
-      return NextResponse.json({ error: "Failed to create or find quiz" }, { status: 500 });
-    }
+    // 🧠 Insert new quiz
+    const [result]: any = await db.query(
+      `INSERT INTO quizzes (name, description, prompt, num_questions, user_id, generation_status)
+       VALUES (?, ?, ?, ?, ?, 'never_generated')`,
+      [name.trim(), description, prompt, validNumQuestions, userId]
+    );
 
-    // ✅ Insert provided questions (if any)
-    if (Array.isArray(questions) && questions.length > 0) {
-      for (const q of questions) {
-        const [a, b, c, d] = q.options || [];
-        await db.execute(
-          `
-          INSERT INTO quiz_questions
-            (quiz_id, question, option_a, option_b, option_c, option_d, correct_answer)
-          VALUES (?, ?, ?, ?, ?, ?, ?)
-          `,
-          [quizId, q.question, a, b, c, d, q.correct]
-        );
-      }
-    }
-
-    await db.end();
+    console.log(`✅ Created quiz '${name}' for user ${userId}`);
 
     return NextResponse.json({
       success: true,
-      quizId,
-      generation_status: "never_generated",
-      message:
-        Array.isArray(questions) && questions.length > 0
-          ? `Quiz "${quizName}" created with ${questions.length} question(s) and status 'never_generated'.`
-          : `Empty quiz "${quizName}" created successfully with status 'never_generated'.`,
+      quizId: result.insertId,
+      message: "Quiz created successfully",
     });
   } catch (err: any) {
     console.error("❌ Error creating quiz:", err);

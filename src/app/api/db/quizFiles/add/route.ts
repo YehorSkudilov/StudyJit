@@ -1,47 +1,86 @@
 import { NextResponse } from "next/server";
-import { getConnection } from "@/lib/db";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/authOptions";
+import db from "@/lib/db";
 
 export async function POST(req: Request) {
+  // 🔒 Require authentication
+  const session = await getServerSession(authOptions);
+  if (!session?.user?.id) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const userId = session.user.id;
+
   try {
     const { quizId, fileId } = await req.json();
 
-    const db = await getConnection();
+    if (!quizId || !fileId) {
+      return NextResponse.json(
+        { error: "Missing quizId or fileId" },
+        { status: 400 }
+      );
+    }
 
-    // Check if already linked
+    // ✅ Ensure quiz belongs to user
+    const [quizRows]: any = await db.query(
+      "SELECT id FROM quizzes WHERE id = ? AND user_id = ?",
+      [quizId, userId]
+    );
+    if (quizRows.length === 0) {
+      return NextResponse.json(
+        { error: "Quiz not found or not owned by user" },
+        { status: 403 }
+      );
+    }
+
+    // ✅ Ensure file belongs to user
+    const [fileRows]: any = await db.query(
+      "SELECT id, name, path FROM files WHERE id = ? AND user_id = ?",
+      [fileId, userId]
+    );
+    if (fileRows.length === 0) {
+      return NextResponse.json(
+        { error: "File not found or not owned by user" },
+        { status: 403 }
+      );
+    }
+
+    // ✅ Check if already linked
     const [existing]: any = await db.query(
-      "SELECT * FROM quiz_files WHERE quiz_id = ? AND file_id = ?",
+      "SELECT id FROM quiz_files WHERE quiz_id = ? AND file_id = ?",
       [quizId, fileId]
     );
     if (existing.length > 0) {
-      await db.end();
       return NextResponse.json({
         success: false,
         message: "File already linked to this quiz.",
       });
     }
 
-    // Insert new link
-    await db.query(
-      "INSERT INTO quiz_files (quiz_id, file_id) VALUES (?, ?)",
-      [quizId, fileId]
-    );
+    // ✅ Create new link
+    await db.query("INSERT INTO quiz_files (quiz_id, file_id) VALUES (?, ?)", [
+      quizId,
+      fileId,
+    ]);
 
-    // Fetch linked file info
-    const [rows]: any = await db.query(
-      `SELECT f.id, f.name, f.path AS file_path
-       FROM files f
-       WHERE f.id = ?`,
-      [fileId]
-    );
+    console.log(`📎 Linked file #${fileId} to quiz #${quizId} for user #${userId}`);
 
-    await db.end();
+    const file = fileRows[0];
 
     return NextResponse.json({
       success: true,
-      file: rows[0], // ✅ always return full file object
+      file: {
+        id: file.id,
+        name: file.name,
+        file_path: file.path,
+      },
     });
   } catch (err: any) {
     console.error("❌ Error linking file:", err);
-    return NextResponse.json({ error: err.message }, { status: 500 });
+    return NextResponse.json(
+      { error: err.message || "Internal server error" },
+      { status: 500 }
+    );
   }
 }
