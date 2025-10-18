@@ -1,4 +1,5 @@
 "use client";
+
 import React, { useState, useEffect } from "react";
 import { useRouter, useParams } from "next/navigation";
 import {
@@ -205,43 +206,49 @@ export default function QuizDetailsPage() {
       <div className="min-h-screen bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 flex flex-col px-3 sm:px-8 md:px-20 py-6 sm:py-10 gap-6">
         <div className="relative p-4 sm:p-8 bg-white dark:bg-gray-800 rounded-xl shadow flex flex-col gap-6 max-w-4xl w-full mx-auto">
 
-          {/* Back Button */}
-          <button
-            onClick={() => router.push("/dashboard")}
-            className="absolute top-3 left-3 sm:top-4 sm:left-4 p-2 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-full transition"
-          >
-            <ChevronLeft className="w-5 h-5" />
-          </button>
+          {/* Title + Status + Back Button (centered vertically) */}
+          <header className="mt-2 sm:mt-0">
+            <div className="flex items-center justify-between sm:justify-center gap-3 sm:gap-6 mb-2 relative">
+              {/* Back button */}
+              <button
+                onClick={() => router.push("/dashboard")}
+                className="p-2 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-full transition"
+                title="Go back"
+              >
+                <ChevronLeft className="w-5 h-5 sm:w-6 sm:h-6" />
+              </button>
 
-          {/* Title + Status */}
-          <header className="text-center mt-2 sm:mt-0">
-            <div className="flex flex-col sm:flex-row justify-center sm:items-center gap-2 mb-2">
-              <div className="flex items-center justify-center gap-2">
-                <BookOpen className="w-5 h-5 sm:w-6 sm:h-6 text-blue-500" />
-                {editingName ? (
-                  <input
-                    type="text"
-                    value={quizTitle}
-                    onChange={(e) => setQuizTitle(e.target.value)}
-                    className="text-2xl sm:text-3xl font-bold bg-gray-50 dark:bg-gray-700 rounded px-2 py-1 border border-gray-300 dark:border-gray-600 text-blue-600 dark:text-blue-400 focus:ring-2 focus:ring-blue-500"
-                  />
-                ) : (
-                  <h1 className="text-2xl sm:text-3xl font-bold text-blue-600 dark:text-blue-400 truncate max-w-[85vw]">
-                    {quizTitle}
-                  </h1>
-                )}
-                <button
-                  onClick={() => setEditingName((prev) => !prev)}
-                  className={`p-1 rounded-full transition-colors ${
-                    editingName
-                      ? "text-green-600 hover:bg-green-500 hover:text-white"
-                      : "text-gray-600 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600"
-                  }`}
-                >
-                  {editingName ? <Check className="w-4 h-4" /> : <Edit2 className="w-4 h-4" />}
-                </button>
+              {/* Title + Edit */}
+              <div className="flex flex-col sm:flex-row items-center justify-center gap-2">
+                <div className="flex items-center justify-center gap-2">
+                  <BookOpen className="w-5 h-5 sm:w-6 sm:h-6 text-blue-500" />
+                  {editingName ? (
+                    <input
+                      type="text"
+                      value={quizTitle}
+                      onChange={(e) => setQuizTitle(e.target.value)}
+                      className="text-2xl sm:text-3xl font-bold bg-gray-50 dark:bg-gray-700 rounded px-2 py-1 border border-gray-300 dark:border-gray-600 text-blue-600 dark:text-blue-400 focus:ring-2 focus:ring-blue-500"
+                    />
+                  ) : (
+                    <h1 className="text-2xl sm:text-3xl font-bold text-blue-600 dark:text-blue-400 truncate max-w-[75vw] sm:max-w-[600px]">
+                      {quizTitle}
+                    </h1>
+                  )}
+                  <button
+                    onClick={() => setEditingName((prev) => !prev)}
+                    className={`p-1 rounded-full transition-colors ${
+                      editingName
+                        ? "text-green-600 hover:bg-green-500 hover:text-white"
+                        : "text-gray-600 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600"
+                    }`}
+                  >
+                    {editingName ? <Check className="w-4 h-4" /> : <Edit2 className="w-4 h-4" />}
+                  </button>
+                </div>
+
+                {/* Status */}
+                <div className="mt-1 sm:mt-0">{getStatusIndicator()}</div>
               </div>
-              <div className="mt-1 sm:mt-0">{getStatusIndicator()}</div>
             </div>
           </header>
 
