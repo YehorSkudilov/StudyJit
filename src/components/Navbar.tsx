@@ -10,7 +10,6 @@ import Image from 'next/image';
 const tabs = [
   { href: '/dashboard', label: 'Dashboard' },
   { href: '/files', label: 'Files' },
-
 ];
 
 export default function Navbar() {
@@ -20,15 +19,16 @@ export default function Navbar() {
   const isActive = (href: string) => pathname === href;
 
   return (
-<nav className="fixed top-0 left-0 w-full bg-gray-100 dark:bg-gray-900 border-b shadow-md text-white z-[1000]">
+    <nav className="w-full bg-gray-100 dark:bg-gray-900 border-b shadow-md text-white z-[1000]">
       <div className="max-w-7xl mx-auto px-4 py-3 flex justify-between items-center md:justify-center relative">
         {/* Left: Logo */}
-      <Link href="/"  className="md:absolute left-4 flex items-center gap-2">
-        <Image src="/images/logo.png" alt="Logo" width={35} height={35} />
-        <span className="text-xl font-bold">
-          Study Jit
-        </span>
-      </Link>
+        <Link href="/" className="md:absolute left-4 flex items-center gap-2">
+          <Image src="/images/logo.png" alt="Logo" width={35} height={35} />
+          <span className="text-xl font-bold text-gray-900 dark:text-white">
+            Study Jit
+          </span>
+        </Link>
+
         {/* Center: Desktop Tabs */}
         <ul className="hidden md:flex gap-1 font-medium">
           {tabs.map((tab) => (
@@ -47,14 +47,13 @@ export default function Navbar() {
           ))}
         </ul>
 
-        {/* Right: Account Menu (desktop only) */}
+        {/* Right: Account Menu */}
         <div className="flex items-center absolute right-4 top-1/2 -translate-y-1/2">
-        <AccountMenu/>
+          <AccountMenu />
         </div>
 
-
         {/* Mobile Menu Button */}
-        <div className="md:hidden absolute right-17 translate-y-1/10">
+        <div className="md:hidden absolute right-16 top-1/2 -translate-y-1/2">
           <button onClick={() => setMenuOpen(!menuOpen)}>
             {menuOpen ? <X size={24} /> : <Menu size={24} />}
           </button>
