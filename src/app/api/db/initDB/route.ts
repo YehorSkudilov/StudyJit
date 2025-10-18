@@ -9,21 +9,52 @@ async function ensureColumnExists(db: any, table: string, column: string, defini
   }
 }
 
+/**
+ * ✅ Helper to ensure ENUM values include 'never_generated'
+ * If 'generation_status' column exists, this checks its ENUM definition
+ * and modifies it if 'never_generated' is missing.
+ */
+async function ensureEnumIncludesNeverGenerated(db: any) {
+  const [rows] = await db.query(`SHOW COLUMNS FROM quizzes LIKE 'generation_status'`);
+  if (rows.length > 0) {
+    const column = rows[0];
+    const type = column.Type; // e.g. enum('pending','success','failed')
+    if (!type.includes("never_generated")) {
+      console.log("🟡 Updating ENUM for generation_status to include 'never_generated'...");
+      await db.query(`
+        ALTER TABLE quizzes 
+        MODIFY generation_status 
+        ENUM('never_generated','pending','success','failed') 
+        DEFAULT 'never_generated';
+      `);
+    }
+  } else {
+    console.log("🟢 Creating generation_status column with full ENUM definition...");
+    await db.query(`
+      ALTER TABLE quizzes 
+      ADD COLUMN generation_status 
+      ENUM('never_generated','pending','success','failed') 
+      DEFAULT 'never_generated';
+    `);
+  }
+}
+
 async function initDatabase() {
   const db = await getConnection();
 
-  // ✅ Create base tables if missing
+  // ✅ Quizzes table
   await db.query(`
     CREATE TABLE IF NOT EXISTS quizzes (
       id INT AUTO_INCREMENT PRIMARY KEY,
       name VARCHAR(255) UNIQUE NOT NULL,
       description TEXT,
       prompt TEXT,
-      generation_status ENUM('pending','success','failed') DEFAULT 'pending',
+      generation_status ENUM('never_generated','pending','success','failed') DEFAULT 'never_generated',
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
   `);
 
+  // ✅ Quiz questions table
   await db.query(`
     CREATE TABLE IF NOT EXISTS quiz_questions (
       id INT AUTO_INCREMENT PRIMARY KEY,
@@ -38,22 +69,57 @@ async function initDatabase() {
     );
   `);
 
-  // ✅ Auto-upgrade existing schema
-  await ensureColumnExists(db, "quizzes", "prompt", "TEXT");
-  await ensureColumnExists(db, "quizzes", "generation_status", "ENUM('pending','success','failed') DEFAULT 'pending'");
-  await ensureColumnExists(db, "quizzes", "created_at", "TIMESTAMP DEFAULT CURRENT_TIMESTAMP");
+  // ✅ Uploaded files table
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS files (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      name VARCHAR(255) NOT NULL,
+      size BIGINT,
+      mime_type VARCHAR(255),
+      path VARCHAR(512) NOT NULL,
+      uploaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
 
-  console.log("✅ Database schema verified and upgraded.");
+  // ✅ Link table (quiz ↔ files)
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS quiz_files (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      quiz_id INT NOT NULL,
+      file_id INT NOT NULL,
+      linked_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (quiz_id) REFERENCES quizzes(id) ON DELETE CASCADE,
+      FOREIGN KEY (file_id) REFERENCES files(id) ON DELETE CASCADE
+    );
+  `);
+
+  // ✅ Auto-upgrade columns if missing
+  await ensureColumnExists(db, "quizzes", "prompt", "TEXT");
+  await ensureColumnExists(
+    db,
+    "quizzes",
+    "created_at",
+    "TIMESTAMP DEFAULT CURRENT_TIMESTAMP"
+  );
+
+  // ✅ Ensure ENUM column exists and includes 'never_generated'
+  await ensureEnumIncludesNeverGenerated(db);
+
+  console.log("✅ Database schema verified and upgraded (including 'never_generated' ENUM).");
   await db.end();
-  return { success: true, message: "✅ Tables verified and updated (with generation_status)" };
+  return {
+    success: true,
+    message: "✅ All tables verified and upgraded (including 'never_generated' ENUM and quiz_files table).",
+  };
 }
 
-// GET or POST both call init
+// ✅ GET or POST both call initDatabase
 export async function GET() {
   try {
     const result = await initDatabase();
     return NextResponse.json(result);
   } catch (err: any) {
+    console.error("❌ initDatabase error:", err);
     return NextResponse.json({ error: err.message }, { status: 500 });
   }
 }

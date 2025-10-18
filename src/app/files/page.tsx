@@ -1,94 +1,123 @@
 "use client";
-import React, { useState } from "react";
-import FileGrid from "@/components/FileGrid"; // Import the FileGrid component
-import FileUploadPopup from "@/components/FileUploadPopup"; // Import the FileUploadPopup component
-import FloatingAddButton from "@/components/FloatingAddButton"; // Import the FloatingAddButton component
-import DashboardHeader from "@/components/DashboardHeader"; // Import the DashboardHeader component
+export const dynamic = "force-dynamic";
 
-export default function FileUploadPage() {
-  const [files, setFiles] = useState([
-    { name: "Document1.pdf", size: 1024 },
-    { name: "Image1.png", size: 2048 },
-    { name: "Report.docx", size: 512 },
-  ]);
+import React, { useEffect, useState } from "react";
+import PageHeader from "@/components/PageHeader";
+import GenericGrid from "@/components/GenericGrid";
+import FileCard from "@/components/FileCard";
+import FloatingAddButton from "@/components/FloatingAddButton";
+import FileUploadPopup from "@/components/FileUploadPopup";
+import { Item } from "@/types/Item";
+import { File } from "lucide-react";
 
-  const [selectedFiles, setSelectedFiles] = useState<string[]>([]);
+export default function FilesPage() {
+  const [files, setFiles] = useState<Item[]>([]);
+  const [selectedItems, setSelectedItems] = useState<string[]>([]);
   const [isPopupOpen, setIsPopupOpen] = useState(false);
-  const [activeFolder, setActiveFolder] = useState<string | null>(null); // Track active folder
+  const [activeFolder, setActiveFolder] = useState<string | null>(null);
 
-  // Handle file selection
-  const handleFileClick = (name: string, index: number, e: React.MouseEvent) => {
-    const newSelectedFiles = selectedFiles.includes(name)
-      ? selectedFiles.filter((file) => file !== name)
-      : [...selectedFiles, name];
-    setSelectedFiles(newSelectedFiles);
+  // ✅ Fetch files from DB (GET /api/files)
+  const fetchFiles = async () => {
+    try {
+      const res = await fetch("/api/db/files", { cache: "no-store" });
+      if (!res.ok) throw new Error("Failed to load files");
+      const data = await res.json();
+      setFiles(
+        data.map((f: any) => ({
+          id: f.id.toString(),
+          type: "file",
+          name: f.name,
+          size: f.size,
+        }))
+      );
+    } catch (err) {
+      console.error("❌ Error fetching files:", err);
+    }
   };
 
-  // Handle file double-click
-  const handleFileDoubleClick = (file: { name: string; size: number }) => {
-    alert(`You double-clicked on: ${file.name}`);
+  useEffect(() => {
+    fetchFiles();
+  }, []);
+
+  // ✅ Upload new file to backend (POST /api/files/upload)
+  const handleFileUpload = async (file: File) => {
+    const formData = new FormData();
+    formData.append("file", file);
+
+    try {
+      const res = await fetch("/api/db/files/upload", {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!res.ok) throw new Error("Upload failed");
+      const result = await res.json();
+      console.log("✅ Uploaded:", result);
+
+      await fetchFiles(); // Refresh list
+    } catch (err) {
+      console.error("❌ Upload error:", err);
+    }
   };
 
-  // Handle file reorder
-  const handleReorder = (newOrder: { name: string }[]) => {
-    setFiles(newOrder.map((item) => ({ name: item.name, size: 1024 }))); // Update files order
+  // ✅ Delete selected files using DELETE /api/files/:id
+  const handleDeleteSelected = async () => {
+    for (const id of selectedItems) {
+      try {
+        const res = await fetch(`/api/db/files/${id}`, { method: "DELETE" });
+        if (!res.ok) throw new Error("Failed to delete file " + id);
+      } catch (err) {
+        console.error("❌ Delete error:", err);
+      }
+    }
+    setSelectedItems([]);
+    await fetchFiles();
   };
 
-  // Handle file upload
-  const handleFileUpload = (file: File) => {
-    const newFile = { name: file.name, size: file.size };
-    setFiles((prevFiles) => [...prevFiles, newFile]);
-  };
+  // ✅ Selection controls
+  const handleSelectAll = () => setSelectedItems(files.map((f) => f.id));
+  const handleDeselectAll = () => setSelectedItems([]);
 
-  // Handle file selection actions (select all/deselect all)
-  const handleSelectAll = () => {
-    setSelectedFiles(files.map((file) => file.name)); // Select all files
-  };
-
-  const handleDeselectAll = () => {
-    setSelectedFiles([]); // Deselect all files
-  };
-
-  const handleDeleteSelected = () => {
-    setFiles(files.filter((file) => !selectedFiles.includes(file.name)));
-    setSelectedFiles([]); // Clear selected files after deletion
-  };
+  // ✅ Drag reorder (visual only)
+  const handleReorder = (newOrder: Item[]) => setFiles(newOrder);
 
   return (
-    <div className="p-8">
-      {/* Dashboard Header */}
-      <DashboardHeader
+    <div className="min-h-screen flex flex-col bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 relative">
+      <PageHeader
+        title="Files"
+        icon={File}
         activeFolder={activeFolder}
-        goBack={() =>
-          setActiveFolder(
-            // Assuming folders is a list of folders with their names and parents
-            activeFolder ? null : "Root Folder" // Example logic to set the folder name
-          )
-        }
-        selectedItems={selectedFiles} // Pass selected files as items
+        goBack={() => setActiveFolder(null)}
+        selectedItems={selectedItems}
         onDeleteSelected={handleDeleteSelected}
         onSelectAll={handleSelectAll}
         onDeselectAll={handleDeselectAll}
       />
 
-      {/* File Grid */}
-      <FileGrid
-        files={files}
-        selectedFiles={selectedFiles}
-        onFileClick={handleFileClick}
-        onFileDoubleClick={handleFileDoubleClick}
-        onReorder={handleReorder}
-      />
+      <main className="px-6 sm:px-20 pb-20">
+        <GenericGrid
+          items={files}
+          selectedItems={selectedItems}
+          setSelectedItems={setSelectedItems}
+          onReorder={handleReorder}
+          renderItem={(item, isSelected, onClick) => (
+            <FileCard
+              fileName={item.name}
+              fileSize={item.size}
+              selected={isSelected}
+              onClick={onClick}
+              onDoubleClick={() => console.log(`Opened ${item.name}`)}
+            />
+          )}
+        />
+      </main>
 
-      {/* File Upload Popup */}
+      <FloatingAddButton onClick={() => setIsPopupOpen(true)} />
       <FileUploadPopup
         isOpen={isPopupOpen}
         onClose={() => setIsPopupOpen(false)}
         onFileUpload={handleFileUpload}
       />
-
-      {/* Floating Add Button */}
-      <FloatingAddButton onClick={() => setIsPopupOpen(true)} />
     </div>
   );
 }

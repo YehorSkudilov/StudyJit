@@ -1,7 +1,7 @@
 version: "3.9"
 
 services:
-  # 🧠 Ollama (auto-pulls DeepSeek / LLaMA / Mistral)
+  # 🧠 Ollama (AI inference backend)
   ollama:
     image: ollama/ollama:latest
     container_name: ${OLLAMA_NAME}
@@ -10,7 +10,7 @@ services:
       - "${OLLAMA_PORT}:11434"
     volumes:
       - ollama:/root/.ollama
-      - ./entrypoint.sh:/entrypoint.sh:ro   # mount startup script
+      - ./entrypoint.sh:/entrypoint.sh:ro   # startup script
     networks:
       - next-network
     environment:
@@ -18,7 +18,6 @@ services:
       - OLLAMA_KEEP_ALIVE=${OLLAMA_KEEP_ALIVE}
       - OLLAMA_MODEL=${OLLAMA_MODEL:-deepseek-r1:7b}
     entrypoint: ["/bin/sh", "/entrypoint.sh"]
-
 
   # 🌐 Next.js app
   app:
@@ -37,6 +36,9 @@ services:
       - DB_USER=root
       - DB_PASS=${DB_PASS}
       - DB_NAME=${DB_NAME}
+    volumes:
+      # ✅ shared volume for uploaded files
+      - db-files:/shared-files
     networks:
       - next-network
 
@@ -52,12 +54,17 @@ services:
       MYSQL_DATABASE: ${DB_NAME}
     volumes:
       - mysql-data:/var/lib/mysql
+      # ✅ shared volume for file storage, accessible to both DB and app
+      - db-files:/var/lib/mysql-files
     networks:
       - next-network
 
+# ✅ Persistent volumes
 volumes:
   mysql-data:
   ollama:
+  db-files:          # shared file-storage volume
 
+# ✅ Shared Docker network
 networks:
   next-network:

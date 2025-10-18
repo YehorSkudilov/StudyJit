@@ -2,21 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { getConnection } from "@/lib/db";
 import { ResultSetHeader } from "mysql2";
 
-/**
- * PATCH /api/db/updateQuiz
- * Updates a quiz's description and prompt.
- *
- * Request body:
- * {
- *   "id": number,
- *   "description": string,
- *   "prompt": string
- * }
- */
 export async function PATCH(req: NextRequest) {
   try {
     const body = await req.json();
-    const { id, description, prompt } = body;
+    const { id, name, description, prompt } = body;
 
     if (!id) {
       return NextResponse.json({ error: "Quiz ID is required" }, { status: 400 });
@@ -27,10 +16,10 @@ export async function PATCH(req: NextRequest) {
     const [result] = await db.execute<ResultSetHeader>(
       `
       UPDATE quizzes
-      SET description = ?, prompt = ?
+      SET name = ?, description = ?, prompt = ?
       WHERE id = ?
       `,
-      [description || "", prompt || "", id]
+      [name || "", description || "", prompt || "", id]
     );
 
     await db.end();

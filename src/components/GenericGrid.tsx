@@ -1,5 +1,7 @@
 "use client";
-import React from "react";
+import React, { useRef } from "react";
+import { Item } from "@/types/Item";
+
 import {
   DndContext,
   closestCenter,
@@ -17,34 +19,27 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 
-// Item type definition
-interface Item {
-  id: string;
-  type: "folder" | "quiz" | "other";
-  name: string;
-  description?: string;
-  generation_status?: "pending" | "success" | "failed" | null;
-  [key: string]: any;
-}
-
-// SortableItem component for drag-and-drop functionality
 interface SortableItemProps {
   id: string;
   children: React.ReactNode;
 }
 
-// GenericGridProps for defining component props
 interface GenericGridProps {
   items: Item[];
   selectedItems: string[];
   setSelectedItems: React.Dispatch<React.SetStateAction<string[]>>;
-  renderItem: (item: Item, isSelected: boolean, onClick: (e: React.MouseEvent) => void) => React.ReactNode;
+  renderItem: (
+    item: Item,
+    isSelected: boolean,
+    onClick: (e: React.MouseEvent) => void
+  ) => React.ReactNode;
   onReorder?: (newOrder: Item[]) => void;
 }
 
 // SortableItem implementation
 function SortableItem({ id, children }: SortableItemProps) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id });
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
+    useSortable({ id });
 
   const style: React.CSSProperties = {
     transform: CSS.Transform.toString(transform),
@@ -79,7 +74,7 @@ function SortableItem({ id, children }: SortableItemProps) {
   );
 }
 
-// GenericGrid component
+// ✅ GenericGrid with Shift-Select
 export default function GenericGrid({
   items,
   selectedItems,
@@ -92,6 +87,9 @@ export default function GenericGrid({
     useSensor(KeyboardSensor)
   );
 
+  // remember last clicked index for shift-range
+  const lastClickedIndex = useRef<number | null>(null);
+
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
     if (!over || active.id === over.id) return;
@@ -102,12 +100,31 @@ export default function GenericGrid({
     onReorder?.(newOrder);
   };
 
-  const handleItemClick = (itemId: string) => {
+  const handleItemClick = (e: React.MouseEvent, itemId: string) => {
+    const index = items.findIndex((i) => i.id === itemId);
     const isSelected = selectedItems.includes(itemId);
-    if (isSelected) {
-      setSelectedItems((prev: string[]) => prev.filter((id) => id !== itemId));
+
+    if (e.shiftKey && lastClickedIndex.current !== null) {
+      // ✅ SHIFT select range
+      const start = Math.min(lastClickedIndex.current, index);
+      const end = Math.max(lastClickedIndex.current, index);
+      const rangeIds = items.slice(start, end + 1).map((i) => i.id);
+      const merged = Array.from(new Set([...selectedItems, ...rangeIds]));
+      setSelectedItems(merged);
+    } else if (e.metaKey || e.ctrlKey) {
+      // ✅ CMD/Ctrl toggle single
+      if (isSelected)
+        setSelectedItems((prev) => prev.filter((id) => id !== itemId));
+      else setSelectedItems((prev) => [...prev, itemId]);
+      lastClickedIndex.current = index;
     } else {
-      setSelectedItems((prev: string[]) => [...prev, itemId]);
+      // ✅ Normal click
+      if (isSelected && selectedItems.length === 1) {
+        setSelectedItems([]);
+      } else {
+        setSelectedItems([itemId]);
+      }
+      lastClickedIndex.current = index;
     }
   };
 
@@ -117,7 +134,11 @@ export default function GenericGrid({
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 items-stretch [grid-auto-rows:1fr]">
           {items.map((item) => (
             <SortableItem key={item.id} id={item.id}>
-              {renderItem(item, selectedItems.includes(item.id), () => handleItemClick(item.id))}
+              {renderItem(
+                item,
+                selectedItems.includes(item.id),
+                (e) => handleItemClick(e, item.id)
+              )}
             </SortableItem>
           ))}
         </div>

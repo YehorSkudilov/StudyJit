@@ -1,12 +1,12 @@
 "use client";
 
-import { X, FilePlus, ArrowLeft } from "lucide-react";
+import { X, FilePlus, ArrowLeft, File, AlertCircle } from "lucide-react";
 import { useState } from "react";
 
 type FileUploadPopupProps = {
   isOpen: boolean;
   onClose: () => void;
-  onFileUpload: (file: File) => void; // Function to handle file upload
+  onFileUpload: (file: File) => void;
 };
 
 export default function FileUploadPopup({
@@ -16,40 +16,47 @@ export default function FileUploadPopup({
 }: FileUploadPopupProps) {
   const [inputFile, setInputFile] = useState<File | null>(null);
   const [activeType, setActiveType] = useState<"upload" | null>(null);
+  const [error, setError] = useState<string>("");
 
   if (!isOpen) return null;
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files ? e.target.files[0] : null;
-    if (file) setInputFile(file);
+    setInputFile(file);
+    setError("");
   };
 
   const handleSubmit = () => {
-    if (inputFile) {
-      onFileUpload(inputFile); // Upload the selected file
-      setInputFile(null);
-      setActiveType(null);
-      onClose();
+    if (!inputFile) {
+      setError("Please select a file before uploading.");
+      return;
     }
+
+    onFileUpload(inputFile);
+    setInputFile(null);
+    setActiveType(null);
+    setError("");
+    onClose();
   };
 
   const handleCancel = () => {
     setInputFile(null);
     setActiveType(null);
+    setError("");
     onClose();
   };
 
   const handleBack = () => {
     setInputFile(null);
     setActiveType(null);
+    setError("");
   };
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-      <div className="bg-white dark:bg-gray-800 rounded-xl p-6 w-full max-w-sm shadow-lg flex flex-col gap-4">
-        {/* Header Row */}
+      <div className="bg-white dark:bg-gray-800 rounded-xl p-6 w-full max-w-sm max-h-[90vh] overflow-y-auto shadow-lg flex flex-col gap-4">
+        {/* Header */}
         <div className="flex items-center justify-between">
-          {/* Back Button */}
           <div className="w-16">
             {activeType && (
               <button
@@ -61,12 +68,10 @@ export default function FileUploadPopup({
             )}
           </div>
 
-          {/* Title */}
           <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100 text-center flex-1">
             {activeType ? "Upload File" : "Upload New File"}
           </h2>
 
-          {/* Close Button */}
           <div className="w-16 flex justify-end">
             <button
               onClick={handleCancel}
@@ -90,7 +95,7 @@ export default function FileUploadPopup({
         )}
 
         {activeType === "upload" && (
-          <div className="flex flex-col gap-2">
+          <div className="flex flex-col gap-3">
             <input
               type="file"
               accept="*/*"
@@ -99,14 +104,33 @@ export default function FileUploadPopup({
             />
 
             {inputFile && (
-              <div className="text-gray-600 dark:text-gray-300 mt-2">
-                <strong>Selected File:</strong> {inputFile.name}
+              <div className="flex items-start gap-3 p-3 bg-gray-100 dark:bg-gray-700 rounded-lg shadow-inner break-words">
+                <File className="w-6 h-6 text-blue-500 flex-shrink-0" />
+                <div className="flex flex-col overflow-hidden">
+                  <span className="text-gray-900 dark:text-gray-100 font-medium break-words whitespace-normal">
+                    {inputFile.name}
+                  </span>
+                  <span className="text-sm text-gray-500 dark:text-gray-400">
+                    {(inputFile.size / 1024).toFixed(1)} KB
+                  </span>
+                </div>
+              </div>
+            )}
+
+            {error && (
+              <div className="flex items-center gap-2 text-red-600 dark:text-red-400 text-sm">
+                <AlertCircle className="w-4 h-4" />
+                {error}
               </div>
             )}
 
             <button
               onClick={handleSubmit}
-              className="w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-700 transition"
+              className={`w-full py-2 rounded transition ${
+                inputFile
+                  ? "bg-blue-600 text-white hover:bg-blue-700"
+                  : "bg-gray-400 text-gray-200 cursor-not-allowed"
+              }`}
               disabled={!inputFile}
             >
               Upload File
