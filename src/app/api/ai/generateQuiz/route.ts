@@ -29,7 +29,7 @@ const SUPPORTED_EXTENSIONS = [
 ];
 
 // Image extensions that require vision
-const IMAGE_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp'];
+const IMAGE_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.gif', '.webp'];
 
 async function processQuiz(req: NextRequest): Promise<NextResponse> {
   const db = await getConnection();
@@ -94,7 +94,7 @@ async function processQuiz(req: NextRequest): Promise<NextResponse> {
     }
 
     // 🧠 Upload documents for file_search
-    const fileIds: string[] = [];
+    const documentFileIds: string[] = [];
     if (hasDocuments) {
       console.log(`📂 Uploading ${documentFiles.length} document(s) to OpenAI...`);
       for (const file of documentFiles) {
@@ -103,37 +103,32 @@ async function processQuiz(req: NextRequest): Promise<NextResponse> {
             file: fs.createReadStream(file.path),
             purpose: "assistants",
           });
-          fileIds.push(upload.id);
-          console.log(`✅ Uploaded ${file.name} → ${upload.id}`);
+          documentFileIds.push(upload.id);
+          console.log(`✅ Uploaded document ${file.name} → ${upload.id}`);
         } catch (err: any) {
           console.warn(`⚠️ Failed to upload ${file.name}:`, err.message);
         }
       }
-      console.log(`✅ Uploaded ${fileIds.length} documents`);
+      console.log(`✅ Uploaded ${documentFileIds.length} documents`);
     }
 
-    // 📸 Encode images to base64 for vision
-    const imageContents: any[] = [];
+    // 📸 Upload images for vision (also as assistant files)
+    const imageFileIds: string[] = [];
     if (hasImages) {
-      console.log(`📸 Processing ${imageFiles.length} image(s)...`);
+      console.log(`📸 Uploading ${imageFiles.length} image(s) for vision...`);
       for (const file of imageFiles) {
         try {
-          const imageBuffer = fs.readFileSync(file.path);
-          const base64Image = imageBuffer.toString('base64');
-          const ext = file.name.substring(file.name.lastIndexOf('.') + 1).toLowerCase();
-          const mimeType = ext === 'jpg' || ext === 'jpeg' ? 'image/jpeg' : `image/${ext}`;
-          
-          imageContents.push({
-            type: "image_url",
-            image_url: {
-              url: `data:${mimeType};base64,${base64Image}`,
-            }
+          const upload = await openai.files.create({
+            file: fs.createReadStream(file.path),
+            purpose: "vision",
           });
-          console.log(`✅ Encoded image: ${file.name}`);
+          imageFileIds.push(upload.id);
+          console.log(`✅ Uploaded image ${file.name} → ${upload.id}`);
         } catch (err: any) {
-          console.warn(`⚠️ Failed to process image ${file.name}:`, err.message);
+          console.warn(`⚠️ Failed to upload image ${file.name}:`, err.message);
         }
       }
+      console.log(`✅ Uploaded ${imageFileIds.length} images`);
     }
 
     // Create assistant with appropriate tools
@@ -143,7 +138,7 @@ async function processQuiz(req: NextRequest): Promise<NextResponse> {
     }
 
     const assistant = await openai.beta.assistants.create({
-      model: hasImages ? "gpt-4o" : "gpt-4o", // gpt-4o supports both vision and file_search
+      model: "gpt-4o",
       name: "Quiz Generator",
       instructions: `You are a quiz generator. Generate multiple-choice quiz questions based on the provided content.
 
@@ -173,7 +168,7 @@ Rules:
 
     console.log(`✅ Created assistant: ${assistant.id}`);
 
-    // Compose message with both text and images
+    // Compose message content
     const messageContent: any[] = [];
     
     // Add text instruction
@@ -204,27 +199,34 @@ Format:
       text: textInstruction
     });
 
-    // Add images to message content
+    // Add image file references for vision
     if (hasImages) {
-      messageContent.push(...imageContents);
+      for (const fileId of imageFileIds) {
+        messageContent.push({
+          type: "image_file",
+          image_file: { file_id: fileId }
+        });
+      }
+    }
+
+    // Prepare attachments for documents
+    const attachments: any[] = [];
+    if (hasDocuments) {
+      for (const fileId of documentFileIds) {
+        attachments.push({
+          file_id: fileId,
+          tools: [{ type: "file_search" }]
+        });
+      }
     }
 
     // Create thread with message
-    const threadMessages: any[] = [{
-      role: "user",
-      content: messageContent,
-    }];
-
-    // Add document attachments if available
-    if (hasDocuments) {
-      threadMessages[0].attachments = fileIds.map((file_id) => ({
-        file_id,
-        tools: [{ type: "file_search" as const }],
-      }));
-    }
-
     const thread = await openai.beta.threads.create({
-      messages: threadMessages,
+      messages: [{
+        role: "user",
+        content: messageContent,
+        attachments: attachments.length > 0 ? attachments : undefined,
+      }],
     });
 
     console.log(`✅ Created thread: ${thread.id}`);
@@ -334,7 +336,7 @@ Format:
     // Cleanup OpenAI resources
     try {
       await openai.beta.assistants.delete(assistant.id);
-      for (const fileId of fileIds) {
+      for (const fileId of [...documentFileIds, ...imageFileIds]) {
         await openai.files.delete(fileId);
       }
       console.log("✅ Cleanup completed");
