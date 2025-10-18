@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/authOptions";
 import { addQuestionsToQuiz } from "@/lib/addQuestionsToQuiz";
-import db from "@/lib/db"; // ✅ Use pool directly
+import { getConnection } from "@/lib/db";
 import fs from "fs";
 import OpenAI from "openai";
 
@@ -44,6 +44,7 @@ async function processQuiz(req: NextRequest): Promise<NextResponse> {
   }
 
   const userId = Number(session.user.id);
+  const db = await getConnection();
   const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY! });
   let quizId = 0;
 
@@ -56,6 +57,7 @@ async function processQuiz(req: NextRequest): Promise<NextResponse> {
     const numQuestions = Number(form.get("numQuestions")) || 10;
 
     if (!quizId) {
+      await db.end();
       return NextResponse.json({ error: "Missing quizId" }, { status: 400 });
     }
 
@@ -68,6 +70,7 @@ async function processQuiz(req: NextRequest): Promise<NextResponse> {
     );
     
     if (!quizRows.length || quizRows[0].user_id !== userId) {
+      await db.end();
       return NextResponse.json({ error: "Forbidden: You do not own this quiz" }, { status: 403 });
     }
 
@@ -411,8 +414,9 @@ Format:
       },
       { status: 500 }
     );
+  } finally {
+    await db.end();
   }
-  // ✅ NO db.end() - pool manages connections automatically
 }
 
 // 🧱 Main endpoint (queued)
