@@ -239,7 +239,7 @@ const handleSaveAndGenerate = async () => {
         <div className="relative p-8 bg-white dark:bg-gray-800 rounded-xl shadow flex flex-col gap-6 max-w-4xl w-full mx-auto">
           {/* 🔙 Back */}
           <button
-            onClick={() => router.back()}
+            onClick={() => router.push("/dashboard")}
             className="absolute top-4 left-4 p-2 text-gray-600 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600 rounded-full transition"
           >
             <ChevronLeft className="w-5 h-5" />
