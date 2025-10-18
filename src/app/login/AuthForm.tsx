@@ -35,8 +35,8 @@ export default function AuthForm() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ name, email, password }),
         });
-        const data = await res.json();
         if (!res.ok) {
+          const data = await res.json();
           setError(data.error || "Registration failed");
           return;
         }
@@ -50,36 +50,39 @@ export default function AuthForm() {
 
       router.push("/dashboard");
     } catch (err) {
-      console.error(err);
       setError("Server error");
     }
   };
 
   return (
-    <main className="flex flex-col items-center justify-center min-h-screen bg-gradient-to-b from-blue-50 to-white text-gray-900 px-4">
-      <div className="w-full max-w-md p-8 bg-white rounded-xl shadow-lg">
+    <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-b from-blue-50 to-white dark:from-gray-900 dark:to-gray-800 text-gray-900 dark:text-gray-100 px-6">
+      <div className="bg-white dark:bg-gray-800 p-8 rounded-xl shadow-lg w-full max-w-md">
         <Image
           src="/images/logo.png"
-          alt="App Logo"
-          width={80}
-          height={80}
+          alt="StudyBuddy Logo"
+          width={100}
+          height={100}
           className="mx-auto mb-4"
         />
 
-        <h1 className="text-3xl font-extrabold text-center text-blue-600 mb-6">
+        <h2 className="text-3xl font-bold text-center mb-6">
           {isRegister ? "Create Account" : "Welcome Back"}
-        </h1>
+        </h2>
+
+        {error && (
+          <div className="mb-4 text-sm text-red-600 bg-red-100 dark:bg-red-900 dark:text-red-300 rounded p-2 text-center">
+            {error}
+          </div>
+        )}
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          {error && <div className="p-2 text-sm text-red-600 bg-red-100 rounded">{error}</div>}
-
           {isRegister && (
             <input
               type="text"
               placeholder="Full Name"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg"
+              className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-transparent focus:outline-none focus:ring-2 focus:ring-blue-400"
             />
           )}
 
@@ -88,7 +91,7 @@ export default function AuthForm() {
             placeholder="Email Address"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            className="w-full px-4 py-2 border border-gray-300 rounded-lg"
+            className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-transparent focus:outline-none focus:ring-2 focus:ring-blue-400"
           />
 
           <input
@@ -96,7 +99,7 @@ export default function AuthForm() {
             placeholder="Password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            className="w-full px-4 py-2 border border-gray-300 rounded-lg"
+            className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-transparent focus:outline-none focus:ring-2 focus:ring-blue-400"
           />
 
           {isRegister && (
@@ -105,36 +108,42 @@ export default function AuthForm() {
               placeholder="Confirm Password"
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg"
+              className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-transparent focus:outline-none focus:ring-2 focus:ring-blue-400"
             />
           )}
 
           <button
             type="submit"
-            className="w-full py-3 font-semibold text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition"
+            className="w-full py-3 font-semibold bg-blue-600 text-white rounded-full hover:bg-blue-700 transition"
           >
             {isRegister ? "Register" : "Log In"}
           </button>
         </form>
 
-        <p className="mt-4 text-center text-sm text-gray-600">
+        <p className="mt-4 text-center text-gray-600 dark:text-gray-300">
           {isRegister ? (
             <>
               Already have an account?{" "}
-              <button onClick={() => setIsRegister(false)} className="text-blue-600 font-semibold hover:underline">
+              <button
+                onClick={() => setIsRegister(false)}
+                className="text-blue-600 dark:text-blue-400 hover:underline font-semibold"
+              >
                 Log In
               </button>
             </>
           ) : (
             <>
               Don’t have an account?{" "}
-              <button onClick={() => setIsRegister(true)} className="text-blue-600 font-semibold hover:underline">
+              <button
+                onClick={() => setIsRegister(true)}
+                className="text-blue-600 dark:text-blue-400 hover:underline font-semibold"
+              >
                 Register
               </button>
             </>
           )}
         </p>
       </div>
-    </main>
+    </div>
   );
 }
