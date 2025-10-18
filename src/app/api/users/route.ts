@@ -24,8 +24,13 @@ export async function GET(req: NextRequest) {
     }
 
     return NextResponse.json(user, { status: 200 });
-  } catch (error) {
+  } catch (error: any) {
     console.error("Profile fetch error:", error);
+    console.error("Error details:", {
+      message: error.message,
+      stack: error.stack,
+      code: error.code
+    });
     return NextResponse.json(
       { error: "Failed to fetch profile" },
       { status: 500 }
