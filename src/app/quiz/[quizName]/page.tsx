@@ -41,8 +41,9 @@ export default function QuizPage() {
   const [answers, setAnswers] = useState<Record<number, string>>({});
   const [submitted, setSubmitted] = useState(false);
   const [score, setScore] = useState<number | null>(null);
-  const [showPopup, setShowPopup] = useState(false);
 
+  const [showPopup, setShowPopup] = useState(false);
+  const [showConfirmIncomplete, setShowConfirmIncomplete] = useState(false);
   const [showScrollTop, setShowScrollTop] = useState(false);
 
   // ✅ Track scroll position for "Scroll to top" button
@@ -54,9 +55,7 @@ export default function QuizPage() {
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
 
-  const scrollToTop = () => {
-    window.scrollTo({ top: 0, behavior: "smooth" });
-  };
+  const scrollToTop = () => window.scrollTo({ top: 0, behavior: "smooth" });
 
   // ✅ Fetch quiz
   useEffect(() => {
@@ -77,7 +76,6 @@ export default function QuizPage() {
         if (!res.ok) throw new Error(data.error || "Failed to load quiz");
 
         const rawQuestions = (data.questions as Question[]) || [];
-
         const shuffledQuestions: Question[] = shuffleArray(
           rawQuestions.map((q) => ({
             ...q,
@@ -109,12 +107,7 @@ export default function QuizPage() {
     );
   };
 
-  const handleSubmit = () => {
-    if (Object.keys(answers).length < questions.length) {
-      setShowPopup(true);
-      return;
-    }
-
+  const submitQuiz = () => {
     let total = 0;
     questions.forEach((q) => {
       const correctIndex = getCorrectAnswerIndex(q);
@@ -124,13 +117,22 @@ export default function QuizPage() {
 
     setScore(total);
     setSubmitted(true);
+    setShowConfirmIncomplete(false);
+  };
+
+  const handleSubmit = () => {
+    const answeredCount = Object.keys(answers).length;
+    if (answeredCount < questions.length) {
+      setShowConfirmIncomplete(true);
+      return;
+    }
+    submitQuiz();
   };
 
   const handleRetry = () => {
     setAnswers({});
     setSubmitted(false);
     setScore(null);
-
     setQuestions((prev) =>
       shuffleArray(prev.map((q) => ({ ...q, options: shuffleArray(q.options) })))
     );
@@ -154,11 +156,39 @@ export default function QuizPage() {
 
   return (
     <>
+      {/* Alert for missing quiz */}
       {showPopup && (
         <AlertPopup
           message="Please answer all questions before submitting."
           onClose={() => setShowPopup(false)}
         />
+      )}
+
+      {/* Confirm incomplete submission */}
+      {showConfirmIncomplete && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+          <div className="bg-white dark:bg-gray-800 rounded-lg p-6 w-[90%] sm:w-[400px] shadow-xl text-center">
+            <p className="text-gray-800 dark:text-gray-100 text-lg mb-4">
+              ⚠️ You haven’t answered all questions.
+              <br />
+              Submit anyway? Unanswered will count as incorrect.
+            </p>
+            <div className="flex justify-center gap-3 mt-4">
+              <button
+                onClick={() => setShowConfirmIncomplete(false)}
+                className="px-4 py-2 rounded bg-gray-400 hover:bg-gray-500 text-white"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={submitQuiz}
+                className="px-4 py-2 rounded bg-blue-600 hover:bg-blue-700 text-white"
+              >
+                Continue
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       <div className="min-h-screen bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 flex flex-col px-3 sm:px-8 md:px-20 py-6 sm:py-10 gap-6">
