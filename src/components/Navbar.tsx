@@ -10,27 +10,24 @@ import Image from 'next/image';
 const tabs = [
   { href: '/dashboard', label: 'Dashboard' },
   { href: '/files', label: 'Files' },
-
 ];
 
 export default function Navbar() {
   const pathname = usePathname();
   const [menuOpen, setMenuOpen] = useState(false);
-
   const isActive = (href: string) => pathname === href;
 
   return (
-    <nav className="w-full bg-gray-100 dark:bg-gray-900 border-b shadow-md text-white">
-      <div className="max-w-7xl mx-auto px-4 py-3 flex justify-between items-center md:justify-center relative">
+    <nav className="w-full bg-[#0C1323] border-b border-gray-700 shadow-sm text-white z-[5000]">
+      <div className="max-w-7xl mx-auto h-16 px-6 flex items-center justify-between">
         {/* Left: Logo */}
-      <Link href="/"  className="md:absolute left-4 flex items-center gap-2">
-        <Image src="/images/logo.png" alt="Logo" width={35} height={35} />
-        <span className="text-xl font-bold">
-          Study Jit
-        </span>
-      </Link>
-        {/* Center: Desktop Tabs */}
-        <ul className="hidden md:flex gap-1 font-medium">
+        <Link href="/" className="flex items-center gap-2">
+          <Image src="/images/logo.png" alt="Logo" width={38} height={38} />
+          <span className="text-xl font-bold text-white">Study Jit</span>
+        </Link>
+
+        {/* Center: Tabs */}
+        <ul className="hidden md:flex gap-2 font-medium">
           {tabs.map((tab) => (
             <li key={tab.href}>
               <Link
@@ -38,7 +35,7 @@ export default function Navbar() {
                 className={`px-4 py-2 rounded-md transition ${
                   isActive(tab.href)
                     ? 'bg-white text-black font-semibold'
-                    : 'text-white hover:bg-white/20'
+                    : 'text-gray-200 hover:bg-white/10'
                 }`}
               >
                 {tab.label}
@@ -47,23 +44,22 @@ export default function Navbar() {
           ))}
         </ul>
 
-        {/* Right: Account Menu (desktop only) */}
-        <div className="flex items-center absolute right-4 top-1/2 -translate-y-1/2">
-        <AccountMenu/>
-        </div>
+        {/* Right: Account + Menu */}
+        <div className="flex items-center gap-4">
+          <AccountMenu />
 
-
-        {/* Mobile Menu Button */}
-        <div className="md:hidden absolute right-17 translate-y-1/10">
-          <button onClick={() => setMenuOpen(!menuOpen)}>
-            {menuOpen ? <X size={24} /> : <Menu size={24} />}
+          <button
+            className="md:hidden text-gray-300 hover:text-white transition"
+            onClick={() => setMenuOpen(!menuOpen)}
+          >
+            {menuOpen ? <X size={26} /> : <Menu size={26} />}
           </button>
         </div>
       </div>
 
-      {/* Mobile Tabs */}
+      {/* Mobile menu */}
       {menuOpen && (
-        <ul className="md:hidden px-4 pb-4 space-y-2 font-medium">
+        <ul className="md:hidden px-4 pb-4 space-y-2 font-medium bg-[#0C1323] border-t border-gray-700">
           {tabs.map((tab) => (
             <li key={tab.href}>
               <Link
@@ -72,7 +68,7 @@ export default function Navbar() {
                 className={`block px-4 py-2 rounded-md transition ${
                   isActive(tab.href)
                     ? 'bg-white text-black font-semibold'
-                    : 'text-white hover:bg-white/20'
+                    : 'text-gray-200 hover:bg-white/10'
                 }`}
               >
                 {tab.label}
