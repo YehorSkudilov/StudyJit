@@ -19,17 +19,18 @@ export default function Navbar() {
   const isActive = (href: string) => pathname === href;
 
   return (
-    <nav className="w-full bg-gray-100 dark:bg-gray-900 border-b shadow-md text-white z-[1000]">
+    <nav className="relative w-full bg-gray-100 dark:bg-gray-900 border-b shadow-md text-white z-[2000]">
       <div className="max-w-7xl mx-auto px-4 py-3 flex justify-between items-center md:justify-center relative">
+        
         {/* Left: Logo */}
-        <Link href="/" className="md:absolute left-4 flex items-center gap-2">
+        <Link href="/" className="flex items-center gap-2">
           <Image src="/images/logo.png" alt="Logo" width={35} height={35} />
           <span className="text-xl font-bold text-gray-900 dark:text-white">
             Study Jit
           </span>
         </Link>
 
-        {/* Center: Desktop Tabs */}
+        {/* Center: Tabs */}
         <ul className="hidden md:flex gap-1 font-medium">
           {tabs.map((tab) => (
             <li key={tab.href}>
@@ -47,22 +48,23 @@ export default function Navbar() {
           ))}
         </ul>
 
-        {/* Right: Account Menu */}
-        <div className="flex items-center absolute right-4 top-1/2 -translate-y-1/2">
+        {/* Right: Account menu + mobile menu */}
+        <div className="flex items-center gap-4">
           <AccountMenu />
-        </div>
 
-        {/* Mobile Menu Button */}
-        <div className="md:hidden absolute right-16 top-1/2 -translate-y-1/2">
-          <button onClick={() => setMenuOpen(!menuOpen)}>
+          {/* Mobile menu toggle */}
+          <button
+            className="md:hidden"
+            onClick={() => setMenuOpen(!menuOpen)}
+          >
             {menuOpen ? <X size={24} /> : <Menu size={24} />}
           </button>
         </div>
       </div>
 
-      {/* Mobile Tabs */}
+      {/* Mobile menu */}
       {menuOpen && (
-        <ul className="md:hidden px-4 pb-4 space-y-2 font-medium">
+        <ul className="md:hidden px-4 pb-4 space-y-2 font-medium bg-gray-100 dark:bg-gray-900 border-t border-gray-200 dark:border-gray-800">
           {tabs.map((tab) => (
             <li key={tab.href}>
               <Link
