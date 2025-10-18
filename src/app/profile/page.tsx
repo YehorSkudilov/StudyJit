@@ -11,7 +11,7 @@ export default function ProfilePage() {
   useEffect(() => {
     (async () => {
       try {
-        const res = await fetch("/api/profile");
+        const res = await fetch("/api/users");
         if (res.ok) {
           const data = await res.json();
           setProfile({
@@ -38,7 +38,7 @@ export default function ProfilePage() {
     setMessage(null);
 
     try {
-      const res = await fetch("/api/profile", {
+      const res = await fetch("/api/users", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(profile),
