@@ -22,6 +22,15 @@ async function runNext() {
   }
 }
 
+// Supported file extensions for file_search (documents only)
+const SUPPORTED_EXTENSIONS = [
+  '.pdf', '.txt', '.doc', '.docx', '.ppt', '.pptx',
+  '.csv', '.json', '.md', '.html', '.xml', '.rtf'
+];
+
+// Image extensions that require vision
+const IMAGE_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp'];
+
 async function processQuiz(req: NextRequest): Promise<NextResponse> {
   const db = await getConnection();
   const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY! });
@@ -56,18 +65,39 @@ async function processQuiz(req: NextRequest): Promise<NextResponse> {
       [quizId]
     );
 
-    const hasFiles = fileRows.length > 0;
-    const hasPrompt = message.trim().length > 0;
+    // Separate files by type
+    const documentFiles: any[] = [];
+    const imageFiles: any[] = [];
+    const unsupportedFiles: any[] = [];
 
-    if (!hasFiles && !hasPrompt) {
-      console.warn("⚠️ No files or prompt provided. Using general fallback topic.");
+    for (const file of fileRows) {
+      const ext = file.name.substring(file.name.lastIndexOf('.')).toLowerCase();
+      
+      if (SUPPORTED_EXTENSIONS.includes(ext)) {
+        documentFiles.push(file);
+      } else if (IMAGE_EXTENSIONS.includes(ext)) {
+        imageFiles.push(file);
+      } else {
+        unsupportedFiles.push(file);
+        console.warn(`⚠️ Unsupported file type: ${file.name}`);
+      }
     }
 
-    // 🧠 Upload files if available
+    const hasDocuments = documentFiles.length > 0;
+    const hasImages = imageFiles.length > 0;
+    const hasPrompt = message.trim().length > 0;
+
+    console.log(`📊 Files: ${documentFiles.length} docs, ${imageFiles.length} images, ${unsupportedFiles.length} unsupported`);
+
+    if (!hasDocuments && !hasImages && !hasPrompt) {
+      console.warn("⚠️ No valid files or prompt provided. Using general fallback.");
+    }
+
+    // 🧠 Upload documents for file_search
     const fileIds: string[] = [];
-    if (hasFiles) {
-      console.log(`📂 Uploading ${fileRows.length} file(s) to OpenAI...`);
-      for (const file of fileRows) {
+    if (hasDocuments) {
+      console.log(`📂 Uploading ${documentFiles.length} document(s) to OpenAI...`);
+      for (const file of documentFiles) {
         try {
           const upload = await openai.files.create({
             file: fs.createReadStream(file.path),
@@ -75,16 +105,45 @@ async function processQuiz(req: NextRequest): Promise<NextResponse> {
           });
           fileIds.push(upload.id);
           console.log(`✅ Uploaded ${file.name} → ${upload.id}`);
-        } catch (err) {
-          console.warn(`⚠️ Failed to upload ${file.name}:`, err);
+        } catch (err: any) {
+          console.warn(`⚠️ Failed to upload ${file.name}:`, err.message);
         }
       }
-      console.log(`✅ Uploaded ${fileIds.length} files`);
+      console.log(`✅ Uploaded ${fileIds.length} documents`);
     }
 
-    // Create assistant with improved instructions
+    // 📸 Encode images to base64 for vision
+    const imageContents: any[] = [];
+    if (hasImages) {
+      console.log(`📸 Processing ${imageFiles.length} image(s)...`);
+      for (const file of imageFiles) {
+        try {
+          const imageBuffer = fs.readFileSync(file.path);
+          const base64Image = imageBuffer.toString('base64');
+          const ext = file.name.substring(file.name.lastIndexOf('.') + 1).toLowerCase();
+          const mimeType = ext === 'jpg' || ext === 'jpeg' ? 'image/jpeg' : `image/${ext}`;
+          
+          imageContents.push({
+            type: "image_url",
+            image_url: {
+              url: `data:${mimeType};base64,${base64Image}`,
+            }
+          });
+          console.log(`✅ Encoded image: ${file.name}`);
+        } catch (err: any) {
+          console.warn(`⚠️ Failed to process image ${file.name}:`, err.message);
+        }
+      }
+    }
+
+    // Create assistant with appropriate tools
+    const tools: any[] = [];
+    if (hasDocuments) {
+      tools.push({ type: "file_search" });
+    }
+
     const assistant = await openai.beta.assistants.create({
-      model: "gpt-4o",
+      model: hasImages ? "gpt-4o" : "gpt-4o", // gpt-4o supports both vision and file_search
       name: "Quiz Generator",
       instructions: `You are a quiz generator. Generate multiple-choice quiz questions based on the provided content.
 
@@ -105,19 +164,25 @@ Rules:
 - Do NOT wrap the JSON in markdown code blocks
 - Each question must have exactly 4 options
 - The "correct" field must match one of the options exactly
-- Generate questions about the actual content/subject matter, not file metadata
+- Generate questions about the actual content/subject matter
+- For images: analyze the content and create questions about what's shown
+- For documents: create questions about the information and concepts
 - If no files provided, generate general knowledge questions`,
-      tools: hasFiles ? [{ type: "file_search" }] : [],
+      tools: tools.length > 0 ? tools : undefined,
     });
 
     console.log(`✅ Created assistant: ${assistant.id}`);
 
-    // Compose message
-    const userMessage = hasPrompt || hasFiles
+    // Compose message with both text and images
+    const messageContent: any[] = [];
+    
+    // Add text instruction
+    const textInstruction = hasPrompt || hasDocuments || hasImages
       ? `Generate EXACTLY ${numQuestions} multiple-choice quiz questions.
 
 ${hasPrompt ? `Topic/Instructions: ${message}` : ""}
-${hasFiles ? "Base questions on the uploaded files." : ""}
+${hasDocuments ? "Base questions on the uploaded documents." : ""}
+${hasImages ? "Analyze the images and create questions about their content." : ""}
 
 RESPOND WITH ONLY THE JSON OBJECT. NO EXPLANATIONS. NO MARKDOWN.
 
@@ -134,20 +199,32 @@ Format:
 }`
       : `Generate ${numQuestions} general knowledge quiz questions. Respond with ONLY the JSON object, no other text.`;
 
-    // Create thread
+    messageContent.push({
+      type: "text",
+      text: textInstruction
+    });
+
+    // Add images to message content
+    if (hasImages) {
+      messageContent.push(...imageContents);
+    }
+
+    // Create thread with message
+    const threadMessages: any[] = [{
+      role: "user",
+      content: messageContent,
+    }];
+
+    // Add document attachments if available
+    if (hasDocuments) {
+      threadMessages[0].attachments = fileIds.map((file_id) => ({
+        file_id,
+        tools: [{ type: "file_search" as const }],
+      }));
+    }
+
     const thread = await openai.beta.threads.create({
-      messages: [
-        {
-          role: "user",
-          content: userMessage,
-          attachments: hasFiles
-            ? fileIds.map((file_id) => ({
-                file_id,
-                tools: [{ type: "file_search" as const }],
-              }))
-            : [],
-        },
-      ],
+      messages: threadMessages,
     });
 
     console.log(`✅ Created thread: ${thread.id}`);
@@ -189,11 +266,10 @@ Format:
     } catch (e) {
       console.log("⚠️ Direct parse failed, trying extraction...");
       
-      // Try to extract from markdown code blocks (```json or ```)
+      // Try to extract from markdown code blocks
       const codeBlockPatterns = [
         /```json\s*([\s\S]*?)\s*```/,
         /```\s*([\s\S]*?)\s*```/,
-        /`([\s\S]*?)`/
       ];
       
       for (const pattern of codeBlockPatterns) {
