@@ -7,7 +7,7 @@ import Image from "next/image";
 
 export default function AuthForm() {
   const [isRegister, setIsRegister] = useState(false);
-  const [name, setName] = useState(""); // NEW
+  const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -33,7 +33,7 @@ export default function AuthForm() {
         const res = await fetch("/api/auth/register", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ name, email, password }), // send name
+          body: JSON.stringify({ name, email, password }),
         });
         const data = await res.json();
         if (!res.ok) {
@@ -42,20 +42,9 @@ export default function AuthForm() {
         }
       }
 
-      const res = await signIn("credentials", {
-        redirect: false,
-        email,
-        password,
-      });
-
+      const res = await signIn("credentials", { redirect: false, email, password });
       if (res?.error) {
-        const messages: Record<string, string> = {
-          CredentialsSignin: "Invalid email or password",
-          USER_NOT_FOUND: "User does not exist",
-          INVALID_PASSWORD: "Incorrect password",
-          MISSING_CREDENTIALS: "Please enter email and password",
-        };
-        setError(messages[res.error] || res.error);
+        setError("Invalid email or password");
         return;
       }
 
@@ -67,95 +56,84 @@ export default function AuthForm() {
   };
 
   return (
-    <main className="flex flex-col items-center justify-center min-h-screen p-4">
-      <div className="w-full max-w-md p-6 bg-white text-black rounded shadow">
+    <main className="flex flex-col items-center justify-center min-h-screen bg-gradient-to-b from-blue-50 to-white text-gray-900 px-4">
+      <div className="w-full max-w-md p-8 bg-white rounded-xl shadow-lg">
         <Image
           src="/images/logo.png"
-          alt="BudgetBuddy Logo"
-          width={60}
-          height={60}
-          className="mb-2 mx-auto"
+          alt="App Logo"
+          width={80}
+          height={80}
+          className="mx-auto mb-4"
         />
-        <h1 className="mb-6 text-3xl font-semibold text-center">
-          {isRegister ? "Register" : "Login"}
+
+        <h1 className="text-3xl font-extrabold text-center text-blue-600 mb-6">
+          {isRegister ? "Create Account" : "Welcome Back"}
         </h1>
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          {error && <div className="p-2 text-sm text-red-700 bg-red-100 rounded">{error}</div>}
+          {error && <div className="p-2 text-sm text-red-600 bg-red-100 rounded">{error}</div>}
 
           {isRegister && (
-            <div>
-              <label>Name</label>
-              <input
-                type="text"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                required
-                className="w-full px-3 py-2 border rounded"
-              />
-            </div>
+            <input
+              type="text"
+              placeholder="Full Name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg"
+            />
           )}
 
-          <div>
-            <label>Email</label>
-            <input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-              className="w-full px-3 py-2 border rounded"
-            />
-          </div>
+          <input
+            type="email"
+            placeholder="Email Address"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            className="w-full px-4 py-2 border border-gray-300 rounded-lg"
+          />
 
-          <div>
-            <label>Password</label>
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-              className="w-full px-3 py-2 border rounded"
-            />
-          </div>
+          <input
+            type="password"
+            placeholder="Password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            className="w-full px-4 py-2 border border-gray-300 rounded-lg"
+          />
 
           {isRegister && (
-            <div>
-              <label>Confirm Password</label>
-              <input
-                type="password"
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                required
-                className="w-full px-3 py-2 border rounded"
-              />
-            </div>
+            <input
+              type="password"
+              placeholder="Confirm Password"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg"
+            />
           )}
 
           <button
             type="submit"
-            className="w-full py-2 mt-2 font-semibold text-white bg-black rounded hover:bg-green-600 transition hover:cursor-pointer"
+            className="w-full py-3 font-semibold text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition"
           >
             {isRegister ? "Register" : "Log In"}
           </button>
         </form>
 
-        <div className="mt-4 text-center">
+        <p className="mt-4 text-center text-sm text-gray-600">
           {isRegister ? (
-            <p>
+            <>
               Already have an account?{" "}
-              <button type="button" onClick={() => setIsRegister(false)} className="text-green-600 hover:cursor-pointer underline">
+              <button onClick={() => setIsRegister(false)} className="text-blue-600 font-semibold hover:underline">
                 Log In
               </button>
-            </p>
+            </>
           ) : (
-            <p>
-              Don&apos;t have an account?{" "}
-              <button type="button" onClick={() => setIsRegister(true)} className="text-green-600 hover:cursor-pointer underline">
+            <>
+              Don’t have an account?{" "}
+              <button onClick={() => setIsRegister(true)} className="text-blue-600 font-semibold hover:underline">
                 Register
               </button>
-            </p>
+            </>
           )}
-        </div>
+        </p>
       </div>
     </main>
   );
