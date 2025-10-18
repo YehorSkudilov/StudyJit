@@ -156,14 +156,6 @@ export default function QuizPage() {
 
   return (
     <>
-      {/* Alert for missing quiz */}
-      {showPopup && (
-        <AlertPopup
-          message="Please answer all questions before submitting."
-          onClose={() => setShowPopup(false)}
-        />
-      )}
-
       {/* Confirm incomplete submission */}
       {showConfirmIncomplete && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
@@ -194,7 +186,7 @@ export default function QuizPage() {
       <div className="min-h-screen bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 flex flex-col px-3 sm:px-8 md:px-20 py-6 sm:py-10 gap-6">
         <div className="relative p-4 sm:p-8 bg-white dark:bg-gray-800 rounded-xl shadow flex flex-col gap-6 max-w-4xl w-full mx-auto">
 
-          {/* Back button - slightly lower for visual alignment */}
+          {/* Back button */}
           <button
             onClick={() => router.back()}
             className="absolute top-6 left-3 sm:top-7 sm:left-4 p-2 text-gray-600 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600 rounded-full transition-colors"
@@ -218,66 +210,73 @@ export default function QuizPage() {
 
           {/* Questions */}
           <div className="flex flex-col gap-5 sm:gap-6">
-            {questions.map((q, idx) => (
-              <div
-                key={q.id}
-                className={`p-4 sm:p-5 rounded-lg border transition-colors ${
-                  submitted
-                    ? "border-gray-300 dark:border-gray-700 bg-gray-100 dark:bg-gray-700"
-                    : "border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800"
-                }`}
-              >
-                <h3 className="text-base sm:text-lg font-semibold mb-3 sm:mb-4">
-                  {idx + 1}. {q.question}
-                </h3>
+            {questions.map((q, idx) => {
+              const userSelected = answers[q.id];
+              return (
+                <div
+                  key={q.id}
+                  className={`p-4 sm:p-5 rounded-lg border transition-colors ${
+                    submitted
+                      ? "border-gray-300 dark:border-gray-700 bg-gray-100 dark:bg-gray-700"
+                      : "border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800"
+                  }`}
+                >
+                  <h3 className="text-base sm:text-lg font-semibold mb-3 sm:mb-4">
+                    {idx + 1}. {q.question}
+                  </h3>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3">
-                  {q.options.map((opt) => {
-                    const isSelected = answers[q.id] === opt;
-                    const isCorrect =
-                      opt.trim().toLowerCase() === q.correct.trim().toLowerCase();
-                    const showCorrect =
-                      submitted &&
-                      ((isCorrect && isSelected) || (!isSelected && isCorrect));
-                    const showIncorrect =
-                      submitted && isSelected && !isCorrect;
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3">
+                    {q.options.map((opt) => {
+                      const isSelected = userSelected === opt;
+                      const isCorrect =
+                        opt.trim().toLowerCase() === q.correct.trim().toLowerCase();
 
-                    return (
-                      <button
-                        key={opt}
-                        onClick={() => selectAnswer(q.id, opt)}
-                        className={`flex items-center justify-between w-full px-3 sm:px-4 py-2 sm:py-3 text-left rounded-lg border transition text-sm sm:text-base
-                          ${
-                            isSelected
-                              ? "border-blue-500 bg-blue-50 dark:bg-blue-900/40"
-                              : "border-gray-300 dark:border-gray-600 hover:border-blue-400"
-                          }
-                          ${
-                            showCorrect
-                              ? "bg-green-100 dark:bg-green-900/40 border-green-500"
-                              : ""
-                          }
-                          ${
-                            showIncorrect
-                              ? "bg-red-100 dark:bg-red-900/40 border-red-500"
-                              : ""
-                          }
-                        `}
-                        disabled={submitted}
-                      >
-                        <span className="truncate">{opt}</span>
-                        {submitted && showCorrect && (
-                          <CheckCircle className="text-green-500 w-4 h-4 sm:w-5 sm:h-5" />
-                        )}
-                        {submitted && showIncorrect && (
-                          <XCircle className="text-red-500 w-4 h-4 sm:w-5 sm:h-5" />
-                        )}
-                      </button>
-                    );
-                  })}
+                      const unanswered = submitted && !userSelected;
+                      const showCorrect =
+                        submitted &&
+                        ((isCorrect && isSelected) || (!isSelected && isCorrect));
+                      const showIncorrect =
+                        submitted &&
+                        ((isSelected && !isCorrect) ||
+                          (unanswered && !isCorrect));
+
+                      return (
+                        <button
+                          key={opt}
+                          onClick={() => selectAnswer(q.id, opt)}
+                          className={`flex items-center justify-between w-full px-3 sm:px-4 py-2 sm:py-3 text-left rounded-lg border transition text-sm sm:text-base
+                            ${
+                              isSelected
+                                ? "border-blue-500 bg-blue-50 dark:bg-blue-900/40"
+                                : "border-gray-300 dark:border-gray-600 hover:border-blue-400"
+                            }
+                            ${
+                              showCorrect
+                                ? "bg-green-100 dark:bg-green-900/40 border-green-500"
+                                : ""
+                            }
+                            ${
+                              showIncorrect
+                                ? "bg-red-100 dark:bg-red-900/30 border-red-400 opacity-75"
+                                : ""
+                            }
+                          `}
+                          disabled={submitted}
+                        >
+                          <span className="truncate">{opt}</span>
+                          {submitted && showCorrect && (
+                            <CheckCircle className="text-green-500 w-4 h-4 sm:w-5 sm:h-5" />
+                          )}
+                          {submitted && showIncorrect && (
+                            <XCircle className="text-red-500 w-4 h-4 sm:w-5 sm:h-5" />
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
 
           {/* Score */}
