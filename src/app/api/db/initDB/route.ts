@@ -10,9 +10,8 @@ async function ensureColumnExists(db: any, table: string, column: string, defini
 }
 
 /**
- * ✅ Helper to ensure ENUM values include 'never_generated'
- * If 'generation_status' column exists, this checks its ENUM definition
- * and modifies it if 'never_generated' is missing.
+ * ✅ Ensure ENUM('never_generated', 'pending', 'success', 'failed') exists
+ * If 'generation_status' column exists, adds 'never_generated' if missing.
  */
 async function ensureEnumIncludesNeverGenerated(db: any) {
   const [rows] = await db.query(`SHOW COLUMNS FROM quizzes LIKE 'generation_status'`);
@@ -49,6 +48,7 @@ async function initDatabase() {
       name VARCHAR(255) UNIQUE NOT NULL,
       description TEXT,
       prompt TEXT,
+      num_questions INT DEFAULT 10,
       generation_status ENUM('never_generated','pending','success','failed') DEFAULT 'never_generated',
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
@@ -95,21 +95,18 @@ async function initDatabase() {
 
   // ✅ Auto-upgrade columns if missing
   await ensureColumnExists(db, "quizzes", "prompt", "TEXT");
-  await ensureColumnExists(
-    db,
-    "quizzes",
-    "created_at",
-    "TIMESTAMP DEFAULT CURRENT_TIMESTAMP"
-  );
+  await ensureColumnExists(db, "quizzes", "created_at", "TIMESTAMP DEFAULT CURRENT_TIMESTAMP");
+  await ensureColumnExists(db, "quizzes", "num_questions", "INT DEFAULT 10");
 
   // ✅ Ensure ENUM column exists and includes 'never_generated'
   await ensureEnumIncludesNeverGenerated(db);
 
-  console.log("✅ Database schema verified and upgraded (including 'never_generated' ENUM).");
+  console.log("✅ Database schema verified and upgraded (including num_questions + ENUM).");
+
   await db.end();
   return {
     success: true,
-    message: "✅ All tables verified and upgraded (including 'never_generated' ENUM and quiz_files table).",
+    message: "✅ All tables verified and upgraded (including num_questions and ENUM).",
   };
 }
 

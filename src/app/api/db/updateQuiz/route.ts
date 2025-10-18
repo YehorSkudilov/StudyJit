@@ -5,7 +5,7 @@ import { ResultSetHeader } from "mysql2";
 export async function PATCH(req: NextRequest) {
   try {
     const body = await req.json();
-    const { id, name, description, prompt } = body;
+    const { id, name, description, prompt, numQuestions } = body;
 
     if (!id) {
       return NextResponse.json({ error: "Quiz ID is required" }, { status: 400 });
@@ -16,10 +16,10 @@ export async function PATCH(req: NextRequest) {
     const [result] = await db.execute<ResultSetHeader>(
       `
       UPDATE quizzes
-      SET name = ?, description = ?, prompt = ?
+      SET name = ?, description = ?, prompt = ?, num_questions = ?
       WHERE id = ?
       `,
-      [name || "", description || "", prompt || "", id]
+      [name || "", description || "", prompt || "", numQuestions || 10, id]
     );
 
     await db.end();

@@ -30,6 +30,7 @@ export default function QuizDetailsPage() {
   const [quizTitle, setQuizTitle] = useState("");
   const [description, setDescription] = useState("");
   const [prompt, setPrompt] = useState("");
+  const [numQuestions, setNumQuestions] = useState<number>(10);
   const [generationStatus, setGenerationStatus] =
     useState<GenerationStatus>(null);
 
@@ -97,113 +98,114 @@ export default function QuizDetailsPage() {
   };
 
   // ✅ Save & Generate (update DB + status only)
-const handleSaveAndGenerate = async () => {
-  if (!quizId) return;
+  const handleSaveAndGenerate = async () => {
+    if (!quizId) return;
 
-  try {
-    // 🧩 1. Update quiz basic info
-    await fetch("/api/db/updateQuiz", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        id: quizId,
-        name: quizTitle,
-        description,
-        prompt,
-      }),
-    });
-
-    // 🧩 2. Sync added/removed files
-    const added = stagedDocuments.filter(
-      (f) => !originalDocuments.some((o) => o.id === f.id)
-    );
-    const removed = originalDocuments.filter(
-      (o) => !stagedDocuments.some((f) => f.id === o.id)
-    );
-
-    for (const file of added) {
-      await fetch("/api/db/quizFiles/add", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ quizId, fileId: file.id }),
-      });
-    }
-    for (const file of removed) {
-      await fetch("/api/db/quizFiles/remove", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ quiz_id: quizId, file_id: file.id }),
-      });
-    }
-
-    setOriginalDocuments(stagedDocuments);
-
-    // 🟡 3. Immediately set status to "pending"
-    setGenerationStatus("pending");
-    await fetch("/api/db/quizStatus/update", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id: quizId, status: "pending" }),
-    });
-
-    // 🧠 Notify user right away
-    setAlertMessage("⏳ Quiz saved and generation started...");
-    setShowAlert(true);
-
-    // 🟢 4. Then wait for generation to complete
-    const form = new FormData();
-    form.append("message", prompt);
-    form.append("quizName", quizTitle);
-    form.append("description", description);
-    form.append("quizId", String(quizId));
-
-    console.log("🧠 Sending generation request to /api/ai/generateQuiz...");
-    const res = await fetch("/api/ai/generateQuiz", { method: "POST", body: form });
-    console.log("📩 Received response from generateQuiz:", res.status);
-
-    let data: any = null;
     try {
-      data = await res.json();
-      console.log("📊 Parsed response JSON:", data);
-    } catch (err) {
-      console.error("❌ Failed to parse generateQuiz JSON response:", err);
-    }
+      // 🧩 1. Update quiz basic info
+await fetch("/api/db/updateQuiz", {
+  method: "PATCH",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({
+    id: quizId,
+    name: quizTitle,
+    description,
+    prompt,
+    numQuestions, // ✅ include this
+  }),
+});
 
-    if (res.ok && data?.success) {
-      console.log(`✅ Quiz #${quizId} generated successfully (${data.questionCount} questions).`);
-      setGenerationStatus("success");
+
+      // 🧩 2. Sync added/removed files
+      const added = stagedDocuments.filter(
+        (f) => !originalDocuments.some((o) => o.id === f.id)
+      );
+      const removed = originalDocuments.filter(
+        (o) => !stagedDocuments.some((f) => f.id === o.id)
+      );
+
+      for (const file of added) {
+        await fetch("/api/db/quizFiles/add", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ quizId, fileId: file.id }),
+        });
+      }
+      for (const file of removed) {
+        await fetch("/api/db/quizFiles/remove", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ quiz_id: quizId, file_id: file.id }),
+        });
+      }
+
+      setOriginalDocuments(stagedDocuments);
+
+      // 🟡 3. Immediately set status to "pending"
+      setGenerationStatus("pending");
       await fetch("/api/db/quizStatus/update", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: quizId, status: "success" }),
+        body: JSON.stringify({ id: quizId, status: "pending" }),
       });
-      setAlertMessage(`✅ Quiz "${quizTitle}" generated successfully!`);
-    } else {
-      console.error("❌ Quiz generation failed:", data);
+
+      // 🧠 Notify user right away
+      setAlertMessage("⏳ Quiz saved and generation started...");
+      setShowAlert(true);
+
+      // 🟢 4. Then wait for generation to complete
+      const form = new FormData();
+      form.append("message", prompt);
+      form.append("quizName", quizTitle);
+      form.append("description", description);
+      form.append("quizId", String(quizId));
+      form.append("numQuestions", String(numQuestions));
+
+      console.log("🧠 Sending generation request to /api/ai/generateQuiz...");
+      const res = await fetch("/api/ai/generateQuiz", { method: "POST", body: form });
+      console.log("📩 Received response from generateQuiz:", res.status);
+
+      let data: any = null;
+      try {
+        data = await res.json();
+        console.log("📊 Parsed response JSON:", data);
+      } catch (err) {
+        console.error("❌ Failed to parse generateQuiz JSON response:", err);
+      }
+
+      if (res.ok && data?.success) {
+        console.log(`✅ Quiz #${quizId} generated successfully (${data.questionCount} questions).`);
+        setGenerationStatus("success");
+        await fetch("/api/db/quizStatus/update", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id: quizId, status: "success" }),
+        });
+        setAlertMessage(`✅ Quiz "${quizTitle}" generated successfully!`);
+      } else {
+        console.error("❌ Quiz generation failed:", data);
+        setGenerationStatus("failed");
+        await fetch("/api/db/quizStatus/update", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id: quizId, status: "failed" }),
+        });
+        setAlertMessage("❌ Quiz generation failed.");
+      }
+
+      setShowAlert(true);
+    } catch (err) {
+      console.error("❌ Generation error:", err);
       setGenerationStatus("failed");
       await fetch("/api/db/quizStatus/update", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ id: quizId, status: "failed" }),
       });
-      setAlertMessage("❌ Quiz generation failed.");
+      setAlertMessage("❌ Failed to save or generate quiz.");
+      setShowAlert(true);
     }
-
-
-    setShowAlert(true);
-  } catch (err) {
-    console.error("❌ Generation error:", err);
-    setGenerationStatus("failed");
-    await fetch("/api/db/quizStatus/update", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id: quizId, status: "failed" }),
-    });
-    setAlertMessage("❌ Failed to save or generate quiz.");
-    setShowAlert(true);
-  }
-};
-
+  };
 
   const getStatusIndicator = () => {
     switch (generationStatus) {
@@ -323,6 +325,29 @@ const handleSaveAndGenerate = async () => {
                 </div>
               ))}
             </div>
+          </section>
+
+          {/* Number of Questions Slider */}
+          <section className="flex flex-col gap-2 mt-4">
+            <h2 className="text-sm font-medium text-gray-500 dark:text-gray-400 uppercase">
+              Number of Questions
+            </h2>
+            <div className="flex items-center gap-4">
+              <input
+                type="range"
+                min="1"
+                max="50"
+                value={numQuestions}
+                onChange={(e) => setNumQuestions(Number(e.target.value))}
+                className="flex-1 h-2 bg-gray-200 dark:bg-gray-700 rounded-lg appearance-none cursor-pointer accent-blue-600"
+              />
+              <span className="text-2xl font-bold text-blue-600 dark:text-blue-400 min-w-[3rem] text-center">
+                {numQuestions}
+              </span>
+            </div>
+            <p className="text-xs text-gray-500 dark:text-gray-400">
+              Drag the slider to select between 1 and 50 questions
+            </p>
           </section>
 
           {/* Prompt + Save */}
