@@ -99,90 +99,113 @@ export default function QuizDetailsPage() {
   };
 
   // ✅ Save & Generate
-  const handleSaveAndGenerate = async () => {
-    if (!quizId) return;
-    try {
-      const updateRes = await fetch("/api/db/updateQuiz", {
-        method: "PATCH",
+const handleSaveAndGenerate = async () => {
+  if (!quizId) return;
+
+  try {
+    console.log("💾 Saving quiz info and preparing generation...");
+    const updateRes = await fetch("/api/db/updateQuiz", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        id: quizId,
+        name: quizTitle.trim(),
+        description,
+        prompt,
+        numQuestions,
+      }),
+    });
+
+    if (!updateRes.ok) {
+      const text = await updateRes.text();
+      console.error("❌ Failed to update quiz info:", text);
+      throw new Error("Failed to update quiz info.");
+    }
+
+    router.refresh();
+
+    const added = stagedDocuments.filter(
+      (f) => !originalDocuments.some((o) => o.id === f.id)
+    );
+    const removed = originalDocuments.filter(
+      (o) => !stagedDocuments.some((f) => f.id === o.id)
+    );
+
+    for (const file of added) {
+      await fetch("/api/db/quizFiles/add", {
+        method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          id: quizId,
-          name: quizTitle.trim(),
-          description,
-          prompt,
-          numQuestions,
-        }),
+        body: JSON.stringify({ quizId, fileId: file.id }),
       });
-      if (!updateRes.ok) throw new Error("Failed to update quiz info.");
-      router.refresh();
+    }
+    for (const file of removed) {
+      await fetch("/api/db/quizFiles/remove", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ quiz_id: quizId, file_id: file.id }),
+      });
+    }
 
-      const added = stagedDocuments.filter(
-        (f) => !originalDocuments.some((o) => o.id === f.id)
-      );
-      const removed = originalDocuments.filter(
-        (o) => !stagedDocuments.some((f) => f.id === o.id)
-      );
+    setOriginalDocuments(stagedDocuments);
+    setGenerationStatus("pending");
 
-      for (const file of added) {
-        await fetch("/api/db/quizFiles/add", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ quizId, fileId: file.id }),
-        });
-      }
-      for (const file of removed) {
-        await fetch("/api/db/quizFiles/remove", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ quiz_id: quizId, file_id: file.id }),
-        });
-      }
+    await fetch("/api/db/quizStatus/update", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: quizId, status: "pending" }),
+    });
 
-      setOriginalDocuments(stagedDocuments);
-      setGenerationStatus("pending");
+    const form = new FormData();
+    form.append("message", prompt);
+    form.append("quizName", quizTitle);
+    form.append("description", description);
+    form.append("quizId", String(quizId));
+    form.append("numQuestions", String(numQuestions));
 
+    console.log("🚀 Starting quiz generation...");
+    const res = await fetch("/api/ai/generateQuiz", { method: "POST", body: form });
+
+    // Log response for debugging
+    const rawText = await res.text();
+    console.log("📩 Raw response from /api/ai/generateQuiz:", rawText);
+
+    let data: any = null;
+    try {
+      data = JSON.parse(rawText);
+    } catch {
+      console.warn("⚠️ Response was not valid JSON.");
+    }
+
+    if (res.ok && data?.success) {
+      console.log("✅ Quiz generation successful:", data);
+      setGenerationStatus("success");
       await fetch("/api/db/quizStatus/update", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: quizId, status: "pending" }),
+        body: JSON.stringify({ id: quizId, status: "success" }),
       });
-
-      const form = new FormData();
-      form.append("message", prompt);
-      form.append("quizName", quizTitle);
-      form.append("description", description);
-      form.append("quizId", String(quizId));
-      form.append("numQuestions", String(numQuestions));
-
-      const res = await fetch("/api/ai/generateQuiz", { method: "POST", body: form });
-      const data = await res.json().catch(() => null);
-
-      if (res.ok && data?.success) {
-        setGenerationStatus("success");
-        await fetch("/api/db/quizStatus/update", {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ id: quizId, status: "success" }),
-        });
-      } else {
-        setGenerationStatus("failed");
-        await fetch("/api/db/quizStatus/update", {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ id: quizId, status: "failed" }),
-        });
-        setAlertMessage("❌ Quiz generation failed.");
-        setShowAlert(true);
-      }
-
-      setTimeout(() => router.refresh(), 800);
-    } catch (err) {
+    } else {
+      console.error("❌ Quiz generation failed:", data || rawText);
       setGenerationStatus("failed");
-      setAlertMessage("❌ Failed to save or generate quiz.");
+      await fetch("/api/db/quizStatus/update", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: quizId, status: "failed" }),
+      });
+      setAlertMessage("❌ Quiz generation failed. See console for details.");
       setShowAlert(true);
-      setTimeout(() => router.refresh(), 800);
     }
-  };
+
+    setTimeout(() => router.refresh(), 800);
+  } catch (err: any) {
+    console.error("💥 Uncaught error during quiz generation:", err);
+    setGenerationStatus("failed");
+    setAlertMessage("❌ Failed to save or generate quiz. See console for details.");
+    setShowAlert(true);
+    setTimeout(() => router.refresh(), 800);
+  }
+};
+
 
   const getStatusIndicator = () => {
     switch (generationStatus) {

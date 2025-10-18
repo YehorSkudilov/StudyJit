@@ -54,69 +54,62 @@ async function processQuiz(req: NextRequest): Promise<NextResponse> {
       [quizId]
     );
 
-    if (fileRows.length === 0) {
-      throw new Error("No files linked to this quiz");
+    const hasFiles = fileRows.length > 0;
+    const hasPrompt = message.trim().length > 0;
+
+    if (!hasFiles && !hasPrompt) {
+      console.warn("⚠️ No files or prompt provided. Using general fallback topic.");
     }
 
-    // 🧠 Upload files to OpenAI
+    // 🧠 Upload files if available
     const fileIds: string[] = [];
-    console.log(`📂 Uploading ${fileRows.length} file(s) to OpenAI...`);
-    
-    for (const file of fileRows) {
-      try {
-        const upload = await openai.files.create({
-          file: fs.createReadStream(file.path),
-          purpose: "assistants",
-        });
-        fileIds.push(upload.id);
-        console.log(`✅ Uploaded ${file.name} → ${upload.id}`);
-      } catch (err) {
-        console.warn(`⚠️ Failed to upload ${file.name}:`, err);
+    if (hasFiles) {
+      console.log(`📂 Uploading ${fileRows.length} file(s) to OpenAI...`);
+      for (const file of fileRows) {
+        try {
+          const upload = await openai.files.create({
+            file: fs.createReadStream(file.path),
+            purpose: "assistants",
+          });
+          fileIds.push(upload.id);
+          console.log(`✅ Uploaded ${file.name} → ${upload.id}`);
+        } catch (err) {
+          console.warn(`⚠️ Failed to upload ${file.name}:`, err);
+        }
       }
+      console.log(`✅ Uploaded ${fileIds.length} files`);
     }
 
-    console.log(`✅ Uploaded ${fileIds.length} files`);
-    
-    // Create assistant with file_search tool
+    // Create assistant with file_search tool if files exist
     const assistant = await openai.beta.assistants.create({
       model: "gpt-4o",
       name: "Quiz Generator",
-      instructions: `You are a quiz generator. Your job is to:
+      instructions: `
+You are a quiz generator. Your job is to:
 
-1. READ THE ACTUAL TEXT CONTENT inside the uploaded documents
-2. UNDERSTAND the subject matter, topics, and concepts being discussed
-3. CREATE quiz questions about WHAT THE DOCUMENT TEACHES/EXPLAINS
+1. Read any uploaded documents (if provided)
+2. Understand their subject matter and topics
+3. Create quiz questions about what the content teaches
+4. If no files or message are provided, generate general-knowledge quiz questions
 
-❌ DO NOT create questions about:
-- PDF version numbers, format specifications
-- File metadata (creation dates, authors, titles)
-- Technical document structure (fonts, encodings, objects, streams)
-- Page sizes, media boxes, or layout properties
+❌ Do NOT create questions about:
+- File metadata, formatting, or technical details
 
-✅ DO create questions about:
-- The actual topics and subject matter in the text
-- Concepts, definitions, and facts presented in the content
-- Key information that someone reading the document would learn
-
-Think of it this way: If a student read this document, what should they know? Ask questions about THAT content, not about the document's technical properties.`,
-      tools: [{ type: "file_search" }],
+✅ Create questions about:
+- The educational content and subject matter
+- Facts, definitions, and key ideas someone should learn.`,
+      tools: hasFiles ? [{ type: "file_search" }] : [],
     });
 
     console.log(`✅ Created assistant: ${assistant.id}`);
 
-    // Create thread with attachments
-    const thread = await openai.beta.threads.create({
-      messages: [
-        {
-          role: "user",
-          content: `Generate EXACTLY ${numQuestions} multiple-choice quiz questions.
-
-IMPORTANT: 
-- Read the TEXT CONTENT in the uploaded files
-- Create questions about the SUBJECT MATTER and TOPICS discussed
-- DO NOT ask about PDF metadata, file structure, or technical properties
-
-Return ONLY valid JSON in this exact format:
+    // Compose message
+    const userMessage =
+      hasPrompt || hasFiles
+        ? `Generate EXACTLY ${numQuestions} multiple-choice quiz questions.
+${hasPrompt ? `Prompt/Instructions: ${message}` : ""}
+${hasFiles ? "Use the uploaded files as source material." : ""}
+Return valid JSON with the following structure:
 {
   "questions": [
     {
@@ -126,16 +119,21 @@ Return ONLY valid JSON in this exact format:
       "correct": "Option A"
     }
   ]
-}
+}`
+        : `Generate ${numQuestions} general knowledge quiz questions in JSON format (same structure as above).`;
 
-Quiz Title: ${quizName}
-${message ? `Additional Instructions: ${message}` : ""}
-
-Generate ${numQuestions} questions now:`,
-          attachments: fileIds.map(file_id => ({
-            file_id,
-            tools: [{ type: "file_search" as const }],
-          })),
+    // Create thread
+    const thread = await openai.beta.threads.create({
+      messages: [
+        {
+          role: "user",
+          content: userMessage,
+          attachments: hasFiles
+            ? fileIds.map((file_id) => ({
+                file_id,
+                tools: [{ type: "file_search" as const }],
+              }))
+            : [],
         },
       ],
     });
@@ -144,120 +142,64 @@ Generate ${numQuestions} questions now:`,
 
     // Run assistant
     console.log("🤖 Running assistant...");
-    const run = await openai.beta.threads.runs.createAndPoll(
-      thread.id,
-      {
-        assistant_id: assistant.id,
-      }
-    );
-
-    console.log(`✅ Run completed with status: ${run.status}`);
+    const run = await openai.beta.threads.runs.createAndPoll(thread.id, {
+      assistant_id: assistant.id,
+    });
 
     if (run.status !== "completed") {
       throw new Error(`Assistant run failed with status: ${run.status}`);
     }
 
-    // Get messages
+    // Get assistant messages
     const messages = await openai.beta.threads.messages.list(thread.id);
     const lastMessage = messages.data[0];
-    
-    if (!lastMessage || lastMessage.role !== "assistant") {
-      throw new Error("No assistant response found");
-    }
+    if (!lastMessage) throw new Error("No assistant response found");
 
-    // Extract text from content blocks
+    // Extract text content
     let text = "";
     for (const block of lastMessage.content) {
-      if (block.type === "text") {
-        text += block.text.value;
-      }
+      if (block.type === "text") text += block.text.value;
     }
-
     text = text.trim();
+    if (!text) throw new Error("Assistant returned empty response");
 
-    if (!text) {
-      throw new Error("Assistant returned empty response");
-    }
-
-    console.log("🔍 Raw response (first 1000 chars):", text.substring(0, 1000));
-    console.log("📏 Total response length:", text.length);
-
-    // Parse response
+    // Try to parse JSON
     let parsed: any = null;
-
     try {
-      // Try direct parse
       parsed = JSON.parse(text);
-    } catch (parseError) {
-      console.log("⚠️ Direct JSON parse failed, trying to extract...");
-      
-      // Try to extract JSON from markdown
+    } catch {
       const jsonMatch = text.match(/```json\s*([\s\S]*?)\s*```/) || text.match(/```\s*([\s\S]*?)\s*```/);
       if (jsonMatch) {
-        console.log("✅ Found JSON in markdown block");
-        try {
-          parsed = JSON.parse(jsonMatch[1]);
-        } catch (e) {
-          console.error("❌ Failed to parse markdown JSON:", e);
-        }
-      }
-      
-      if (!parsed) {
-        // Try to find any JSON object
+        parsed = JSON.parse(jsonMatch[1]);
+      } else {
         const objectMatch = text.match(/\{[\s\S]*\}/);
-        if (objectMatch) {
-          console.log("✅ Found JSON object in text");
-          try {
-            parsed = JSON.parse(objectMatch[0]);
-          } catch (e) {
-            console.error("❌ Failed to parse extracted JSON:", e);
-          }
-        }
-      }
-      
-      if (!parsed) {
-        console.error("❌ Full response text:", text);
-        throw new Error("Could not find valid JSON in response. Check server logs for full response.");
+        if (objectMatch) parsed = JSON.parse(objectMatch[0]);
       }
     }
 
-    console.log("📦 Parsed structure:", Object.keys(parsed));
-
     if (!parsed?.questions || !Array.isArray(parsed.questions)) {
-      console.error("❌ Invalid structure. Parsed object:", JSON.stringify(parsed, null, 2));
       throw new Error("Response missing 'questions' array");
     }
 
-    if (parsed.questions.length === 0) {
-      throw new Error("Questions array is empty");
-    }
-
-    // Format questions
-    const formattedQuestions = parsed.questions.map((q: any, idx: number) => ({
-      id: q.id || idx + 1,
+    const formattedQuestions = parsed.questions.map((q: any, i: number) => ({
+      id: q.id || i + 1,
       question: q.question || "",
       options: Array.isArray(q.options) ? q.options : [],
       correct: q.correct || q.answer || "",
     }));
 
     console.log(`✅ Formatted ${formattedQuestions.length} questions`);
-    console.log("📋 First question:", formattedQuestions[0]?.question);
 
-    // Cleanup OpenAI resources
-    console.log("🧹 Cleaning up...");
+    // Cleanup
     try {
       await openai.beta.assistants.delete(assistant.id);
-      for (const fileId of fileIds) {
-        await openai.files.delete(fileId);
-      }
+      for (const fileId of fileIds) await openai.files.delete(fileId);
     } catch (err) {
       console.warn("⚠️ Cleanup warning:", err);
     }
 
-    // Save to database
+    // Save to DB
     const result = await addQuestionsToQuiz(quizId, formattedQuestions);
-    console.log(`💾 Saved ${result.questionCount} questions to database`);
-
     await db.execute(`UPDATE quizzes SET generation_status = 'success' WHERE id = ?`, [quizId]);
 
     return NextResponse.json({
@@ -265,16 +207,12 @@ Generate ${numQuestions} questions now:`,
       quizId,
       questionCount: result.questionCount,
     });
-
   } catch (error: any) {
     console.error("❌ Error:", error);
     if (quizId > 0) {
       await db.execute(`UPDATE quizzes SET generation_status = 'failed' WHERE id = ?`, [quizId]);
     }
-    return NextResponse.json(
-      { error: error.message || "Failed to generate quiz" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: error.message }, { status: 500 });
   } finally {
     await db.end();
   }
