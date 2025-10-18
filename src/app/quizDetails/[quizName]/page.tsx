@@ -157,11 +157,20 @@ const handleSaveAndGenerate = async () => {
     form.append("description", description);
     form.append("quizId", String(quizId));
 
+    console.log("🧠 Sending generation request to /api/ai/generateQuiz...");
     const res = await fetch("/api/ai/generateQuiz", { method: "POST", body: form });
-    const data = await res.json();
+    console.log("📩 Received response from generateQuiz:", res.status);
 
-    // 🧩 5. When AI finishes, update DB + UI
-    if (res.ok && data.success) {
+    let data: any = null;
+    try {
+      data = await res.json();
+      console.log("📊 Parsed response JSON:", data);
+    } catch (err) {
+      console.error("❌ Failed to parse generateQuiz JSON response:", err);
+    }
+
+    if (res.ok && data?.success) {
+      console.log(`✅ Quiz #${quizId} generated successfully (${data.questionCount} questions).`);
       setGenerationStatus("success");
       await fetch("/api/db/quizStatus/update", {
         method: "PATCH",
@@ -170,6 +179,7 @@ const handleSaveAndGenerate = async () => {
       });
       setAlertMessage(`✅ Quiz "${quizTitle}" generated successfully!`);
     } else {
+      console.error("❌ Quiz generation failed:", data);
       setGenerationStatus("failed");
       await fetch("/api/db/quizStatus/update", {
         method: "PATCH",
@@ -178,6 +188,7 @@ const handleSaveAndGenerate = async () => {
       });
       setAlertMessage("❌ Quiz generation failed.");
     }
+
 
     setShowAlert(true);
   } catch (err) {
