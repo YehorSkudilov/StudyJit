@@ -4,7 +4,7 @@ import { RowDataPacket } from "mysql2";
 
 /**
  * GET /api/db/getQuiz/[id]
- * Fetches a single quiz by ID (with its description, prompt, generation status, and questions).
+ * Fetches a single quiz by ID (with its description, prompt, num_questions, generation status, and questions).
  */
 export async function GET(
   req: NextRequest,
@@ -20,11 +20,19 @@ export async function GET(
 
     const db = await getConnection();
 
-    // ✅ Include prompt + generation_status
+    // ✅ Include num_questions + prompt + generation_status
     const [quizRows] = await db.query<RowDataPacket[]>(
-      `SELECT id, name, description, prompt, generation_status
-       FROM quizzes
-       WHERE id = ?`,
+      `
+      SELECT 
+        id, 
+        name, 
+        description, 
+        prompt, 
+        num_questions, 
+        generation_status
+      FROM quizzes
+      WHERE id = ?
+      `,
       [quizId]
     );
 
@@ -37,9 +45,11 @@ export async function GET(
 
     // ✅ Fetch questions
     const [questionRows] = await db.query<RowDataPacket[]>(
-      `SELECT id, question, option_a, option_b, option_c, option_d, correct_answer
-       FROM quiz_questions
-       WHERE quiz_id = ?`,
+      `
+      SELECT id, question, option_a, option_b, option_c, option_d, correct_answer
+      FROM quiz_questions
+      WHERE quiz_id = ?
+      `,
       [quizId]
     );
 

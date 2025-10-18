@@ -56,19 +56,21 @@ export default function QuizDetailsPage() {
     const id = Number(storedId);
     setQuizId(id);
 
-    const fetchQuiz = async () => {
-      try {
-        const res = await fetch(`/api/db/getQuiz/${id}`);
-        const data = await res.json();
-        setQuizTitle(data.name);
-        setDescription(data.description);
-        setPrompt(data.prompt || "");
-        setGenerationStatus(data.generation_status || null);
-      } catch {
-        setAlertMessage("❌ Failed to load quiz details.");
-        setShowAlert(true);
-      }
-    };
+   const fetchQuiz = async () => {
+  try {
+    const res = await fetch(`/api/db/getQuiz/${id}`);
+    const data = await res.json();
+    setQuizTitle(data.name);
+    setDescription(data.description);
+    setPrompt(data.prompt || "");
+    setGenerationStatus(data.generation_status || null);
+    setNumQuestions(data.num_questions || 10); // ✅ <-- added
+  } catch {
+    setAlertMessage("❌ Failed to load quiz details.");
+    setShowAlert(true);
+  }
+};
+
     fetchQuiz();
   }, [router]);
 
@@ -98,114 +100,126 @@ export default function QuizDetailsPage() {
   };
 
   // ✅ Save & Generate (update DB + status only)
-  const handleSaveAndGenerate = async () => {
-    if (!quizId) return;
+const handleSaveAndGenerate = async () => {
+  if (!quizId) return;
 
+  try {
+    // 🧩 1. Update quiz basic info
+    const updateRes = await fetch("/api/db/updateQuiz", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        id: quizId,
+        name: quizTitle.trim(),
+        description,
+        prompt,
+        numQuestions,
+      }),
+    });
+
+    if (!updateRes.ok) {
+      throw new Error("Failed to update quiz info.");
+    }
+
+    // ✅ Refresh to reflect latest name/description/numQuestions
+    router.refresh();
+
+    // 🧩 2. Sync added/removed files
+    const added = stagedDocuments.filter(
+      (f) => !originalDocuments.some((o) => o.id === f.id)
+    );
+    const removed = originalDocuments.filter(
+      (o) => !stagedDocuments.some((f) => f.id === o.id)
+    );
+
+    for (const file of added) {
+      await fetch("/api/db/quizFiles/add", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ quizId, fileId: file.id }),
+      });
+    }
+
+    for (const file of removed) {
+      await fetch("/api/db/quizFiles/remove", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ quiz_id: quizId, file_id: file.id }),
+      });
+    }
+
+    setOriginalDocuments(stagedDocuments);
+
+    // 🟡 3. Set status to pending immediately
+    setGenerationStatus("pending");
+    await fetch("/api/db/quizStatus/update", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: quizId, status: "pending" }),
+    });
+
+    setAlertMessage("⏳ Quiz saved and generation started...");
+    setShowAlert(true);
+
+    // 🟢 4. Generate quiz
+    const form = new FormData();
+    form.append("message", prompt);
+    form.append("quizName", quizTitle);
+    form.append("description", description);
+    form.append("quizId", String(quizId));
+    form.append("numQuestions", String(numQuestions));
+
+    console.log("🧠 Sending generation request to /api/ai/generateQuiz...");
+    const res = await fetch("/api/ai/generateQuiz", { method: "POST", body: form });
+    console.log("📩 Received response:", res.status);
+
+    let data: any = null;
     try {
-      // 🧩 1. Update quiz basic info
-await fetch("/api/db/updateQuiz", {
-  method: "PATCH",
-  headers: { "Content-Type": "application/json" },
-  body: JSON.stringify({
-    id: quizId,
-    name: quizTitle,
-    description,
-    prompt,
-    numQuestions, // ✅ include this
-  }),
-});
+      data = await res.json();
+      console.log("📊 Response:", data);
+    } catch (err) {
+      console.error("❌ JSON parse error:", err);
+    }
 
-
-      // 🧩 2. Sync added/removed files
-      const added = stagedDocuments.filter(
-        (f) => !originalDocuments.some((o) => o.id === f.id)
-      );
-      const removed = originalDocuments.filter(
-        (o) => !stagedDocuments.some((f) => f.id === o.id)
-      );
-
-      for (const file of added) {
-        await fetch("/api/db/quizFiles/add", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ quizId, fileId: file.id }),
-        });
-      }
-      for (const file of removed) {
-        await fetch("/api/db/quizFiles/remove", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ quiz_id: quizId, file_id: file.id }),
-        });
-      }
-
-      setOriginalDocuments(stagedDocuments);
-
-      // 🟡 3. Immediately set status to "pending"
-      setGenerationStatus("pending");
+    if (res.ok && data?.success) {
+      console.log(`✅ Quiz #${quizId} generated successfully.`);
+      setGenerationStatus("success");
       await fetch("/api/db/quizStatus/update", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: quizId, status: "pending" }),
+        body: JSON.stringify({ id: quizId, status: "success" }),
       });
-
-      // 🧠 Notify user right away
-      setAlertMessage("⏳ Quiz saved and generation started...");
-      setShowAlert(true);
-
-      // 🟢 4. Then wait for generation to complete
-      const form = new FormData();
-      form.append("message", prompt);
-      form.append("quizName", quizTitle);
-      form.append("description", description);
-      form.append("quizId", String(quizId));
-      form.append("numQuestions", String(numQuestions));
-
-      console.log("🧠 Sending generation request to /api/ai/generateQuiz...");
-      const res = await fetch("/api/ai/generateQuiz", { method: "POST", body: form });
-      console.log("📩 Received response from generateQuiz:", res.status);
-
-      let data: any = null;
-      try {
-        data = await res.json();
-        console.log("📊 Parsed response JSON:", data);
-      } catch (err) {
-        console.error("❌ Failed to parse generateQuiz JSON response:", err);
-      }
-
-      if (res.ok && data?.success) {
-        console.log(`✅ Quiz #${quizId} generated successfully (${data.questionCount} questions).`);
-        setGenerationStatus("success");
-        await fetch("/api/db/quizStatus/update", {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ id: quizId, status: "success" }),
-        });
-        setAlertMessage(`✅ Quiz "${quizTitle}" generated successfully!`);
-      } else {
-        console.error("❌ Quiz generation failed:", data);
-        setGenerationStatus("failed");
-        await fetch("/api/db/quizStatus/update", {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ id: quizId, status: "failed" }),
-        });
-        setAlertMessage("❌ Quiz generation failed.");
-      }
-
-      setShowAlert(true);
-    } catch (err) {
-      console.error("❌ Generation error:", err);
+      setAlertMessage(`✅ Quiz "${quizTitle}" generated successfully!`);
+    } else {
+      console.error("❌ Quiz generation failed:", data);
       setGenerationStatus("failed");
       await fetch("/api/db/quizStatus/update", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ id: quizId, status: "failed" }),
       });
-      setAlertMessage("❌ Failed to save or generate quiz.");
-      setShowAlert(true);
+      setAlertMessage("❌ Quiz generation failed.");
     }
-  };
+
+    setShowAlert(true);
+
+    // ✅ Refresh again to reflect final generation_status + num_questions
+    setTimeout(() => {
+      router.refresh();
+    }, 800);
+  } catch (err) {
+    console.error("❌ Generation error:", err);
+    setGenerationStatus("failed");
+    await fetch("/api/db/quizStatus/update", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: quizId, status: "failed" }),
+    });
+    setAlertMessage("❌ Failed to save or generate quiz.");
+    setShowAlert(true);
+    setTimeout(() => router.refresh(), 800);
+  }
+};
 
   const getStatusIndicator = () => {
     switch (generationStatus) {
@@ -378,6 +392,8 @@ await fetch("/api/db/updateQuiz", {
                 onClick={() => {
                   if (generationStatus === "success" && quizId) {
                     sessionStorage.setItem("selectedQuizId", String(quizId));
+                    console.log("🚀 Navigating to quiz:", quizTitle);
+
                     router.push(`/quiz/${encodeURIComponent(quizTitle)}`);
                   } else {
                     setAlertMessage("Quiz not ready. Please generate it first!");
