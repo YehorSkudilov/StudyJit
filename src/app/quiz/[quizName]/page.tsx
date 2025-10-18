@@ -61,12 +61,17 @@ export default function QuizPage() {
         if (!res.ok) throw new Error(data.error || "Failed to load quiz");
 
         // 🎲 Randomize both questions and options
-        const shuffledQuestions = shuffleArray(
-          (data.questions || []).map((q: Question) => ({
+        // ✅ Explicitly tell TypeScript this is an array of Question objects
+        const rawQuestions = (data.questions as Question[]) || [];
+
+        // ✅ Shuffle questions and their options
+        const shuffledQuestions: Question[] = shuffleArray(
+          rawQuestions.map((q) => ({
             ...q,
             options: shuffleArray(q.options),
           }))
         );
+
 
         setQuestions(shuffledQuestions);
         setDescription(data.description || "");
