@@ -48,9 +48,7 @@ export default function QuizPage() {
 
   // ✅ Track scroll position for "Scroll to top" button
   useEffect(() => {
-    const onScroll = () => {
-      setShowScrollTop(window.scrollY > 250);
-    };
+    const onScroll = () => setShowScrollTop(window.scrollY > 250);
     window.addEventListener("scroll", onScroll);
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
@@ -107,12 +105,19 @@ export default function QuizPage() {
     );
   };
 
+  // ✅ FIXED: Prevent score showing 1 when none answered
   const submitQuiz = () => {
     let total = 0;
     questions.forEach((q) => {
       const correctIndex = getCorrectAnswerIndex(q);
-      const selectedIndex = q.options.indexOf(answers[q.id]);
-      if (selectedIndex === correctIndex) total++;
+      const selected = answers[q.id];
+      if (
+        selected &&
+        q.options[correctIndex]?.trim().toLowerCase() ===
+          selected.trim().toLowerCase()
+      ) {
+        total++;
+      }
     });
 
     setScore(total);
@@ -185,7 +190,6 @@ export default function QuizPage() {
 
       <div className="min-h-screen bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 flex flex-col px-3 sm:px-8 md:px-20 py-6 sm:py-10 gap-6">
         <div className="relative p-4 sm:p-8 bg-white dark:bg-gray-800 rounded-xl shadow flex flex-col gap-6 max-w-4xl w-full mx-auto">
-
           {/* Back button */}
           <button
             onClick={() => router.back()}
@@ -230,7 +234,6 @@ export default function QuizPage() {
                       const isSelected = userSelected === opt;
                       const isCorrect =
                         opt.trim().toLowerCase() === q.correct.trim().toLowerCase();
-
                       const unanswered = submitted && !userSelected;
                       const showCorrect =
                         submitted &&
@@ -263,12 +266,15 @@ export default function QuizPage() {
                           `}
                           disabled={submitted}
                         >
-                          <span className="truncate">{opt}</span>
+                          {/* ✅ FIXED: allow multiline and wrapping */}
+                          <span className="whitespace-normal break-words text-left flex-1 mr-2">
+                            {opt}
+                          </span>
                           {submitted && showCorrect && (
-                            <CheckCircle className="text-green-500 w-4 h-4 sm:w-5 sm:h-5" />
+                            <CheckCircle className="text-green-500 w-4 h-4 sm:w-5 sm:h-5 flex-shrink-0" />
                           )}
                           {submitted && showIncorrect && (
-                            <XCircle className="text-red-500 w-4 h-4 sm:w-5 sm:h-5" />
+                            <XCircle className="text-red-500 w-4 h-4 sm:w-5 sm:h-5 flex-shrink-0" />
                           )}
                         </button>
                       );
