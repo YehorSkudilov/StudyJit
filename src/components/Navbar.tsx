@@ -20,7 +20,7 @@ export default function Navbar() {
   const isActive = (href: string) => pathname === href;
 
   return (
-    <nav className="w-full bg-gray-100 dark:bg-gray-900 border-b shadow-md text-white">
+<nav className="fixed top-0 left-0 w-full bg-gray-100 dark:bg-gray-900 border-b shadow-md text-white z-[1000]">
       <div className="max-w-7xl mx-auto px-4 py-3 flex justify-between items-center md:justify-center relative">
         {/* Left: Logo */}
       <Link href="/"  className="md:absolute left-4 flex items-center gap-2">

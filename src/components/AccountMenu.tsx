@@ -9,7 +9,7 @@ export default function AccountMenu() {
   const [open, setOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
-  // Close dropdown when clicking outside
+
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
@@ -21,55 +21,36 @@ export default function AccountMenu() {
   }, []);
 
   const handleLogout = async () => {
-    setOpen(false); // close the menu
-    await signOut({ redirect: false }); // log out without redirect
-    router.push('/login'); // navigate to login page manually
+    setOpen(false);
+    await signOut({ redirect: false });
+    router.push('/login');
   };
 
   return (
     <div className="relative inline-block text-left" ref={menuRef}>
-        <button
-            onClick={() => setOpen(!open)}
-            className="group hover:cursor-pointer flex items-center justify-center w-10 h-10 rounded-full hover:bg-gray-100 transition"
-            >
-            <UserCircle size={24} className="text-white group-hover:text-black transition" />
-        </button>
-
-
+      <button
+        onClick={() => setOpen(!open)}
+        className="group flex items-center justify-center w-10 h-10 rounded-full bg-gray-800 hover:bg-gray-700 transition shadow-md"
+      >
+        <UserCircle size={22} className="text-gray-100 group-hover:text-white transition" />
+      </button>
 
       {open && (
-<div className="absolute right-0 top-full mt-2 w-48 z-[1100] origin-top-right rounded-md bg-white dark:bg-gray-800 shadow-lg ring-1 ring-black ring-opacity-5">
-          <div className="py-1">
-            <a
-              href="/profile"
-              className="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-            >
-              <UserCircle size={18} /> Profile
-            </a>
+        <div
+          className="absolute right-0 top-full mt-3 w-52 rounded-xl border border-gray-200 dark:border-gray-700
+                     bg-white dark:bg-gray-900 shadow-[0_4px_18px_rgba(0,0,0,0.15)] overflow-hidden z-[1100]"
+        >
+          <div className="py-1 text-sm">
+            <MenuItem href="/profile" icon={<UserCircle size={18} />} text="Profile" />
+            <MenuItem href="/settings" icon={<Settings size={18} />} text="Settings" />
+            <MenuItem href="/contact" icon={<Mail size={18} />} text="Contact" />
+            <MenuItem href="/about" icon={<Info size={18} />} text="About" />
 
-            <a
-              href="/settings"
-              className="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-            >
-              <Settings size={18} /> Settings
-            </a>
-
-            <a
-              href="/contact"
-              className="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
-              <Mail size={18} /> Contact
-            </a>
-
-                        <a
-              href="/about"
-              className="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
-              <Info size={18} /> About
-            </a>
-
+            <hr className="border-gray-200 dark:border-gray-700 my-1" />
 
             <button
-              onClick={() => handleLogout()}
-              className="w-full flex hover:cursor-pointer items-center gap-2 px-4 py-2 text-sm text-red-600 hover:bg-red-50"
+              onClick={handleLogout}
+              className="w-full flex items-center gap-2 px-4 py-2 text-red-600 hover:bg-red-100 dark:hover:bg-red-900/30 transition"
             >
               <LogOut size={18} /> Logout
             </button>
@@ -77,5 +58,16 @@ export default function AccountMenu() {
         </div>
       )}
     </div>
+  );
+}
+
+function MenuItem({ href, icon, text }: { href: string; icon: React.ReactNode; text: string }) {
+  return (
+    <a
+      href={href}
+      className="flex items-center gap-2 px-4 py-2 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 transition"
+    >
+      {icon} {text}
+    </a>
   );
 }
