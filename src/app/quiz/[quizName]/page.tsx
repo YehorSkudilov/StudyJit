@@ -8,6 +8,7 @@ import {
   XCircle,
   BookOpen,
   RotateCcw,
+  ArrowUp,
 } from "lucide-react";
 import AlertPopup from "@/components/AlertPopup";
 
@@ -25,7 +26,7 @@ interface Question {
   id: number;
   question: string;
   options: string[];
-  correct: string; // holds TEXT of correct answer
+  correct: string;
 }
 
 export default function QuizPage() {
@@ -41,6 +42,21 @@ export default function QuizPage() {
   const [submitted, setSubmitted] = useState(false);
   const [score, setScore] = useState<number | null>(null);
   const [showPopup, setShowPopup] = useState(false);
+
+  const [showScrollTop, setShowScrollTop] = useState(false);
+
+  // ✅ Track scroll position for "Scroll to top" button
+  useEffect(() => {
+    const onScroll = () => {
+      setShowScrollTop(window.scrollY > 250);
+    };
+    window.addEventListener("scroll", onScroll);
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
+
+  const scrollToTop = () => {
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
 
   // ✅ Fetch quiz
   useEffect(() => {
@@ -60,8 +76,8 @@ export default function QuizPage() {
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || "Failed to load quiz");
 
-        // ✅ Shuffle questions and options
         const rawQuestions = (data.questions as Question[]) || [];
+
         const shuffledQuestions: Question[] = shuffleArray(
           rawQuestions.map((q) => ({
             ...q,
@@ -114,7 +130,7 @@ export default function QuizPage() {
     setAnswers({});
     setSubmitted(false);
     setScore(null);
-    // Re-shuffle quiz again on retry
+
     setQuestions((prev) =>
       shuffleArray(prev.map((q) => ({ ...q, options: shuffleArray(q.options) })))
     );
@@ -146,29 +162,29 @@ export default function QuizPage() {
       )}
 
       <div className="min-h-screen bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 flex flex-col px-3 sm:px-8 md:px-20 py-6 sm:py-10 gap-6">
-        <div className="p-4 sm:p-8 bg-white dark:bg-gray-800 rounded-xl shadow flex flex-col gap-6 max-w-4xl w-full mx-auto">
+        <div className="relative p-4 sm:p-8 bg-white dark:bg-gray-800 rounded-xl shadow flex flex-col gap-6 max-w-4xl w-full mx-auto">
 
-          {/* Header (back button centered with title) */}
-          <header className="flex flex-col sm:flex-row items-center justify-center text-center gap-3 mb-2">
-            <button
-              onClick={() => router.back()}
-              className="p-2 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-full transition"
-              title="Go Back"
-            >
-              <ChevronLeft className="w-5 h-5 sm:w-6 sm:h-6" />
-            </button>
+          {/* Back button - slightly lower for visual alignment */}
+          <button
+            onClick={() => router.back()}
+            className="absolute top-6 left-3 sm:top-7 sm:left-4 p-2 text-gray-600 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600 rounded-full transition-colors"
+            title="Go Back"
+          >
+            <ChevronLeft className="w-5 h-5" />
+          </button>
 
+          {/* Header */}
+          <header className="flex flex-col items-center text-center mt-4 sm:mt-0 mb-2">
             <h1 className="text-2xl sm:text-3xl font-bold text-blue-600 dark:text-blue-400 flex items-center gap-2 leading-tight">
               <BookOpen className="w-5 h-5 sm:w-6 sm:h-6" />
               {decodedQuizName}
             </h1>
+            {description && (
+              <p className="mt-1 sm:mt-2 text-sm sm:text-base text-gray-600 dark:text-gray-300 max-w-[90%]">
+                {description}
+              </p>
+            )}
           </header>
-
-          {description && (
-            <p className="text-sm sm:text-base text-gray-600 dark:text-gray-300 text-center max-w-[90%] mx-auto">
-              {description}
-            </p>
-          )}
 
           {/* Questions */}
           <div className="flex flex-col gap-5 sm:gap-6">
@@ -273,6 +289,17 @@ export default function QuizPage() {
           </div>
         </div>
       </div>
+
+      {/* Floating "Scroll to Top" button */}
+      {showScrollTop && (
+        <button
+          onClick={scrollToTop}
+          className="fixed bottom-6 right-6 p-3 rounded-full bg-blue-600 text-white shadow-lg hover:bg-blue-700 transition-colors"
+          title="Scroll to top"
+        >
+          <ArrowUp className="w-5 h-5" />
+        </button>
+      )}
     </>
   );
 }
