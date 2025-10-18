@@ -79,7 +79,7 @@ async function processQuiz(req: NextRequest): Promise<NextResponse> {
     
     // Create assistant with file_search tool
     const assistant = await openai.beta.assistants.create({
-      model: "gpt-4o-mini",
+      model: "gpt-4o",
       name: "Quiz Generator",
       instructions: `You are a quiz generator. Your job is to:
 
