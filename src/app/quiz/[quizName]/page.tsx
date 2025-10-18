@@ -46,7 +46,7 @@ export default function QuizPage() {
   const [showConfirmIncomplete, setShowConfirmIncomplete] = useState(false);
   const [showScrollTop, setShowScrollTop] = useState(false);
 
-  // ✅ Track scroll position for "Scroll to top" button
+  // ✅ Scroll button toggle
   useEffect(() => {
     const onScroll = () => setShowScrollTop(window.scrollY > 250);
     window.addEventListener("scroll", onScroll);
@@ -105,7 +105,7 @@ export default function QuizPage() {
     );
   };
 
-  // ✅ FIXED: Prevent score showing 1 when none answered
+  // ✅ Correct score calculation
   const submitQuiz = () => {
     let total = 0;
     questions.forEach((q) => {
@@ -247,7 +247,7 @@ export default function QuizPage() {
                         <button
                           key={opt}
                           onClick={() => selectAnswer(q.id, opt)}
-                          className={`flex items-center justify-between w-full px-3 sm:px-4 py-2 sm:py-3 text-left rounded-lg border transition text-sm sm:text-base
+                          className={`flex items-start justify-between w-full px-3 sm:px-4 py-2 sm:py-3 text-left rounded-lg border transition text-sm sm:text-base
                             ${
                               isSelected
                                 ? "border-blue-500 bg-blue-50 dark:bg-blue-900/40"
@@ -266,15 +266,16 @@ export default function QuizPage() {
                           `}
                           disabled={submitted}
                         >
-                          {/* ✅ FIXED: allow multiline and wrapping */}
-                          <span className="whitespace-normal break-words text-left flex-1 mr-2">
+                          {/* ✅ Full wrapping, no truncation */}
+                          <span className="whitespace-normal break-words text-left flex-1 leading-snug overflow-visible">
                             {opt}
                           </span>
+
                           {submitted && showCorrect && (
-                            <CheckCircle className="text-green-500 w-4 h-4 sm:w-5 sm:h-5 flex-shrink-0" />
+                            <CheckCircle className="text-green-500 w-4 h-4 sm:w-5 sm:h-5 flex-shrink-0 mt-1" />
                           )}
                           {submitted && showIncorrect && (
-                            <XCircle className="text-red-500 w-4 h-4 sm:w-5 sm:h-5 flex-shrink-0" />
+                            <XCircle className="text-red-500 w-4 h-4 sm:w-5 sm:h-5 flex-shrink-0 mt-1" />
                           )}
                         </button>
                       );
