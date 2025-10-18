@@ -15,7 +15,7 @@ interface Question {
   id: number;
   question: string;
   options: string[];
-  correct: string; // Correct answer is now a letter (e.g., "A", "B", "C", "D")
+  correct: string; // now holds the TEXT of the correct answer
 }
 
 export default function QuizPage() {
@@ -27,13 +27,11 @@ export default function QuizPage() {
   const [questions, setQuestions] = useState<Question[]>([]);
   const [description, setDescription] = useState("");
   const [loading, setLoading] = useState(true);
-
   const [answers, setAnswers] = useState<Record<number, string>>({});
   const [submitted, setSubmitted] = useState(false);
   const [score, setScore] = useState<number | null>(null);
   const [showPopup, setShowPopup] = useState(false);
 
-  // ✅ Fetch quiz data from DB
   useEffect(() => {
     const storedId = sessionStorage.getItem("selectedQuizId");
     if (!storedId) {
@@ -49,7 +47,6 @@ export default function QuizPage() {
       try {
         const res = await fetch(`/api/db/getQuiz/${id}`);
         const data = await res.json();
-
         if (!res.ok) throw new Error(data.error || "Failed to load quiz");
 
         setQuestions(data.questions || []);
@@ -70,10 +67,11 @@ export default function QuizPage() {
     setAnswers({ ...answers, [qid]: option });
   };
 
-  const getCorrectAnswerIndex = (correctAnswer: string): number => {
-    // Convert letter to index (A -> 0, B -> 1, C -> 2, D -> 3)
-    const answerIndexMap: Record<string, number> = { A: 0, B: 1, C: 2, D: 3 };
-    return answerIndexMap[correctAnswer.toUpperCase()] ?? -1; // If not found, return -1 (invalid)
+  // ✅ FIXED: now detects index by matching the correct TEXT
+  const getCorrectAnswerIndex = (q: Question): number => {
+    return q.options.findIndex(
+      (opt) => opt.trim().toLowerCase() === q.correct.trim().toLowerCase()
+    );
   };
 
   const handleSubmit = () => {
@@ -84,15 +82,13 @@ export default function QuizPage() {
 
     let total = 0;
     questions.forEach((q) => {
-      const correctIndex = getCorrectAnswerIndex(q.correct); // Convert correct letter to index
-      const selectedIndex = q.options.indexOf(answers[q.id]); // Find the index of the selected answer
+      const correctIndex = getCorrectAnswerIndex(q);
+      const selectedIndex = q.options.indexOf(answers[q.id]);
 
-      // Log the comparison for debugging
       console.log(`Comparing question ${q.id}:`);
       console.log(`Selected answer index: "${selectedIndex}"`);
       console.log(`Correct answer index: "${correctIndex}"`);
 
-      // Compare the selected index with the correct index
       if (selectedIndex === correctIndex) total++;
     });
 
@@ -133,7 +129,6 @@ export default function QuizPage() {
 
       <div className="min-h-screen bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 flex flex-col px-6 sm:px-20 py-10 gap-8">
         <div className="relative p-8 bg-white dark:bg-gray-800 rounded-xl shadow flex flex-col gap-6 max-w-4xl w-full mx-auto">
-          {/* Back Button */}
           <button
             onClick={() => router.back()}
             className="absolute top-4 left-4 p-2 text-gray-600 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600 hover:text-gray-900 dark:hover:text-white rounded-full transition-colors cursor-pointer z-10"
@@ -141,7 +136,6 @@ export default function QuizPage() {
             <ChevronLeft className="w-5 h-5" />
           </button>
 
-          {/* Header */}
           <header className="w-full flex flex-col items-center justify-center relative mb-4">
             <h1 className="text-3xl font-bold text-blue-600 dark:text-blue-400 flex items-center gap-2 leading-tight">
               <BookOpen className="w-6 h-6" />
@@ -154,7 +148,6 @@ export default function QuizPage() {
             )}
           </header>
 
-          {/* Quiz Body */}
           <div className="flex flex-col gap-6">
             {questions.map((q, idx) => (
               <div
@@ -172,7 +165,9 @@ export default function QuizPage() {
                 <div className="grid sm:grid-cols-2 gap-3">
                   {q.options.map((opt) => {
                     const isSelected = answers[q.id] === opt;
-                    const isCorrect = opt === q.options[getCorrectAnswerIndex(q.correct)]; // Correct answer comparison
+                    const isCorrect =
+                      opt.trim().toLowerCase() ===
+                      q.correct.trim().toLowerCase();
                     const showCorrect =
                       submitted &&
                       ((isCorrect && isSelected) || (!isSelected && isCorrect));
@@ -217,7 +212,6 @@ export default function QuizPage() {
             ))}
           </div>
 
-          {/* Score Summary */}
           {submitted && score !== null && (
             <div className="text-center text-lg text-gray-700 dark:text-gray-200 font-medium mt-6">
               Your Score:{" "}
@@ -227,7 +221,6 @@ export default function QuizPage() {
             </div>
           )}
 
-          {/* Buttons */}
           <div className="flex gap-3 mt-4">
             {!submitted ? (
               <button
