@@ -158,9 +158,6 @@ const handleSaveAndGenerate = async () => {
       body: JSON.stringify({ id: quizId, status: "pending" }),
     });
 
-    setAlertMessage("⏳ Quiz saved and generation started...");
-    setShowAlert(true);
-
     // 🟢 4. Generate quiz
     const form = new FormData();
     form.append("message", prompt);
@@ -189,7 +186,6 @@ const handleSaveAndGenerate = async () => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ id: quizId, status: "success" }),
       });
-      setAlertMessage(`✅ Quiz "${quizTitle}" generated successfully!`);
     } else {
       console.error("❌ Quiz generation failed:", data);
       setGenerationStatus("failed");
@@ -199,9 +195,10 @@ const handleSaveAndGenerate = async () => {
         body: JSON.stringify({ id: quizId, status: "failed" }),
       });
       setAlertMessage("❌ Quiz generation failed.");
+          setShowAlert(true);
+
     }
 
-    setShowAlert(true);
 
     // ✅ Refresh again to reflect final generation_status + num_questions
     setTimeout(() => {
