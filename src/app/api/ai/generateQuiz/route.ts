@@ -6,6 +6,8 @@ import path from "path";
 import { PDFParse } from "pdf-parse"; // ✅ v2 API
 import Tesseract from "tesseract.js";
 import mammoth from "mammoth"; // ✅ DOCX to text
+// Optional: enable image enhancement if needed later
+// import sharp from "sharp";
 
 export async function POST(req: NextRequest) {
   const db = await getConnection();
@@ -63,7 +65,7 @@ export async function POST(req: NextRequest) {
             fileContext += `\n\n# File: ${file.name}\n${value.trim()}`;
           }
 
-          // ✅ PDF Extraction (text + tables + images)
+          // ✅ PDF Extraction (text + tables + images + OCR)
           else if (ext === ".pdf") {
             console.log(`📘 Parsing PDF: ${file.name}`);
             const buffer = await fs.readFile(file.path);
@@ -73,7 +75,7 @@ export async function POST(req: NextRequest) {
             const textResult = await parser.getText();
             const text = textResult.text?.trim() || "";
 
-            // 🔹 Extract tables (safe type handling)
+            // 🔹 Extract tables
             const tableResult = await parser.getTable();
             let tableText = "";
             for (const page of tableResult.pages) {
@@ -86,41 +88,52 @@ export async function POST(req: NextRequest) {
             }
 
             // 🔹 Extract images + OCR
-            const imageResult = await parser.getImage({ imageThreshold: 80 });
+            const imageResult = await parser.getImage({ imageThreshold: 10 }); // lower threshold
             const pagesWithImages = imageResult.pages.filter(
               (p: any) => p.images?.length > 0
             );
 
             let ocrText = "";
             if (pagesWithImages.length > 0) {
-              console.log(
-                `🖼️ Found ${pagesWithImages.length} image page(s) in ${file.name}`
-              );
+              console.log(`🖼️ Found ${pagesWithImages.length} image page(s) in ${file.name}`);
               for (const page of pagesWithImages) {
                 for (const img of page.images) {
                   try {
-                    const bufferImg = Buffer.from(img.data); // ✅ convert Uint8Array → Buffer
+                    const bufferImg = Buffer.from(img.data);
+
+                    // Optional: enhance image before OCR
+                    // const processedImg = await sharp(bufferImg)
+                    //   .grayscale()
+                    //   .normalize()
+                    //   .toBuffer();
+
                     const result = await Tesseract.recognize(bufferImg, "eng");
                     const detected = result.data.text.trim();
-                    if (detected) ocrText += "\n" + detected;
+
+                    if (detected) {
+                      console.log(`🧾 OCR detected text on page ${page.pageNumber}:`, detected.slice(0, 80));
+                      ocrText += "\n" + detected;
+                    } else {
+                      console.warn(`⚠️ OCR returned empty text for ${file.name} page ${page.pageNumber}`);
+                    }
                   } catch (ocrErr) {
-                    console.warn(
-                      `⚠️ OCR failed for image on page ${page.pageNumber}:`,
-                      ocrErr
-                    );
+                    console.warn(`⚠️ OCR failed for ${file.name} page ${page.pageNumber}:`, ocrErr);
                   }
                 }
               }
+            } else {
+              console.warn(`⚠️ No embedded images found in ${file.name}`);
             }
 
             await parser.destroy();
 
-            const combinedText =
-              text ||
-              tableText ||
-              ocrText ||
-              "(⚠️ No extractable text/images/tables found in PDF)";
-            fileContext += `\n\n# File: ${file.name}\n${combinedText}`;
+            // ✅ Combine all text sources
+            const combinedText = [text, tableText, ocrText].filter(Boolean).join("\n");
+            if (!combinedText) {
+              console.warn(`⚠️ No extractable content found in PDF: ${file.name}`);
+            }
+
+            fileContext += `\n\n# File: ${file.name}\n${combinedText || "(⚠️ No extractable text/images/tables found)"}`;
           }
 
           // ✅ Image OCR
@@ -129,6 +142,9 @@ export async function POST(req: NextRequest) {
             const buffer = await fs.readFile(file.path);
             const result = await Tesseract.recognize(buffer, "eng");
             const ocrText = result.data.text.trim();
+            if (!ocrText) {
+              console.warn(`⚠️ No text detected in image: ${file.name}`);
+            }
             fileContext += `\n\n# File: ${file.name}\n${
               ocrText || "(⚠️ No text detected in image)"
             }`;
@@ -136,12 +152,18 @@ export async function POST(req: NextRequest) {
 
           // ⚠️ Unsupported files
           else {
+            console.warn(`⚠️ Unsupported file type for quiz input: ${file.name}`);
             fileContext += `\n\n# File: ${file.name}\n(⚠️ Unsupported file type: ${ext})`;
           }
         } catch (err) {
           console.warn(`⚠️ Failed to process ${file.name}:`, err);
+const message =
+  err instanceof Error ? err.message : JSON.stringify(err);
+fileContext += `\n\n# File: ${file.name}\n(⚠️ Error processing file: ${message})`;
         }
       }
+    } else {
+      console.warn(`⚠️ No files linked to quiz #${quizId}`);
     }
 
     // 🧠 Build prompt for AI
@@ -164,7 +186,7 @@ ${message}
 ${fileContext || "(no attached files)"}
 `;
 
-    // 🔹 Call Ollama
+    console.log(`🧠 Sending prompt to Ollama model: ${model}`);
     const res = await fetch(`${ollamaUrl}/api/generate`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
