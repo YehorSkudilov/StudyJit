@@ -3,7 +3,7 @@ import { ChevronLeft, Folder as FolderIcon, BookOpen, Trash2, Move, CheckSquare,
 interface DashboardHeaderProps {
   activeFolder: string | null;
   goBack: () => void;
-  selectedItems: string[]; // Combined array for selected folders and quizzes
+  selectedItems: string[]; // Array for selected folders and quizzes
   onDeleteSelected: () => void;
   onSelectAll: () => void;
   onDeselectAll: () => void;
@@ -17,7 +17,7 @@ export default function DashboardHeader({
   onSelectAll,
   onDeselectAll,
 }: DashboardHeaderProps) {
-  const hasSelection = selectedItems.length > 0;
+  const hasSelection = selectedItems.length > 0; // Check if there are selected items
 
   return (
     <section className="px-6 sm:px-20 py-10 relative">
