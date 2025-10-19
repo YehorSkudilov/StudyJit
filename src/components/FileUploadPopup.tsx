@@ -143,7 +143,16 @@ export default function FileUploadPopup({
         {activeType === "upload" && (
           <div className="flex flex-col gap-3">
             {/* File Input */}
-            <label className="w-full px-4 py-8 rounded-lg border-2 border-dashed border-gray-300 dark:border-gray-600 hover:border-blue-500 dark:hover:border-blue-500 cursor-pointer transition text-center bg-gray-50 dark:bg-gray-700/50">
+            <label 
+              className={`w-full px-4 py-8 rounded-lg border-2 border-dashed cursor-pointer transition text-center ${
+                isDragging 
+                  ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20' 
+                  : 'border-gray-300 dark:border-gray-600 hover:border-blue-500 dark:hover:border-blue-500 bg-gray-50 dark:bg-gray-700/50'
+              }`}
+              onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave}
+              onDrop={handleDrop}
+            >
               <input
                 type="file"
                 multiple
@@ -160,6 +169,7 @@ export default function FileUploadPopup({
                 or drag and drop (multiple files supported)
               </p>
             </label>
+
 
             {/* File List */}
             {inputFiles.length > 0 && (
