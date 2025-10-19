@@ -8,22 +8,18 @@ export default function ProfilePage() {
     bio: "",
     currentPassword: "",
     newPassword: "",
+    confirmPassword: "",
   });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
-  // ✅ Fetch user profile on mount
   useEffect(() => {
-    console.log("=== ProfilePage: Starting profile fetch ===");
-
     (async () => {
       try {
         const res = await fetch("/api/users");
         if (res.ok) {
           const data = await res.json();
-          console.log("✅ Profile data received:", data);
-
           setProfile((prev) => ({
             ...prev,
             name: data.name || "",
@@ -32,11 +28,9 @@ export default function ProfilePage() {
           }));
         } else {
           const error = await res.json();
-          console.error("❌ Error fetching profile:", error);
           setMessage({ type: "error", text: error.error || "Failed to load profile" });
         }
       } catch (err: any) {
-        console.error("❌❌❌ Fetch error:", err);
         setMessage({ type: "error", text: "Network error while loading profile" });
       } finally {
         setLoading(false);
@@ -44,23 +38,46 @@ export default function ProfilePage() {
     })();
   }, []);
 
-  // ✅ Handle form submission (profile + password)
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    console.log("=== ProfilePage: Starting profile update ===");
-
     setSaving(true);
     setMessage(null);
+
+    // Validate password confirmation
+    if (profile.newPassword || profile.confirmPassword) {
+      if (profile.newPassword !== profile.confirmPassword) {
+        setMessage({ type: "error", text: "New passwords do not match" });
+        setSaving(false);
+        return;
+      }
+      
+      if (!profile.currentPassword) {
+        setMessage({ type: "error", text: "Current password is required to change password" });
+        setSaving(false);
+        return;
+      }
+
+      if (profile.newPassword.length < 6) {
+        setMessage({ type: "error", text: "New password must be at least 6 characters long" });
+        setSaving(false);
+        return;
+      }
+    }
 
     try {
       const res = await fetch("/api/users", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(profile),
+        body: JSON.stringify({
+          name: profile.name,
+          email: profile.email,
+          bio: profile.bio,
+          currentPassword: profile.currentPassword,
+          newPassword: profile.newPassword,
+        }),
       });
 
       const data = await res.json();
-      console.log("Update response data:", data);
 
       if (res.ok) {
         setMessage({ type: "success", text: data.message || "Profile updated successfully!" });
@@ -68,12 +85,12 @@ export default function ProfilePage() {
           ...prev,
           currentPassword: "",
           newPassword: "",
+          confirmPassword: "",
         }));
       } else {
         setMessage({ type: "error", text: data.error || "Failed to update profile" });
       }
     } catch (err: any) {
-      console.error("❌ Update error:", err);
       setMessage({ type: "error", text: "Network error while saving profile" });
     } finally {
       setSaving(false);
@@ -98,7 +115,6 @@ export default function ProfilePage() {
           Your Profile
         </h2>
 
-        {/* Message Banner */}
         {message && (
           <div
             className={`mb-6 p-4 rounded-lg ${
@@ -112,7 +128,6 @@ export default function ProfilePage() {
         )}
 
         <form onSubmit={handleSubmit} className="space-y-6">
-          {/* Name */}
           <div>
             <label htmlFor="name" className="block text-sm font-medium mb-2">
               Name
@@ -127,7 +142,6 @@ export default function ProfilePage() {
             />
           </div>
 
-          {/* Email */}
           <div>
             <label htmlFor="email" className="block text-sm font-medium mb-2">
               Email
@@ -142,7 +156,6 @@ export default function ProfilePage() {
             />
           </div>
 
-          {/* Bio */}
           <div>
             <label htmlFor="bio" className="block text-sm font-medium mb-2">
               Bio
@@ -156,10 +169,8 @@ export default function ProfilePage() {
             />
           </div>
 
-          {/* Divider */}
           <div className="border-t border-gray-300 dark:border-gray-600 pt-6 mt-6" />
 
-          {/* Change Password */}
           <div>
             <h3 className="text-xl font-semibold mb-4">Change Password</h3>
 
@@ -193,10 +204,32 @@ export default function ProfilePage() {
                   className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-transparent focus:ring-2 focus:ring-blue-400 focus:border-transparent transition"
                 />
               </div>
+
+              <div>
+                <label htmlFor="confirmPassword" className="block text-sm font-medium mb-2">
+                  Confirm New Password
+                </label>
+                <input
+                  id="confirmPassword"
+                  type="password"
+                  value={profile.confirmPassword}
+                  onChange={(e) => setProfile({ ...profile, confirmPassword: e.target.value })}
+                  placeholder="Confirm new password"
+                  className={`w-full px-4 py-3 border rounded-lg bg-transparent focus:ring-2 focus:border-transparent transition ${
+                    profile.newPassword && profile.confirmPassword && profile.newPassword !== profile.confirmPassword
+                      ? "border-red-500 dark:border-red-500 focus:ring-red-400"
+                      : "border-gray-300 dark:border-gray-600 focus:ring-blue-400"
+                  }`}
+                />
+                {profile.newPassword && profile.confirmPassword && profile.newPassword !== profile.confirmPassword && (
+                  <p className="mt-1 text-sm text-red-600 dark:text-red-400">
+                    Passwords do not match
+                  </p>
+                )}
+              </div>
             </div>
           </div>
 
-          {/* Save Button */}
           <button
             type="submit"
             disabled={saving}
