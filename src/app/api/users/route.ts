@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import db from "@/lib/db";
 import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/authOptions"; // ✅ ensure correct path
+import { authOptions } from "@/app/api/auth/[...nextauth]/route"; // ✅ ensure correct path
 
 /* ----------------------------- GET /api/users ----------------------------- */
 export async function GET() {
