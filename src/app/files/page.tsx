@@ -38,41 +38,46 @@ export default function FilesPage() {
     fetchFiles();
   }, []);
 
-  const handleFileUpload = async (files: File[]) => {
-    let successCount = 0;
-    let errorCount = 0;
+// ✅ Upload one file in chunks with progress
+const handleFileUpload = async (
+  file: File,
+  onProgress?: (progress: number) => void
+): Promise<void> => {
+  const CHUNK_SIZE = 5 * 1024 * 1024; // 5 MB per chunk
+  let start = 0;
+  let part = 0;
 
-    for (const file of files) {
-      const formData = new FormData();
-      formData.append("file", file);
+  console.log(`🚀 Starting upload: ${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MB)`);
 
-      try {
-        const res = await fetch("/api/db/files/upload", {
-          method: "POST",
-          body: formData,
-        });
+  while (start < file.size) {
+    const end = Math.min(start + CHUNK_SIZE, file.size);
+    const chunk = file.slice(start, end);
 
-        if (!res.ok) {
-          errorCount++;
-          const error = await res.json();
-          console.error(`❌ Failed to upload ${file.name}:`, error);
-        } else {
-          successCount++;
-          console.log(`✅ Uploaded: ${file.name}`);
-        }
-      } catch (err) {
-        errorCount++;
-        console.error(`❌ Upload error for ${file.name}:`, err);
-      }
+    const headers = {
+      "Content-Range": `bytes ${start}-${end - 1}/${file.size}`,
+      "X-Filename": encodeURIComponent(file.name),
+    };
+
+    const res = await fetch("/api/db/files/upload", {
+      method: "POST",
+      headers,
+      body: chunk,
+    });
+
+    if (!res.ok) {
+      const err = await res.text();
+      throw new Error(`Chunk ${part} failed: ${err}`);
     }
 
-    console.log(`📊 Upload complete: ${successCount} succeeded, ${errorCount} failed`);
-    await fetchFiles();
+    const progress = Math.round((end / file.size) * 100);
+    onProgress?.(progress);
+    start = end;
+    part++;
+  }
 
-    if (errorCount > 0) {
-      throw new Error(`${errorCount} file(s) failed to upload`);
-    }
-  };
+  console.log(`✅ Upload complete: ${file.name}`);
+  await fetchFiles();
+};
 
   const handleDeleteSelected = async () => {
     for (const id of selectedItems) {

@@ -1,12 +1,12 @@
 "use client";
 
-import { X, FilePlus, ArrowLeft, File, AlertCircle, Trash2 } from "lucide-react";
-import { useState } from "react";
+import { X, FilePlus, ArrowLeft, File, AlertCircle, Loader2, UploadCloud } from "lucide-react";
+import { useState, DragEvent } from "react";
 
 type FileUploadPopupProps = {
   isOpen: boolean;
   onClose: () => void;
-  onFileUpload: (files: File[]) => void;
+  onFileUpload: (file: File, onProgress?: (progress: number) => void) => Promise<void>;
 };
 
 export default function FileUploadPopup({
@@ -17,96 +17,93 @@ export default function FileUploadPopup({
   const [inputFiles, setInputFiles] = useState<File[]>([]);
   const [activeType, setActiveType] = useState<"upload" | null>(null);
   const [error, setError] = useState<string>("");
-  const [uploading, setUploading] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<Record<string, number>>({});
   const [isDragging, setIsDragging] = useState(false);
 
   if (!isOpen) return null;
 
+  const reset = () => {
+    setInputFiles([]);
+    setActiveType(null);
+    setError("");
+    setUploadProgress({});
+  };
+
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files ? Array.from(e.target.files) : [];
-    setInputFiles((prev) => [...prev, ...files]);
+    setInputFiles(files);
     setError("");
-    e.target.value = ""; // Reset input to allow selecting same file again
+    setUploadProgress({});
   };
 
-  const handleDragOver = (e: React.DragEvent<HTMLLabelElement>) => {
+  const handleDrop = (e: DragEvent<HTMLDivElement>) => {
     e.preventDefault();
-    e.stopPropagation();
-    setIsDragging(true);
-  };
-
-  const handleDragLeave = (e: React.DragEvent<HTMLLabelElement>) => {
-    e.preventDefault();
-    e.stopPropagation();
     setIsDragging(false);
+    const files = Array.from(e.dataTransfer.files);
+    if (files.length > 0) {
+      setInputFiles(files);
+      setError("");
+      setUploadProgress({});
+    }
   };
 
-  const handleDrop = (e: React.DragEvent<HTMLLabelElement>) => {
+  const handleDragOver = (e: DragEvent<HTMLDivElement>) => {
     e.preventDefault();
-    e.stopPropagation();
-    setIsDragging(false);
-
-    const files = e.dataTransfer.files ? Array.from(e.dataTransfer.files) : [];
-    setInputFiles((prev) => [...prev, ...files]);
-    setError("");
+    if (!isDragging) setIsDragging(true);
   };
 
-  const handleRemoveFile = (index: number) => {
-    setInputFiles((prev) => prev.filter((_, i) => i !== index));
+  const handleDragLeave = (e: DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setIsDragging(false);
   };
 
   const handleSubmit = async () => {
     if (inputFiles.length === 0) {
-      setError("Please select at least one file before uploading.");
+      setError("Please select at least one file.");
       return;
     }
 
-    setUploading(true);
+    setIsUploading(true);
     setError("");
 
     try {
-      await onFileUpload(inputFiles);
-      setInputFiles([]);
-      setActiveType(null);
+      for (const file of inputFiles) {
+        await onFileUpload(file, (progress) =>
+          setUploadProgress((prev) => ({ ...prev, [file.name]: progress }))
+        );
+      }
+
+      reset();
       onClose();
     } catch (err: any) {
       setError(err.message || "Upload failed");
     } finally {
-      setUploading(false);
+      setIsUploading(false);
     }
   };
 
   const handleCancel = () => {
-    setInputFiles([]);
-    setActiveType(null);
-    setError("");
+    if (isUploading) return;
+    reset();
     onClose();
   };
 
   const handleBack = () => {
-    setInputFiles([]);
-    setActiveType(null);
-    setError("");
-  };
-
-  const totalSize = inputFiles.reduce((sum, file) => sum + file.size, 0);
-  const formatSize = (bytes: number) => {
-    if (bytes < 1024) return `${bytes} B`;
-    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+    if (isUploading) return;
+    reset();
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white dark:bg-gray-800 rounded-xl p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-lg flex flex-col gap-4">
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+      <div className="bg-white dark:bg-gray-800 rounded-xl p-6 w-full max-w-sm max-h-[90vh] overflow-y-auto shadow-lg flex flex-col gap-4">
         {/* Header */}
         <div className="flex items-center justify-between">
           <div className="w-16">
-            {activeType && (
+            {activeType && !isUploading && (
               <button
                 onClick={handleBack}
                 className="flex items-center gap-2 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
-                disabled={uploading}
               >
                 <ArrowLeft className="w-4 h-4" />
               </button>
@@ -114,14 +111,16 @@ export default function FileUploadPopup({
           </div>
 
           <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100 text-center flex-1">
-            {activeType ? "Upload Files" : "Upload New Files"}
+            {activeType ? "Upload Files" : "New Upload"}
           </h2>
 
           <div className="w-16 flex justify-end">
             <button
               onClick={handleCancel}
-              className="text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
-              disabled={uploading}
+              disabled={isUploading}
+              className={`text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 ${
+                isUploading ? "opacity-50 cursor-not-allowed" : ""
+              }`}
             >
               <X className="w-5 h-5" />
             </button>
@@ -141,98 +140,92 @@ export default function FileUploadPopup({
         )}
 
         {activeType === "upload" && (
-          <div className="flex flex-col gap-3">
-            {/* File Input */}
-            <label 
-              className={`w-full px-4 py-8 rounded-lg border-2 border-dashed cursor-pointer transition text-center ${
-                isDragging 
-                  ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20' 
-                  : 'border-gray-300 dark:border-gray-600 hover:border-blue-500 dark:hover:border-blue-500 bg-gray-50 dark:bg-gray-700/50'
-              }`}
-              onDragOver={handleDragOver}
-              onDragLeave={handleDragLeave}
-              onDrop={handleDrop}
-            >
+          <div
+            onDrop={handleDrop}
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            className={`flex flex-col gap-3 border-2 border-dashed rounded-lg p-4 transition-colors ${
+              isDragging
+                ? "border-blue-500 bg-blue-50 dark:bg-gray-700/30"
+                : "border-gray-300 dark:border-gray-600"
+            }`}
+          >
+            <div className="flex flex-col items-center justify-center gap-2 py-4 text-gray-500 dark:text-gray-300">
+              <UploadCloud className="w-8 h-8" />
+              <p className="text-sm">
+                Drag & drop files here or{" "}
+                <label
+                  htmlFor="fileInput"
+                  className="text-blue-600 dark:text-blue-400 cursor-pointer hover:underline"
+                >
+                  browse
+                </label>
+              </p>
               <input
+                id="fileInput"
                 type="file"
                 multiple
                 accept="*/*"
                 onChange={handleFileChange}
+                disabled={isUploading}
                 className="hidden"
-                disabled={uploading}
               />
-              <FilePlus className="w-10 h-10 mx-auto mb-2 text-gray-400" />
-              <p className="text-gray-600 dark:text-gray-300 font-medium">
-                Click to select files
-              </p>
-              <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-                or drag and drop (multiple files supported)
-              </p>
-            </label>
+            </div>
 
+            {inputFiles.map((file) => (
+              <div
+                key={file.name}
+                className="flex items-start gap-3 p-3 bg-gray-100 dark:bg-gray-700 rounded-lg shadow-inner break-words"
+              >
+                <File className="w-6 h-6 text-blue-500 flex-shrink-0" />
+                <div className="flex flex-col overflow-hidden w-full">
+                  <span className="text-gray-900 dark:text-gray-100 font-medium break-words whitespace-normal">
+                    {file.name}
+                  </span>
+                  <span className="text-sm text-gray-500 dark:text-gray-400">
+                    {(file.size / 1024 / 1024).toFixed(2)} MB
+                  </span>
 
-            {/* File List */}
-            {inputFiles.length > 0 && (
-              <div className="space-y-2 max-h-64 overflow-y-auto">
-                <div className="flex items-center justify-between text-sm text-gray-600 dark:text-gray-400 mb-2">
-                  <span>{inputFiles.length} file(s) selected</span>
-                  <span>{formatSize(totalSize)}</span>
-                </div>
-
-                {inputFiles.map((file, index) => (
-                  <div
-                    key={`${file.name}-${index}`}
-                    className="flex items-start gap-3 p-3 bg-gray-100 dark:bg-gray-700 rounded-lg shadow-inner group"
-                  >
-                    <File className="w-6 h-6 text-blue-500 flex-shrink-0 mt-0.5" />
-                    <div className="flex-1 overflow-hidden min-w-0">
-                      <p className="text-gray-900 dark:text-gray-100 font-medium break-words">
-                        {file.name}
-                      </p>
-                      <p className="text-sm text-gray-500 dark:text-gray-400">
-                        {formatSize(file.size)}
+                  {isUploading && uploadProgress[file.name] !== undefined && (
+                    <div className="mt-2 w-full">
+                      <div className="w-full bg-gray-200 dark:bg-gray-600 rounded-full h-2 overflow-hidden">
+                        <div
+                          className="bg-blue-600 h-2 transition-all duration-300 ease-out"
+                          style={{ width: `${uploadProgress[file.name]}%` }}
+                        />
+                      </div>
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                        {uploadProgress[file.name]}% uploaded
                       </p>
                     </div>
-                    <button
-                      onClick={() => handleRemoveFile(index)}
-                      className="text-gray-400 hover:text-red-500 dark:hover:text-red-400 transition flex-shrink-0 opacity-0 group-hover:opacity-100"
-                      disabled={uploading}
-                      title="Remove file"
-                    >
-                      <Trash2 className="w-5 h-5" />
-                    </button>
-                  </div>
-                ))}
+                  )}
+                </div>
               </div>
-            )}
+            ))}
 
-            {/* Error Message */}
             {error && (
-              <div className="flex items-center gap-2 text-red-600 dark:text-red-400 text-sm bg-red-50 dark:bg-red-900/20 p-3 rounded-lg">
-                <AlertCircle className="w-4 h-4 flex-shrink-0" />
-                <span>{error}</span>
+              <div className="flex items-center gap-2 text-red-600 dark:text-red-400 text-sm">
+                <AlertCircle className="w-4 h-4" />
+                {error}
               </div>
             )}
 
-            {/* Upload Button */}
             <button
               onClick={handleSubmit}
-              disabled={inputFiles.length === 0 || uploading}
-              className={`w-full py-3 rounded-lg font-semibold transition flex items-center justify-center gap-2 ${
-                inputFiles.length > 0 && !uploading
+              disabled={inputFiles.length === 0 || isUploading}
+              className={`w-full py-2 rounded transition flex items-center justify-center gap-2 ${
+                inputFiles.length > 0 && !isUploading
                   ? "bg-blue-600 text-white hover:bg-blue-700"
                   : "bg-gray-400 text-gray-200 cursor-not-allowed"
               }`}
             >
-              {uploading ? (
+              {isUploading ? (
                 <>
-                  <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                  Uploading {inputFiles.length} file(s)...
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Uploading...
                 </>
               ) : (
-                <>
-                  Upload {inputFiles.length > 0 ? `${inputFiles.length} File(s)` : "Files"}
-                </>
+                "Upload Files"
               )}
             </button>
           </div>

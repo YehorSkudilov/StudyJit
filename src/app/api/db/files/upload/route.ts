@@ -1,66 +1,76 @@
 import { NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/authOptions"; // ✅ your auth options
-import db from "@/lib/db";
 import fs from "fs";
 import path from "path";
+import { pipeline } from "stream";
+import { promisify } from "util";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/authOptions";
+import db from "@/lib/db";
+
+// ✅ use Node.js stream pipeline
+const pump = promisify(pipeline);
+
+// ✅ force pure Node runtime (critical!)
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+export const preferredRegion = "auto";
+export const fetchCache = "force-no-store";
 
 export async function POST(req: Request) {
-  // 🔒 Require authentication
-  const session = await getServerSession(authOptions);
-  if (!session?.user?.id) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
-  const userId = session.user.id;
-
   try {
-    const form = await req.formData();
-    const file = form.get("file") as File;
+    // ✅ ensure session check
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.id)
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-    if (!file) {
-      return NextResponse.json({ error: "No file uploaded" }, { status: 400 });
+    // ✅ validate custom headers
+    const range = req.headers.get("content-range");
+    const filenameHeader = req.headers.get("x-filename");
+    if (!range || !filenameHeader)
+      return NextResponse.json({ error: "Missing headers" }, { status: 400 });
+
+    // ✅ parse "bytes start-end/total"
+    const match = range.match(/bytes (\d+)-(\d+)\/(\d+)/);
+    if (!match)
+      return NextResponse.json({ error: "Invalid Content-Range header" }, { status: 400 });
+
+    const [, startStr, endStr, totalStr] = match;
+    const start = parseInt(startStr);
+    const end = parseInt(endStr);
+    const total = parseInt(totalStr);
+    const filename = decodeURIComponent(filenameHeader);
+
+    // ✅ ensure directory exists
+    const uploadDir = "/shared-files";
+    await fs.promises.mkdir(uploadDir, { recursive: true });
+    const filePath = path.join(uploadDir, filename);
+    const flags = start === 0 ? "w" : "a";
+
+    // ✅ open write stream
+    const fileStream = fs.createWriteStream(filePath, { flags });
+
+    // ✅ ensure we have a streamable body (no FormData)
+    if (!req.body) {
+      return NextResponse.json({ error: "Missing request body" }, { status: 400 });
     }
 
-    // ✅ Read the file
-    const bytes = await file.arrayBuffer();
-    const buffer = Buffer.from(bytes);
+    // ✅ use pipeline to stream directly to disk
+    await pump(req.body as any, fileStream);
 
-    const uploadDir = "/shared-files"; // Docker shared volume
-    await fs.promises.mkdir(uploadDir, { recursive: true }); // ensure dir exists
+    // ✅ if last chunk, finalize DB record
+    if (end + 1 >= total) {
+      await db.query(
+        "INSERT INTO files (name, path, size, user_id) VALUES (?, ?, ?, ?)",
+        [filename, filePath, total, session.user.id]
+      );
+      console.log(`✅ Upload completed: ${filename} (${total} bytes)`);
+    }
 
-    // 1️⃣ Create placeholder entry
-    const [result]: any = await db.query(
-      `INSERT INTO files (name, size, mime_type, path, user_id) VALUES (?, ?, ?, '', ?)`,
-      [file.name, buffer.length, file.type, userId]
-    );
-
-    const fileId = result.insertId;
-    const ext = path.extname(file.name) || "";
-    const safeFileName = `${fileId}${ext}`;
-    const filePath = path.join(uploadDir, safeFileName);
-
-    // 2️⃣ Save file to disk
-    await fs.promises.writeFile(filePath, buffer);
-
-    // 3️⃣ Update record with real path
-    await db.query(`UPDATE files SET path = ? WHERE id = ? AND user_id = ?`, [
-      filePath,
-      fileId,
-      userId,
-    ]);
-
-    console.log(`✅ User ${userId} uploaded file saved as: ${filePath}`);
-
-    return NextResponse.json({
-      success: true,
-      id: fileId,
-      path: filePath,
-    });
+    return NextResponse.json({ success: true, start, end, total });
   } catch (err: any) {
-    console.error("❌ Upload error:", err);
+    console.error("💥 Upload error:", err);
     return NextResponse.json(
-      { error: err.message || "Internal server error" },
+      { error: err.message || "Upload failed" },
       { status: 500 }
     );
   }
