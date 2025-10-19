@@ -1,19 +1,28 @@
 import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import db from "@/lib/db";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/authOptions"; // make sure path is correct
 
 /* ----------------------------- GET /api/users ----------------------------- */
 /**
- * Fetches the first user’s profile info.
- * Later you can replace with actual session-based user retrieval.
+ * Fetches the current logged-in user’s profile info from session.
  */
 export async function GET() {
   try {
-    const [rows] = await db.query("SELECT id, name, email, bio FROM users ORDER BY id ASC LIMIT 1;");
+    const session = await getServerSession(authOptions);
+    if (!session || !session.user?.id) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const [rows] = await db.query(
+      "SELECT id, name, email, bio FROM users WHERE id = ?",
+      [session.user.id]
+    );
     const user = (rows as any[])[0];
 
     if (!user) {
-      return NextResponse.json({ error: "No users found" }, { status: 404 });
+      return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
     return NextResponse.json(user);
@@ -25,15 +34,21 @@ export async function GET() {
 
 /* ---------------------------- PATCH /api/users ---------------------------- */
 /**
- * Updates profile fields and optionally changes password.
+ * Updates current user’s profile fields and optionally changes password.
  */
 export async function PATCH(req: Request) {
   try {
+    const session = await getServerSession(authOptions);
+    if (!session || !session.user?.id) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const userId = session.user.id;
     const body = await req.json();
     const { name, email, bio, currentPassword, newPassword } = body;
 
-    // 🧠 Find user by email
-    const [rows] = await db.query("SELECT * FROM users WHERE email = ?", [email]);
+    // 🧠 Get current user
+    const [rows] = await db.query("SELECT * FROM users WHERE id = ?", [userId]);
     const user = (rows as any[])[0];
     if (!user) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
@@ -54,16 +69,14 @@ export async function PATCH(req: Request) {
       }
 
       const hashed = await bcrypt.hash(newPassword, 10);
-      await db.query("UPDATE users SET password = ? WHERE id = ?", [hashed, user.id]);
+      await db.query("UPDATE users SET password = ? WHERE id = ?", [hashed, userId]);
     }
 
     // 🧩 Update name, email, bio
-    await db.query("UPDATE users SET name = ?, email = ?, bio = ? WHERE id = ?", [
-      name,
-      email,
-      bio,
-      user.id,
-    ]);
+    await db.query(
+      "UPDATE users SET name = ?, email = ?, bio = ? WHERE id = ?",
+      [name, email, bio, userId]
+    );
 
     return NextResponse.json({ message: "Profile updated successfully" });
   } catch (err: any) {
