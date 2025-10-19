@@ -2,99 +2,85 @@
 import { useState, useEffect } from "react";
 
 export default function ProfilePage() {
-  const [profile, setProfile] = useState({ name: "", email: "", bio: "" });
+  const [profile, setProfile] = useState({
+    name: "",
+    email: "",
+    bio: "",
+    currentPassword: "",
+    newPassword: "",
+  });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
-  // Fetch profile on mount
+  // ✅ Fetch user profile on mount
   useEffect(() => {
     console.log("=== ProfilePage: Starting profile fetch ===");
-    
+
     (async () => {
       try {
-        console.log("Fetching from /api/users...");
         const res = await fetch("/api/users");
-        
-        console.log("Response status:", res.status);
-        console.log("Response OK:", res.ok);
-        console.log("Response headers:", Object.fromEntries(res.headers.entries()));
-        
         if (res.ok) {
           const data = await res.json();
           console.log("✅ Profile data received:", data);
-          
-          setProfile({
+
+          setProfile((prev) => ({
+            ...prev,
             name: data.name || "",
             email: data.email || "",
             bio: data.bio || "",
-          });
-          console.log("✅ Profile state updated successfully");
+          }));
         } else {
           const error = await res.json();
-          console.error("❌ Error response:", error);
-          console.error("Status code:", res.status);
+          console.error("❌ Error fetching profile:", error);
           setMessage({ type: "error", text: error.error || "Failed to load profile" });
         }
       } catch (err: any) {
-        console.error("❌❌❌ Fetch error caught ❌❌❌");
-        console.error("Error type:", err.constructor?.name);
-        console.error("Error message:", err.message);
-        console.error("Error stack:", err.stack);
-        console.error("Full error:", err);
-        setMessage({ type: "error", text: "Failed to load profile" });
+        console.error("❌❌❌ Fetch error:", err);
+        setMessage({ type: "error", text: "Network error while loading profile" });
       } finally {
-        console.log("Profile fetch completed, setting loading to false");
         setLoading(false);
       }
     })();
   }, []);
 
-  // Handle form submission
+  // ✅ Handle form submission (profile + password)
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     console.log("=== ProfilePage: Starting profile update ===");
-    console.log("Profile data to submit:", profile);
-    
+
     setSaving(true);
     setMessage(null);
 
     try {
-      console.log("Sending PATCH request to /api/profile...");
-      const res = await fetch("/api/profile", {
+      const res = await fetch("/api/users", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(profile),
       });
 
-      console.log("Update response status:", res.status);
-      console.log("Update response OK:", res.ok);
-
       const data = await res.json();
       console.log("Update response data:", data);
 
       if (res.ok) {
-        console.log("✅ Profile updated successfully");
-        setMessage({ type: "success", text: "Profile updated successfully!" });
+        setMessage({ type: "success", text: data.message || "Profile updated successfully!" });
+        setProfile((prev) => ({
+          ...prev,
+          currentPassword: "",
+          newPassword: "",
+        }));
       } else {
-        console.error("❌ Update failed:", data);
         setMessage({ type: "error", text: data.error || "Failed to update profile" });
       }
     } catch (err: any) {
-      console.error("❌❌❌ Update error caught ❌❌❌");
-      console.error("Error type:", err.constructor?.name);
-      console.error("Error message:", err.message);
-      console.error("Error stack:", err.stack);
-      console.error("Full error:", err);
-      setMessage({ type: "error", text: "Network error. Please try again." });
+      console.error("❌ Update error:", err);
+      setMessage({ type: "error", text: "Network error while saving profile" });
     } finally {
-      console.log("Profile update completed, setting saving to false");
       setSaving(false);
     }
   };
 
   if (loading) {
-    console.log("Rendering loading state...");
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-b from-blue-50 to-white dark:from-gray-900 dark:to-gray-800">
         <div className="text-center">
@@ -105,8 +91,6 @@ export default function ProfilePage() {
     );
   }
 
-  console.log("Rendering profile form with data:", profile);
-
   return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-b from-blue-50 to-white dark:from-gray-900 dark:to-gray-800 text-gray-900 dark:text-gray-100 px-6 py-12">
       <div className="bg-white dark:bg-gray-800 p-8 rounded-xl shadow-lg w-full max-w-2xl">
@@ -114,7 +98,7 @@ export default function ProfilePage() {
           Your Profile
         </h2>
 
-        {/* Success/Error Message */}
+        {/* Message Banner */}
         {message && (
           <div
             className={`mb-6 p-4 rounded-lg ${
@@ -128,7 +112,7 @@ export default function ProfilePage() {
         )}
 
         <form onSubmit={handleSubmit} className="space-y-6">
-          {/* Name Field */}
+          {/* Name */}
           <div>
             <label htmlFor="name" className="block text-sm font-medium mb-2">
               Name
@@ -136,15 +120,14 @@ export default function ProfilePage() {
             <input
               id="name"
               type="text"
-              placeholder="Enter your name"
               value={profile.name}
               onChange={(e) => setProfile({ ...profile, name: e.target.value })}
-              required
               className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-transparent focus:ring-2 focus:ring-blue-400 focus:border-transparent transition"
+              required
             />
           </div>
 
-          {/* Email Field */}
+          {/* Email */}
           <div>
             <label htmlFor="email" className="block text-sm font-medium mb-2">
               Email
@@ -152,22 +135,20 @@ export default function ProfilePage() {
             <input
               id="email"
               type="email"
-              placeholder="Enter your email"
               value={profile.email}
               onChange={(e) => setProfile({ ...profile, email: e.target.value })}
-              required
               className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-transparent focus:ring-2 focus:ring-blue-400 focus:border-transparent transition"
+              required
             />
           </div>
 
-          {/* Bio Field */}
+          {/* Bio */}
           <div>
             <label htmlFor="bio" className="block text-sm font-medium mb-2">
               Bio
             </label>
             <textarea
               id="bio"
-              placeholder="Tell us about yourself"
               rows={4}
               value={profile.bio}
               onChange={(e) => setProfile({ ...profile, bio: e.target.value })}
@@ -175,11 +156,51 @@ export default function ProfilePage() {
             />
           </div>
 
-          {/* Submit Button */}
+          {/* Divider */}
+          <div className="border-t border-gray-300 dark:border-gray-600 pt-6 mt-6" />
+
+          {/* Change Password */}
+          <div>
+            <h3 className="text-xl font-semibold mb-4">Change Password</h3>
+
+            <div className="space-y-4">
+              <div>
+                <label htmlFor="currentPassword" className="block text-sm font-medium mb-2">
+                  Current Password
+                </label>
+                <input
+                  id="currentPassword"
+                  type="password"
+                  value={profile.currentPassword}
+                  onChange={(e) =>
+                    setProfile({ ...profile, currentPassword: e.target.value })
+                  }
+                  placeholder="Enter current password"
+                  className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-transparent focus:ring-2 focus:ring-blue-400 focus:border-transparent transition"
+                />
+              </div>
+
+              <div>
+                <label htmlFor="newPassword" className="block text-sm font-medium mb-2">
+                  New Password
+                </label>
+                <input
+                  id="newPassword"
+                  type="password"
+                  value={profile.newPassword}
+                  onChange={(e) => setProfile({ ...profile, newPassword: e.target.value })}
+                  placeholder="Enter new password"
+                  className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-transparent focus:ring-2 focus:ring-blue-400 focus:border-transparent transition"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Save Button */}
           <button
             type="submit"
             disabled={saving}
-            className="w-full py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-white font-semibold rounded-lg transition flex items-center justify-center"
+            className="w-full py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white font-semibold rounded-lg transition flex items-center justify-center"
           >
             {saving ? (
               <>
@@ -196,17 +217,18 @@ export default function ProfilePage() {
                     r="10"
                     stroke="currentColor"
                     strokeWidth="4"
-                  ></circle>
+                  />
                   <path
                     className="opacity-75"
                     fill="currentColor"
-                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                  ></path>
+                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 
+                    3.042 1.135 5.824 3 7.938l3-2.647z"
+                  />
                 </svg>
                 Saving...
               </>
             ) : (
-              "Save Profile"
+              "Save Changes"
             )}
           </button>
         </form>
