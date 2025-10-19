@@ -18,19 +18,11 @@ export default function AuthForm() {
     e.preventDefault();
     setError(null);
 
-    // 🔍 Required field check
     if (!email || !password || (isRegister && !confirmPassword) || (isRegister && !name)) {
       setError("Please fill out all required fields.");
       return;
     }
 
-    // 🔐 Password length check
-    if (password.length < 6) {
-      setError("Password must be at least 6 characters long.");
-      return;
-    }
-
-    // 🔁 Confirm password check (for register mode)
     if (isRegister && password !== confirmPassword) {
       setError("Passwords do not match.");
       return;
@@ -43,15 +35,13 @@ export default function AuthForm() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ name, email, password }),
         });
-
         if (!res.ok) {
-          const data = await res.json().catch(() => ({}));
+          const data = await res.json();
           setError(data.error || "Registration failed");
           return;
         }
       }
 
-      // ✅ Attempt sign-in
       const res = await signIn("credentials", { redirect: false, email, password });
       if (res?.error) {
         setError("Invalid email or password");
@@ -60,7 +50,6 @@ export default function AuthForm() {
 
       router.push("/dashboard");
     } catch (err) {
-      console.error("❌ Auth error:", err);
       setError("Server error");
     }
   };
