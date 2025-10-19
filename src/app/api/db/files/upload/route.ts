@@ -10,7 +10,7 @@ import { Readable } from "stream";
 export const runtime = 'nodejs';
 export const maxDuration = 300; // 5 minutes
 
-export async function POST(req: Request) {
+export async function POST(req: Request): Promise<Response> {
   const session = await getServerSession(authOptions);
   if (!session?.user?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
