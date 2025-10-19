@@ -73,14 +73,11 @@ export default function FileUploadPopup({
           const formData = new FormData();
           formData.append("file", file);
 
-          // Temporarily use debug route
           const response = await fetch("/api/db/files/upload", {
             method: "POST",
             body: formData,
             // DO NOT set Content-Type header - browser will set it with boundary
           });
-          
-          console.log("📤 Upload response:", response.status, response.statusText);
 
           if (!response.ok) {
             const errorData = await response.json();
