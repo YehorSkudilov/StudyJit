@@ -35,14 +35,10 @@ export default function QuizAddFilePopup({
       try {
         const res = await fetch("/api/db/files");
         const data = await res.json();
-const fetchedFiles = data.map((f: FileItem) => ({
-  ...f,
-  preselected: existingFileIds.includes(f.id),
-}));
-setFiles(fetchedFiles);
-setSelectedFiles(new Set(existingFileIds)); // Show them as selected
-
-        setFiles(fetchedFiles);
+        const filtered = data.filter(
+          (f: FileItem) => !existingFileIds.includes(f.id)
+        );
+        setFiles(filtered);
       } catch (err) {
         console.error("❌ Failed to load files:", err);
       }
@@ -57,29 +53,25 @@ setSelectedFiles(new Set(existingFileIds)); // Show them as selected
     file.name.toLowerCase().includes(search.toLowerCase())
   );
 
-const toggleFile = (fileId: number) => {
-  setSelectedFiles((prev) => {
-    const newSet = new Set(prev);
-    if (newSet.has(fileId)) {
-      newSet.delete(fileId);
-    } else {
-      if (newSet.size >= 10) {
-        alert("You can select up to 10 files only.");
-        return prev;
+  const toggleFile = (fileId: number) => {
+    setSelectedFiles((prev) => {
+      const newSet = new Set(prev);
+      if (newSet.has(fileId)) {
+        newSet.delete(fileId);
+      } else {
+        newSet.add(fileId);
       }
-      newSet.add(fileId);
+      return newSet;
+    });
+  };
+
+  const handleAddFiles = () => {
+    const filesToAdd = files.filter((file) => selectedFiles.has(file.id));
+    if (filesToAdd.length > 0) {
+      onAddFiles(filesToAdd);
+      onClose();
     }
-    return newSet;
-  });
-};
-
-
-const handleAddFiles = () => {
-  const filesToAdd = files.filter((file) => selectedFiles.has(file.id));
-  onAddFiles(filesToAdd);
-  onClose();
-};
-
+  };
 
   const selectAll = () => {
     setSelectedFiles(new Set(filteredFiles.map((f) => f.id)));
@@ -145,26 +137,38 @@ const handleAddFiles = () => {
             {filteredFiles.map((file) => {
               const isSelected = selectedFiles.has(file.id);
               return (
-<ul className="space-y-2 max-h-80 overflow-y-auto pr-2 mb-4">
-  {filteredFiles.map((file) => {
-    const isSelected = selectedFiles.has(file.id);
-    return (
-      <li
-        key={file.id}
-        onClick={() => toggleFile(file.id)}
-        className={`cursor-pointer p-3 rounded transition flex justify-between items-center
-          ${
-            isSelected
-              ? "bg-blue-100 dark:bg-blue-900 border-2 border-blue-500"
-              : "hover:bg-gray-100 dark:hover:bg-gray-700 border-2 border-transparent"
-          }`}
-      >
-        {/* file info */}
-      </li>
-    );
-  })}
-</ul>
-
+                <li
+                  key={file.id}
+                  onClick={() => toggleFile(file.id)}
+                  className={`cursor-pointer p-3 rounded transition flex justify-between items-center
+                    ${
+                      isSelected
+                        ? "bg-blue-100 dark:bg-blue-900 border-2 border-blue-500"
+                        : "hover:bg-gray-100 dark:hover:bg-gray-700 border-2 border-transparent"
+                    }`}
+                >
+                  <div className="flex items-center gap-3 flex-1">
+                    {/* Checkbox indicator */}
+                    <div
+                      className={`w-5 h-5 rounded border-2 flex items-center justify-center transition
+                        ${
+                          isSelected
+                            ? "bg-blue-500 border-blue-500"
+                            : "border-gray-300 dark:border-gray-600"
+                        }`}
+                    >
+                      {isSelected && <Check className="w-4 h-4 text-white" />}
+                    </div>
+                    
+                    <File className="w-5 h-5 text-blue-500 flex-shrink-0" />
+                    <span className="truncate max-w-[240px] text-gray-900 dark:text-gray-100">
+                      {file.name}
+                    </span>
+                  </div>
+                  <span className="text-sm text-gray-400 dark:text-gray-300 ml-2">
+                    {(file.size / 1024).toFixed(1)} KB
+                  </span>
+                </li>
               );
             })}
           </ul>
