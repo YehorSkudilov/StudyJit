@@ -7,6 +7,9 @@ async function ensureColumnExists(table: string, column: string, definition: str
   if ((rows as any[]).length === 0) {
     console.log(`🟡 Adding missing column '${column}' to '${table}'...`);
     await db.query(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+    console.log(`✅ Column '${column}' added to '${table}'`);
+  } else {
+    console.log(`✅ Column '${column}' already exists in '${table}'`);
   }
 }
 
@@ -37,13 +40,14 @@ async function ensureEnumIncludesNeverGenerated() {
 
 /* --------------------------- Core Init Function --------------------------- */
 async function initDatabase() {
-  /* ✅ USERS TABLE */
+  /* ✅ USERS TABLE - Now includes bio column */
   await db.query(`
     CREATE TABLE IF NOT EXISTS users (
       id INT AUTO_INCREMENT PRIMARY KEY,
       name VARCHAR(255) NOT NULL,
       email VARCHAR(255) UNIQUE NOT NULL,
       password VARCHAR(255) NOT NULL,
+      bio TEXT,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
   `);
@@ -108,7 +112,12 @@ async function initDatabase() {
     );
   `);
 
+  console.log("🔧 Checking and adding missing columns...");
+
   /* 🔧 AUTO-UPGRADE Columns for Backward Compatibility */
+  // Add bio column to users table if it doesn't exist
+  await ensureColumnExists("users", "bio", "TEXT");
+  
   await ensureColumnExists("quizzes", "user_id", "INT NOT NULL DEFAULT 1");
   await ensureColumnExists("quiz_questions", "user_id", "INT NOT NULL DEFAULT 1");
   await ensureColumnExists("files", "user_id", "INT NOT NULL DEFAULT 1");
@@ -120,18 +129,20 @@ async function initDatabase() {
 
   await ensureEnumIncludesNeverGenerated();
 
-  console.log("✅ Database schema verified and upgraded with user linkage.");
+  console.log("✅ Database schema verified and upgraded with user linkage and bio column.");
 
   return {
     success: true,
-    message: "✅ All tables verified and upgraded with user_id linkage.",
+    message: "✅ All tables verified and upgraded with user_id linkage and bio column.",
   };
 }
 
 /* --------------------------- API Route Handlers --------------------------- */
 export async function GET() {
   try {
+    console.log("🚀 Starting database initialization...");
     const result = await initDatabase();
+    console.log("✅ Database initialization completed successfully");
     return NextResponse.json(result);
   } catch (err: any) {
     console.error("❌ initDatabase error:", err);
