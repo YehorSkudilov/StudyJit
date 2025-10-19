@@ -27,6 +27,84 @@ const SUPPORTED_EXTENSIONS = [".pdf", ".txt", ".doc", ".docx", ".ppt", ".pptx", 
 const IMAGE_EXTENSIONS = [".jpg", ".jpeg", ".png", ".gif", ".webp"];
 const AUDIO_EXTENSIONS = [".mp3", ".mp4", ".mpeg", ".mpga", ".m4a", ".wav", ".webm"];
 
+// Enhanced JSON extraction
+function extractAndParseJSON(text: string): any {
+  console.log("🔍 Attempting to parse response...");
+  
+  // Try direct parse first
+  try {
+    const parsed = JSON.parse(text);
+    if (parsed?.questions && Array.isArray(parsed.questions)) {
+      console.log("✅ Direct JSON parse successful");
+      return parsed;
+    }
+  } catch {}
+
+  // Remove markdown code blocks
+  let cleaned = text.replace(/```json\s*/gi, '').replace(/```\s*/g, '');
+  
+  // Try parsing cleaned version
+  try {
+    const parsed = JSON.parse(cleaned);
+    if (parsed?.questions && Array.isArray(parsed.questions)) {
+      console.log("✅ Cleaned JSON parse successful");
+      return parsed;
+    }
+  } catch {}
+
+  // Extract JSON object with questions array
+  const jsonPatterns = [
+    /\{[\s\S]*?"questions"\s*:\s*\[[\s\S]*?\]\s*\}/,
+    /\{[^{}]*"questions"[^{}]*\[[^\]]*\][^{}]*\}/,
+  ];
+
+  for (const pattern of jsonPatterns) {
+    const match = text.match(pattern);
+    if (match) {
+      try {
+        // Handle potential truncation by ensuring proper JSON closure
+        let jsonStr = match[0];
+        
+        // Count braces to detect truncation
+        const openBraces = (jsonStr.match(/\{/g) || []).length;
+        const closeBraces = (jsonStr.match(/\}/g) || []).length;
+        const openBrackets = (jsonStr.match(/\[/g) || []).length;
+        const closeBrackets = (jsonStr.match(/\]/g) || []).length;
+        
+        // Attempt to close unclosed structures
+        if (openBrackets > closeBrackets) {
+          jsonStr += ']'.repeat(openBrackets - closeBrackets);
+        }
+        if (openBraces > closeBraces) {
+          jsonStr += '}'.repeat(openBraces - closeBraces);
+        }
+        
+        const parsed = JSON.parse(jsonStr);
+        if (parsed?.questions && Array.isArray(parsed.questions)) {
+          console.log("✅ Pattern-based JSON extraction successful");
+          return parsed;
+        }
+      } catch (e) {
+        console.log(`⚠️ Pattern match failed:`, e);
+      }
+    }
+  }
+
+  // Last resort: extract questions array directly
+  const questionsMatch = text.match(/"questions"\s*:\s*(\[[^\]]*\])/);
+  if (questionsMatch) {
+    try {
+      const questions = JSON.parse(questionsMatch[1]);
+      if (Array.isArray(questions) && questions.length > 0) {
+        console.log("✅ Direct questions array extraction successful");
+        return { questions };
+      }
+    } catch {}
+  }
+
+  return null;
+}
+
 async function processQuiz(req: NextRequest): Promise<NextResponse> {
   const session = await getServerSession(authOptions);
   if (!session?.user?.id) {
@@ -132,97 +210,74 @@ async function processQuiz(req: NextRequest): Promise<NextResponse> {
       }
     }
 
-    // Create assistant
+    // Create assistant with stricter JSON enforcement
     const tools: any[] = [];
     if (documentFiles.length > 0) tools.push({ type: "file_search" });
 
     const assistant = await openai.beta.assistants.create({
       model: "gpt-4o",
       name: "Quiz Generator",
-      instructions: `You are an expert quiz generator. Your task is to create comprehensive, well-distributed quiz questions that thoroughly cover ALL the material provided.
+      instructions: `You are a quiz generator. You MUST respond with ONLY valid JSON. NO explanations, NO markdown, NO text before or after.
 
-CRITICAL INSTRUCTIONS:
-1. Analyze ALL provided content (documents, images, audio transcriptions) completely
-2. Create questions that cover the ENTIRE breadth of the material, not just highlights
-3. Distribute questions evenly across all topics, sections, and concepts
-4. Include questions about:
-   - Main concepts and key ideas
-   - Important details and facts
-   - Relationships and connections between topics
-   - Applications and examples
-   - Visual content (for images)
-   - Definitions and terminology
+CRITICAL: Your entire response must be a single JSON object starting with { and ending with }
 
-QUESTION QUALITY RULES:
-- Each question must be clear, unambiguous, and answerable from the material
-- Options must be plausible and of similar length/complexity
-- Avoid "all of the above" or "none of the above" options
-- Mix difficulty levels: some easier recall questions, some deeper understanding
-- For images: ask about specific visual elements, patterns, or information shown
-- For audio: cover the main points and important details from transcriptions
+ANALYZE all provided content thoroughly and create questions covering the full breadth of material.
 
-OUTPUT FORMAT (CRITICAL):
-Respond with ONLY valid JSON. NO explanations. NO markdown. NO code blocks.
-
+JSON FORMAT (REQUIRED):
 {
   "questions": [
     {
       "id": 1,
-      "question": "Clear, specific question text?",
+      "question": "Clear question text?",
       "options": ["Option A", "Option B", "Option C", "Option D"],
       "correct": "Option A"
     }
   ]
 }
 
-REQUIREMENTS:
+RULES:
 - Generate EXACTLY the requested number of questions
-- Each question MUST have exactly 4 options
+- Each question has exactly 4 options
 - The "correct" field must match one option exactly
-- Cover ALL material comprehensively, not just selected highlights`,
+- Cover ALL material: main concepts, details, and important facts
+- Distribute questions evenly across all content
+- NO text outside the JSON object
+- NO markdown code blocks
+- NO explanations
+
+RESPOND WITH ONLY THE JSON OBJECT.`,
       tools: tools.length > 0 ? tools : undefined,
+      response_format: { type: "json_object" }, // Force JSON response
     });
 
     console.log(`✅ Assistant created: ${assistant.id}`);
 
-    // Build comprehensive instruction
-    let instruction = `Generate EXACTLY ${numQuestions} multiple-choice questions that comprehensively cover ALL the material provided below.\n\n`;
+    // Build instruction with emphasis on JSON-only output
+    let instruction = `Generate ${numQuestions} quiz questions in JSON format.\n\n`;
     
-    instruction += `COVERAGE REQUIREMENTS:\n`;
-    instruction += `- Distribute questions evenly across ALL topics and sections\n`;
-    instruction += `- Cover main ideas, supporting details, and important facts\n`;
-    instruction += `- Include questions from beginning, middle, and end of content\n`;
-    instruction += `- Don't focus only on highlights - cover the full breadth\n\n`;
+    instruction += `IMPORTANT: Respond with ONLY the JSON object. Start with { and end with }. No other text.\n\n`;
 
     if (message.trim()) {
-      instruction += `TOPIC/FOCUS: ${message}\n\n`;
+      instruction += `Topic: ${message}\n\n`;
     }
 
     if (documentFiles.length > 0) {
-      instruction += `DOCUMENTS PROVIDED: ${documentFiles.length} file(s)\n`;
-      instruction += `- Analyze ALL documents thoroughly\n`;
-      instruction += `- Create questions covering information from ALL documents\n`;
-      instruction += `- Ensure comprehensive coverage of all document content\n\n`;
+      instruction += `Analyze all ${documentFiles.length} document(s) thoroughly. Create questions covering the full breadth of content.\n\n`;
     }
 
     if (imageFiles.length > 0) {
-      instruction += `IMAGES PROVIDED: ${imageFiles.length} image(s)\n`;
-      instruction += `- Analyze each image carefully\n`;
-      instruction += `- Create questions about visual elements, patterns, text, and content\n`;
-      instruction += `- Cover information from ALL images provided\n\n`;
+      instruction += `Analyze all ${imageFiles.length} image(s). Create questions about visual content.\n\n`;
     }
 
     if (audioFiles.length > 0) {
-      instruction += `AUDIO TRANSCRIPTIONS:\n${audioTranscriptions}\n\n`;
-      instruction += `- Create questions covering the full audio content\n`;
-      instruction += `- Include main points and important details from transcriptions\n\n`;
+      instruction += `Audio transcriptions:\n${audioTranscriptions}\n\n`;
     }
 
     if (!documentFiles.length && !imageFiles.length && !audioFiles.length) {
-      instruction = `Generate ${numQuestions} general knowledge quiz questions on the topic: "${message || 'general knowledge'}".\n\n`;
+      instruction = `Generate ${numQuestions} quiz questions on: "${message || 'general knowledge'}"\n\n`;
     }
 
-    instruction += `RESPOND WITH ONLY THE JSON OBJECT. NO OTHER TEXT.\n\nJSON FORMAT:\n{\n  "questions": [\n    {\n      "id": 1,\n      "question": "Question text?",\n      "options": ["A", "B", "C", "D"],\n      "correct": "A"\n    }\n  ]\n}`;
+    instruction += `Output ONLY this JSON structure:\n{"questions":[{"id":1,"question":"...","options":["A","B","C","D"],"correct":"A"}]}`;
 
     // Build message content
     const messageContent: any[] = [{ type: "text", text: instruction }];
@@ -252,20 +307,26 @@ REQUIREMENTS:
 
     console.log(`✅ Thread created: ${thread.id}`);
 
-    // Run assistant
+    // Run assistant with longer timeout for large files
     console.log("🤖 Running assistant...");
     const run = await openai.beta.threads.runs.createAndPoll(thread.id, {
       assistant_id: assistant.id,
+      max_prompt_tokens: 100000, // Increase token limit for large files
+      max_completion_tokens: 16000, // Increase completion tokens
     });
 
     if (run.status !== "completed") {
+      console.error(`❌ Run status: ${run.status}`);
+      if (run.last_error) {
+        console.error(`❌ Error details:`, run.last_error);
+      }
       throw new Error(`Assistant run failed: ${run.status}`);
     }
 
     // Get response
     const messages = await openai.beta.threads.messages.list(thread.id);
     const lastMessage = messages.data[0];
-    if (!lastMessage) throw new Error("No response");
+    if (!lastMessage) throw new Error("No response from assistant");
 
     let text = "";
     for (const block of lastMessage.content) {
@@ -273,55 +334,39 @@ REQUIREMENTS:
     }
     text = text.trim();
 
-    console.log("📩 Response preview:", text.substring(0, 300));
+    console.log("📩 Response length:", text.length);
+    console.log("📩 Response preview:", text.substring(0, 500));
 
-    // Parse JSON
-    let parsed: any = null;
-
-    try {
-      parsed = JSON.parse(text);
-    } catch {
-      // Extract from code blocks
-      const patterns = [/```json\s*([\s\S]*?)\s*```/, /```\s*([\s\S]*?)\s*```/];
-      for (const pattern of patterns) {
-        const match = text.match(pattern);
-        if (match) {
-          try {
-            parsed = JSON.parse(match[1].trim());
-            break;
-          } catch {}
-        }
-      }
-
-      // Extract JSON object
-      if (!parsed) {
-        const jsonMatch = text.match(/\{[\s\S]*"questions"[\s\S]*\}/);
-        if (jsonMatch) {
-          try {
-            parsed = JSON.parse(jsonMatch[0]);
-          } catch {}
-        }
-      }
-    }
+    // Enhanced JSON parsing
+    const parsed = extractAndParseJSON(text);
 
     if (!parsed?.questions || !Array.isArray(parsed.questions)) {
-      throw new Error("Invalid response structure");
+      console.error("❌ Failed to extract valid JSON structure");
+      console.error("📄 Full response:", text);
+      throw new Error("Could not extract valid questions from response. The file might be too large or complex.");
     }
 
     if (parsed.questions.length === 0) {
-      throw new Error("No questions generated");
+      throw new Error("No questions were generated. Please try with a smaller file or fewer questions.");
     }
 
-    const formattedQuestions = parsed.questions.map((q: any, i: number) => ({
-      id: q.id || i + 1,
-      question: q.question || `Question ${i + 1}`,
-      options: Array.isArray(q.options) && q.options.length >= 2
-        ? q.options
-        : ["Option A", "Option B", "Option C", "Option D"],
-      correct: q.correct || q.answer || q.options?.[0] || "Option A",
-    }));
+    // Format and validate questions
+    const formattedQuestions = parsed.questions
+      .filter((q: any) => q.question && q.options) // Filter out invalid questions
+      .map((q: any, i: number) => ({
+        id: q.id || i + 1,
+        question: q.question || `Question ${i + 1}`,
+        options: Array.isArray(q.options) && q.options.length >= 2
+          ? q.options.slice(0, 4) // Limit to 4 options
+          : ["Option A", "Option B", "Option C", "Option D"],
+        correct: q.correct || q.answer || (Array.isArray(q.options) ? q.options[0] : "Option A"),
+      }));
 
-    console.log(`✅ Generated ${formattedQuestions.length} questions`);
+    console.log(`✅ Successfully parsed ${formattedQuestions.length} questions`);
+
+    if (formattedQuestions.length === 0) {
+      throw new Error("No valid questions could be extracted from the response.");
+    }
 
     // Cleanup
     try {
@@ -350,6 +395,7 @@ REQUIREMENTS:
 
   } catch (error: any) {
     console.error("❌ Error:", error);
+    console.error("❌ Stack:", error.stack);
     
     if (quizId > 0) {
       await db.execute(
@@ -359,7 +405,7 @@ REQUIREMENTS:
     }
     
     return NextResponse.json(
-      { error: error.message },
+      { error: error.message || "Failed to generate quiz" },
       { status: 500 }
     );
   }
