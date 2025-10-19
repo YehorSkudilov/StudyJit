@@ -95,83 +95,86 @@ export default function FileUploadPopup({
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-      <div className="bg-white dark:bg-gray-800 rounded-xl p-6 w-full max-w-sm max-h-[90vh] overflow-y-auto shadow-lg flex flex-col gap-4">
-        {/* Header */}
-        <div className="flex items-center justify-between">
-          <div className="w-16">
-            {activeType && !isUploading && (
-              <button
-                onClick={handleBack}
-                className="flex items-center gap-2 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
-              >
-                <ArrowLeft className="w-4 h-4" />
-              </button>
-            )}
-          </div>
+<div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+  <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-md p-6 flex flex-col gap-5 max-h-[85vh]">
+    {/* Header */}
+    <div className="flex items-center justify-between border-b border-gray-200 dark:border-gray-700 pb-3">
+      <div className="w-16">
+        {activeType && !isUploading && (
+          <button
+            onClick={handleBack}
+            className="flex items-center gap-2 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
+          >
+            <ArrowLeft className="w-4 h-4" />
+          </button>
+        )}
+      </div>
 
-          <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100 text-center flex-1">
-            {activeType ? "Upload Files" : "New Upload"}
-          </h2>
+      <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 flex-1 text-center">
+        {activeType ? "Upload Files" : "New Upload"}
+      </h2>
 
-          <div className="w-16 flex justify-end">
-            <button
-              onClick={handleCancel}
-              disabled={isUploading}
-              className={`text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 ${
-                isUploading ? "opacity-50 cursor-not-allowed" : ""
-              }`}
+      <div className="w-16 flex justify-end">
+        <button
+          onClick={handleCancel}
+          disabled={isUploading}
+          className={`text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 ${
+            isUploading ? "opacity-50 cursor-not-allowed" : ""
+          }`}
+        >
+          <X className="w-5 h-5" />
+        </button>
+      </div>
+    </div>
+
+    {/* Main Upload Area */}
+    {!activeType && (
+      <div className="flex flex-col gap-2">
+        <button
+          onClick={() => setActiveType("upload")}
+          className="flex items-center gap-2 justify-center py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition font-medium"
+        >
+          <FilePlus className="w-5 h-5" /> Upload Files
+        </button>
+      </div>
+    )}
+
+    {activeType === "upload" && (
+      <div
+        onDrop={handleDrop}
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        className={`flex flex-col gap-4 border-2 border-dashed rounded-xl p-5 transition-colors ${
+          isDragging
+            ? "border-blue-500 bg-blue-50 dark:bg-gray-700/30"
+            : "border-gray-300 dark:border-gray-600"
+        }`}
+      >
+        <div className="flex flex-col items-center justify-center gap-2 text-gray-500 dark:text-gray-300">
+          <UploadCloud className="w-8 h-8" />
+          <p className="text-sm text-center">
+            Drag & drop files here or{" "}
+            <label
+              htmlFor="fileInput"
+              className="text-blue-600 dark:text-blue-400 cursor-pointer hover:underline"
             >
-              <X className="w-5 h-5" />
-            </button>
-          </div>
+              browse
+            </label>
+          </p>
+          <input
+            id="fileInput"
+            type="file"
+            multiple
+            accept="*/*"
+            onChange={handleFileChange}
+            disabled={isUploading}
+            className="hidden"
+          />
         </div>
 
-        {/* Content */}
-        {!activeType && (
-          <div className="flex flex-col gap-2">
-            <button
-              onClick={() => setActiveType("upload")}
-              className="flex items-center gap-2 justify-center p-3 bg-blue-600 text-white rounded hover:bg-blue-700 transition"
-            >
-              <FilePlus className="w-5 h-5" /> Upload Files
-            </button>
-          </div>
-        )}
-
-        {activeType === "upload" && (
-          <div
-            onDrop={handleDrop}
-            onDragOver={handleDragOver}
-            onDragLeave={handleDragLeave}
-            className={`flex flex-col gap-3 border-2 border-dashed rounded-lg p-4 transition-colors ${
-              isDragging
-                ? "border-blue-500 bg-blue-50 dark:bg-gray-700/30"
-                : "border-gray-300 dark:border-gray-600"
-            }`}
-          >
-            <div className="flex flex-col items-center justify-center gap-2 py-4 text-gray-500 dark:text-gray-300">
-              <UploadCloud className="w-8 h-8" />
-              <p className="text-sm">
-                Drag & drop files here or{" "}
-                <label
-                  htmlFor="fileInput"
-                  className="text-blue-600 dark:text-blue-400 cursor-pointer hover:underline"
-                >
-                  browse
-                </label>
-              </p>
-              <input
-                id="fileInput"
-                type="file"
-                multiple
-                accept="*/*"
-                onChange={handleFileChange}
-                disabled={isUploading}
-                className="hidden"
-              />
-            </div>
-
+        {/* Scrollable file list */}
+        {inputFiles.length > 0 && (
+          <div className="max-h-[45vh] overflow-y-auto flex flex-col gap-3 pr-1">
             {inputFiles.map((file) => (
               <div
                 key={file.name}
@@ -202,35 +205,38 @@ export default function FileUploadPopup({
                 </div>
               </div>
             ))}
-
-            {error && (
-              <div className="flex items-center gap-2 text-red-600 dark:text-red-400 text-sm">
-                <AlertCircle className="w-4 h-4" />
-                {error}
-              </div>
-            )}
-
-            <button
-              onClick={handleSubmit}
-              disabled={inputFiles.length === 0 || isUploading}
-              className={`w-full py-2 rounded transition flex items-center justify-center gap-2 ${
-                inputFiles.length > 0 && !isUploading
-                  ? "bg-blue-600 text-white hover:bg-blue-700"
-                  : "bg-gray-400 text-gray-200 cursor-not-allowed"
-              }`}
-            >
-              {isUploading ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  Uploading...
-                </>
-              ) : (
-                "Upload Files"
-              )}
-            </button>
           </div>
         )}
+
+        {error && (
+          <div className="flex items-center gap-2 text-red-600 dark:text-red-400 text-sm">
+            <AlertCircle className="w-4 h-4" />
+            {error}
+          </div>
+        )}
+
+        <button
+          onClick={handleSubmit}
+          disabled={inputFiles.length === 0 || isUploading}
+          className={`w-full py-2.5 rounded-lg font-medium transition flex items-center justify-center gap-2 ${
+            inputFiles.length > 0 && !isUploading
+              ? "bg-blue-600 text-white hover:bg-blue-700"
+              : "bg-gray-400 text-gray-200 cursor-not-allowed"
+          }`}
+        >
+          {isUploading ? (
+            <>
+              <Loader2 className="w-4 h-4 animate-spin" />
+              Uploading...
+            </>
+          ) : (
+            "Upload Files"
+          )}
+        </button>
       </div>
-    </div>
+    )}
+  </div>
+</div>
+
   );
 }
