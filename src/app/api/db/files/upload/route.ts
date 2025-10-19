@@ -70,6 +70,12 @@ export async function POST(req: Request) {
     });
   } catch (err: any) {
     console.error("❌ Upload error:", err);
+    console.error("Error stack:", err.stack);
+    console.error("Error details:", {
+      message: err.message,
+      code: err.code,
+      errno: err.errno,
+    });
     
     // 🧹 Cleanup: try to delete the database entry if file write failed
     if (fileId) {
@@ -78,13 +84,17 @@ export async function POST(req: Request) {
           fileId,
           userId,
         ]);
+        console.log(`🧹 Cleaned up DB entry for file ID: ${fileId}`);
       } catch (cleanupErr) {
         console.error("Failed to cleanup DB entry:", cleanupErr);
       }
     }
 
     return NextResponse.json(
-      { error: err.message || "Internal server error" },
+      { 
+        error: err.message || "Internal server error",
+        details: process.env.NODE_ENV === "development" ? err.stack : undefined
+      },
       { status: 500 }
     );
   }
