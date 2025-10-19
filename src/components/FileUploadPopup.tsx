@@ -18,6 +18,7 @@ export default function FileUploadPopup({
   const [activeType, setActiveType] = useState<"upload" | null>(null);
   const [error, setError] = useState<string>("");
   const [uploading, setUploading] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
 
   if (!isOpen) return null;
 
@@ -26,6 +27,28 @@ export default function FileUploadPopup({
     setInputFiles((prev) => [...prev, ...files]);
     setError("");
     e.target.value = ""; // Reset input to allow selecting same file again
+  };
+
+  const handleDragOver = (e: React.DragEvent<HTMLLabelElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent<HTMLLabelElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+  };
+
+  const handleDrop = (e: React.DragEvent<HTMLLabelElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+
+    const files = e.dataTransfer.files ? Array.from(e.dataTransfer.files) : [];
+    setInputFiles((prev) => [...prev, ...files]);
+    setError("");
   };
 
   const handleRemoveFile = (index: number) => {
