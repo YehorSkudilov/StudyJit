@@ -19,6 +19,7 @@ export default function FileUploadPopup({
   const [error, setError] = useState<string>("");
   const [uploading, setUploading] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<{succeeded: number, failed: number}>({ succeeded: 0, failed: 0 });
 
   if (!isOpen) return null;
 
@@ -63,12 +64,60 @@ export default function FileUploadPopup({
 
     setUploading(true);
     setError("");
+    setUploadProgress({ succeeded: 0, failed: 0 });
 
     try {
-      await onFileUpload(inputFiles);
-      setInputFiles([]);
-      setActiveType(null);
-      onClose();
+      // Upload files one by one
+      const results = await Promise.allSettled(
+        inputFiles.map(async (file) => {
+          const formData = new FormData();
+          formData.append("file", file);
+
+          const response = await fetch("/api/db/files/upload", {
+            method: "POST",
+            body: formData,
+            // DO NOT set Content-Type header - browser will set it with boundary
+          });
+
+          if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.error || `Failed to upload ${file.name}`);
+          }
+
+          return await response.json();
+        })
+      );
+
+      // Count successes and failures
+      const succeeded = results.filter((r) => r.status === "fulfilled").length;
+      const failed = results.filter((r) => r.status === "rejected").length;
+      
+      setUploadProgress({ succeeded, failed });
+
+      if (failed > 0) {
+        const failedFiles = results
+          .map((r, i) => (r.status === "rejected" ? inputFiles[i].name : null))
+          .filter(Boolean)
+          .join(", ");
+        setError(`${failed} file(s) failed to upload: ${failedFiles}`);
+      }
+
+      if (succeeded > 0) {
+        // Notify parent component of successful uploads
+        onFileUpload(inputFiles.filter((_, i) => results[i].status === "fulfilled"));
+        
+        if (failed === 0) {
+          // Only close if all succeeded
+          setInputFiles([]);
+          setActiveType(null);
+          onClose();
+        } else {
+          // Remove successfully uploaded files
+          setInputFiles((prev) => 
+            prev.filter((_, i) => results[i].status === "rejected")
+          );
+        }
+      }
     } catch (err: any) {
       setError(err.message || "Upload failed");
     } finally {
@@ -80,6 +129,7 @@ export default function FileUploadPopup({
     setInputFiles([]);
     setActiveType(null);
     setError("");
+    setUploadProgress({ succeeded: 0, failed: 0 });
     onClose();
   };
 
@@ -87,6 +137,7 @@ export default function FileUploadPopup({
     setInputFiles([]);
     setActiveType(null);
     setError("");
+    setUploadProgress({ succeeded: 0, failed: 0 });
   };
 
   const totalSize = inputFiles.reduce((sum, file) => sum + file.size, 0);
@@ -170,7 +221,6 @@ export default function FileUploadPopup({
               </p>
             </label>
 
-
             {/* File List */}
             {inputFiles.length > 0 && (
               <div className="space-y-2 max-h-64 overflow-y-auto">
@@ -203,6 +253,13 @@ export default function FileUploadPopup({
                     </button>
                   </div>
                 ))}
+              </div>
+            )}
+
+            {/* Upload Progress */}
+            {uploading && uploadProgress.succeeded + uploadProgress.failed > 0 && (
+              <div className="text-sm text-gray-600 dark:text-gray-400 bg-blue-50 dark:bg-blue-900/20 p-3 rounded-lg">
+                Progress: {uploadProgress.succeeded} succeeded, {uploadProgress.failed} failed
               </div>
             )}
 

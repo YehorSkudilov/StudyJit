@@ -14,13 +14,22 @@ export async function POST(req: Request) {
     if (!session?.user?.id)
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
+    // Get the content type to verify it's multipart/form-data
+    const contentType = req.headers.get("content-type");
+    if (!contentType?.includes("multipart/form-data")) {
+      return NextResponse.json(
+        { error: "Invalid content type", details: "Expected multipart/form-data" },
+        { status: 400 }
+      );
+    }
+
     let form: FormData;
     try {
       form = await req.formData();
     } catch (err) {
       console.error("❌ Failed to parse FormData:", err);
       return NextResponse.json(
-        { error: "Bad FormData", details: "Make sure bodyParser is disabled." },
+        { error: "Bad FormData", details: err instanceof Error ? err.message : "Unknown error" },
         { status: 400 }
       );
     }
@@ -43,7 +52,7 @@ export async function POST(req: Request) {
       [file.name, file.size, filePath, session.user.id]
     );
 
-    return NextResponse.json({ success: true });
+    return NextResponse.json({ success: true, fileName: file.name });
   } catch (err: any) {
     console.error("❌ Upload failed:", err);
     return NextResponse.json(

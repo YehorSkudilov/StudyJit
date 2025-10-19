@@ -1,9 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  api: {
-    bodyParser: false, // Required for FormData uploads
-  },
+  // Remove the api.bodyParser config - it doesn't work with App Router
 };
 
 export default nextConfig;
