@@ -1,7 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  // Remove the api.bodyParser config - it doesn't work with App Router
+  /* config options here */
 };
 
 export default nextConfig;
