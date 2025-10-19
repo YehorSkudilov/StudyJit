@@ -24,6 +24,7 @@ export default function ProfilePage() {
           setMessage({ type: "error", text: error.error || "Failed to load profile" });
         }
       } catch (err) {
+        console.error("Fetch error:", err);
         setMessage({ type: "error", text: "Failed to load profile" });
       } finally {
         setLoading(false);
@@ -38,7 +39,8 @@ export default function ProfilePage() {
     setMessage(null);
 
     try {
-      const res = await fetch("/api/users", {
+      // ✅ CHANGED FROM /api/users TO /api/profile
+      const res = await fetch("/api/profile", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(profile),
@@ -52,6 +54,7 @@ export default function ProfilePage() {
         setMessage({ type: "error", text: data.error || "Failed to update profile" });
       }
     } catch (err) {
+      console.error("Update error:", err);
       setMessage({ type: "error", text: "Network error. Please try again." });
     } finally {
       setSaving(false);
