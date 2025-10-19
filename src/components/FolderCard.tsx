@@ -8,43 +8,24 @@ interface FolderCardProps {
   onDoubleClick: () => void;
 }
 
-export default function FolderCard({
-  folderName,
-  itemCount,
-  selected,
-  onClick,
-  onDoubleClick,
+export default function FolderCard({ 
+  folderName, 
+  itemCount, 
+  selected, 
+  onClick, 
+  onDoubleClick 
 }: FolderCardProps) {
   return (
     <div
+      className={`p-6 bg-white dark:bg-gray-800 rounded-xl shadow flex gap-4 items-center hover:bg-blue-50 dark:hover:bg-gray-700 transition cursor-pointer h-full
+        ${selected ? "ring-2 ring-blue-500" : ""}`}
       onClick={onClick}
       onDoubleClick={onDoubleClick}
-      className={`group relative p-6 rounded-xl cursor-pointer flex items-center gap-4 shadow-sm border transition-all
-        ${
-          selected
-            ? "ring-2 ring-blue-500 bg-blue-50 dark:bg-blue-900/20"
-            : "bg-gradient-to-br from-yellow-50 to-white dark:from-gray-800 dark:to-gray-900 hover:shadow-md hover:scale-[1.02]"
-        }`}
     >
-      <div
-        className={`flex items-center justify-center w-14 h-14 rounded-lg transition-transform
-          ${
-            selected
-              ? "bg-blue-500 text-white"
-              : "bg-yellow-400/90 group-hover:bg-yellow-500 text-white"
-          }`}
-      >
-        <Folder className="w-7 h-7" />
-      </div>
-      <div className="flex flex-col min-w-0">
-        <h3
-          className={`font-semibold text-lg truncate ${
-            selected ? "text-blue-600 dark:text-blue-300" : ""
-          }`}
-        >
-          {folderName}
-        </h3>
-        <p className="text-sm text-gray-500 dark:text-gray-400">
+      <Folder className="w-8 h-8 text-yellow-500 flex-shrink-0" />
+      <div className="flex flex-col justify-center min-w-0 flex-1">
+        <h3 className="font-semibold text-lg truncate">{folderName}</h3>
+        <p className="text-gray-500 dark:text-gray-400 text-sm">
           {itemCount} item{itemCount !== 1 && "s"}
         </p>
       </div>
