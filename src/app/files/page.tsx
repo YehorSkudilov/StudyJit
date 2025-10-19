@@ -16,7 +16,6 @@ export default function FilesPage() {
   const [isPopupOpen, setIsPopupOpen] = useState(false);
   const [activeFolder, setActiveFolder] = useState<string | null>(null);
 
-  // ✅ Fetch files from DB (GET /api/files)
   const fetchFiles = async () => {
     try {
       const res = await fetch("/api/db/files", { cache: "no-store" });
@@ -39,28 +38,42 @@ export default function FilesPage() {
     fetchFiles();
   }, []);
 
-  // ✅ Upload new file to backend (POST /api/files/upload)
-  const handleFileUpload = async (file: File) => {
-    const formData = new FormData();
-    formData.append("file", file);
+  const handleFileUpload = async (files: File[]) => {
+    let successCount = 0;
+    let errorCount = 0;
 
-    try {
-      const res = await fetch("/api/db/files/upload", {
-        method: "POST",
-        body: formData,
-      });
+    for (const file of files) {
+      const formData = new FormData();
+      formData.append("file", file);
 
-      if (!res.ok) throw new Error("Upload failed");
-      const result = await res.json();
-      console.log("✅ Uploaded:", result);
+      try {
+        const res = await fetch("/api/db/files/upload", {
+          method: "POST",
+          body: formData,
+        });
 
-      await fetchFiles(); // Refresh list
-    } catch (err) {
-      console.error("❌ Upload error:", err);
+        if (!res.ok) {
+          errorCount++;
+          const error = await res.json();
+          console.error(`❌ Failed to upload ${file.name}:`, error);
+        } else {
+          successCount++;
+          console.log(`✅ Uploaded: ${file.name}`);
+        }
+      } catch (err) {
+        errorCount++;
+        console.error(`❌ Upload error for ${file.name}:`, err);
+      }
+    }
+
+    console.log(`📊 Upload complete: ${successCount} succeeded, ${errorCount} failed`);
+    await fetchFiles();
+
+    if (errorCount > 0) {
+      throw new Error(`${errorCount} file(s) failed to upload`);
     }
   };
 
-  // ✅ Delete selected files using DELETE /api/files/:id
   const handleDeleteSelected = async () => {
     for (const id of selectedItems) {
       try {
@@ -74,11 +87,8 @@ export default function FilesPage() {
     await fetchFiles();
   };
 
-  // ✅ Selection controls
   const handleSelectAll = () => setSelectedItems(files.map((f) => f.id));
   const handleDeselectAll = () => setSelectedItems([]);
-
-  // ✅ Drag reorder (visual only)
   const handleReorder = (newOrder: Item[]) => setFiles(newOrder);
 
   return (
