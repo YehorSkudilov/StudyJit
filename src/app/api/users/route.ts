@@ -1,86 +1,113 @@
-import { NextResponse } from "next/server";
+import { NextAuthOptions, DefaultSession, DefaultUser } from "next-auth";
+import CredentialsProvider from "next-auth/providers/credentials";
 import bcrypt from "bcryptjs";
 import db from "@/lib/db";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/authOptions"; // make sure path is correct
+import { RowDataPacket } from "mysql2";
 
-/* ----------------------------- GET /api/users ----------------------------- */
-/**
- * Fetches the current logged-in user’s profile info from session.
- */
-export async function GET() {
-  try {
-    const session = await getServerSession(authOptions);
-    if (!session || !session.user?.id) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
-    const [rows] = await db.query(
-      "SELECT id, name, email, bio FROM users WHERE id = ?",
-      [session.user.id]
-    );
-    const user = (rows as any[])[0];
-
-    if (!user) {
-      return NextResponse.json({ error: "User not found" }, { status: 404 });
-    }
-
-    return NextResponse.json(user);
-  } catch (err: any) {
-    console.error("❌ Error fetching user:", err);
-    return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
+// Extend NextAuth types
+declare module "next-auth" {
+  interface Session {
+    user: { id: string } & DefaultSession["user"];
+  }
+  interface User extends DefaultUser {
+    id: string;
   }
 }
 
-/* ---------------------------- PATCH /api/users ---------------------------- */
-/**
- * Updates current user’s profile fields and optionally changes password.
- */
-export async function PATCH(req: Request) {
-  try {
-    const session = await getServerSession(authOptions);
-    if (!session || !session.user?.id) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+declare module "next-auth/jwt" {
+  interface JWT {
+    id?: string;
+  }
+}
 
-    const userId = session.user.id;
-    const body = await req.json();
-    const { name, email, bio, currentPassword, newPassword } = body;
+interface DbUser extends RowDataPacket {
+  id: number;
+  name: string;
+  email: string;
+  password: string;
+}
 
-    // 🧠 Get current user
-    const [rows] = await db.query("SELECT * FROM users WHERE id = ?", [userId]);
-    const user = (rows as any[])[0];
-    if (!user) {
-      return NextResponse.json({ error: "User not found" }, { status: 404 });
-    }
+export const authOptions: NextAuthOptions = {
+  providers: [
+    CredentialsProvider({
+      name: "Credentials",
+      credentials: {
+        email: { label: "Email", type: "text" },
+        password: { label: "Password", type: "password" },
+      },
+      async authorize(credentials) {
+        if (!credentials?.email || !credentials?.password) {
+          throw new Error("MISSING_CREDENTIALS");
+        }
 
-    // 🔐 Handle password change (optional)
-    if (currentPassword && newPassword) {
-      const isMatch = await bcrypt.compare(currentPassword, user.password);
-      if (!isMatch) {
-        return NextResponse.json({ error: "Current password is incorrect" }, { status: 400 });
-      }
-
-      if (newPassword.length < 6) {
-        return NextResponse.json(
-          { error: "New password must be at least 6 characters long" },
-          { status: 400 }
+        const [rows] = await db.query<DbUser[]>(
+          "SELECT * FROM users WHERE email = ?",
+          [credentials.email]
         );
+        const user = rows[0];
+        if (!user) throw new Error("USER_NOT_FOUND");
+
+        const isValid = await bcrypt.compare(credentials.password, user.password);
+        if (!isValid) throw new Error("INVALID_PASSWORD");
+
+        return { id: user.id.toString(), email: user.email, name: user.name };
+      },
+    }),
+  ],
+
+  session: {
+    strategy: "jwt",
+    maxAge: 60 * 60 * 24 * 7, // 7 days
+  },
+
+  callbacks: {
+    async jwt({ token, user }) {
+      // When user first signs in, add their ID to the token
+      if (user) {
+        token.id = user.id;
+        console.log("✅ JWT: User signed in with ID:", user.id);
       }
 
-      const hashed = await bcrypt.hash(newPassword, 10);
-      await db.query("UPDATE users SET password = ? WHERE id = ?", [hashed, userId]);
-    }
+      // Validate that the user still exists in the database
+      if (token?.id) {
+        try {
+          const [rows] = await db.query<DbUser[]>(
+            "SELECT id FROM users WHERE id = ?", 
+            [parseInt(token.id)] // ✅ Convert string to number
+          );
+          
+          if (rows.length === 0) {
+            console.warn("⚠️ JWT: User no longer exists, clearing token");
+            return {}; // Clear token if user deleted
+          }
+        } catch (error) {
+          console.error("❌ JWT: Database error:", error);
+          return {}; // Clear token on error
+        }
+      }
 
-    // 🧩 Update name, email, bio
-    await db.query(
-      "UPDATE users SET name = ?, email = ?, bio = ? WHERE id = ?",
-      [name, email, bio, userId]
-    );
+      return token;
+    },
 
-    return NextResponse.json({ message: "Profile updated successfully" });
-  } catch (err: any) {
-    console.error("❌ Error updating profile:", err);
-    return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
-  }
-}
+    async session({ session, token }) {
+      // Add user ID to the session
+      if (token?.id) {
+        session.user.id = token.id;
+        console.log("✅ Session: User ID set to:", token.id);
+      } else {
+        session.user.id = "";
+        console.warn("⚠️ Session: No user ID in token");
+      }
+
+      return session;
+    },
+  },
+
+  secret: process.env.NEXTAUTH_SECRET,
+  
+  pages: {
+    signIn: '/login', // Optional: customize sign-in page
+  },
+  
+  debug: process.env.NODE_ENV === 'development', // Enable debug logs in development
+};
