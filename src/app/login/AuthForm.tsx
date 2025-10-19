@@ -18,8 +18,14 @@ export default function AuthForm() {
     e.preventDefault();
     setError(null);
 
+    // Basic validation
     if (!email || !password || (isRegister && !confirmPassword) || (isRegister && !name)) {
       setError("Please fill out all required fields.");
+      return;
+    }
+
+    if (isRegister && password.length < 6) {
+      setError("Password must be at least 6 characters long.");
       return;
     }
 
@@ -98,6 +104,7 @@ export default function AuthForm() {
             type="password"
             placeholder="Password"
             value={password}
+            minLength={6}
             onChange={(e) => setPassword(e.target.value)}
             className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-transparent focus:outline-none focus:ring-2 focus:ring-blue-400"
           />
