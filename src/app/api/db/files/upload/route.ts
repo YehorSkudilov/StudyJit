@@ -1,62 +1,107 @@
-export const runtime = "nodejs";
-export const dynamic = "force-dynamic";
+// Create this at: app/api/db/files/test-upload/route.ts
+// This is a simplified route to debug the FormData issue
 
 import { NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/authOptions";
-import db from "@/lib/db";
-import fs from "fs";
-import path from "path";
 
 export async function POST(req: Request) {
+  console.log("🔍 === UPLOAD DEBUG START ===");
+  
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.id)
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    // Log headers
+    console.log("📋 Headers:");
+    req.headers.forEach((value, key) => {
+      console.log(`  ${key}: ${value}`);
+    });
 
-    // Get the content type to verify it's multipart/form-data
+    // Check content type
     const contentType = req.headers.get("content-type");
+    console.log("\n📦 Content-Type:", contentType);
+
     if (!contentType?.includes("multipart/form-data")) {
+      console.log("❌ Invalid content type");
       return NextResponse.json(
-        { error: "Invalid content type", details: "Expected multipart/form-data" },
+        { error: "Invalid content type", received: contentType },
         { status: 400 }
       );
     }
 
-    let form: FormData;
+    // Try to parse FormData
+    console.log("\n🔄 Attempting to parse FormData...");
+    let formData: FormData;
+    
     try {
-      form = await req.formData();
-    } catch (err) {
-      console.error("❌ Failed to parse FormData:", err);
+      formData = await req.formData();
+      console.log("✅ FormData parsed successfully");
+    } catch (parseError: any) {
+      console.error("❌ FormData parse error:", parseError);
       return NextResponse.json(
-        { error: "Bad FormData", details: err instanceof Error ? err.message : "Unknown error" },
+        { 
+          error: "Failed to parse FormData", 
+          details: parseError.message,
+          stack: parseError.stack 
+        },
         { status: 400 }
       );
     }
 
-    const file = form.get("file") as File | null;
-    if (!file)
-      return NextResponse.json({ error: "No file uploaded" }, { status: 400 });
+    // Log FormData contents
+    console.log("\n📝 FormData entries:");
+    const entries: Array<[string, any]> = [];
+    for (const [key, value] of formData.entries()) {
+      entries.push([key, value]);
+      if (value instanceof File) {
+        console.log(`  ${key}: File(name="${value.name}", size=${value.size}, type="${value.type}")`);
+      } else {
+        console.log(`  ${key}: ${value}`);
+      }
+    }
 
-    const bytes = await file.arrayBuffer();
-    const buffer = Buffer.from(bytes);
+    // Get the file
+    const file = formData.get("file");
+    console.log("\n🎯 File field:", file);
 
-    const uploadDir = path.join(process.cwd(), "shared-files");
-    await fs.promises.mkdir(uploadDir, { recursive: true });
+    if (!file) {
+      console.log("❌ No file found in FormData");
+      return NextResponse.json(
+        { 
+          error: "No file uploaded",
+          formDataKeys: entries.map(([key]) => key)
+        },
+        { status: 400 }
+      );
+    }
 
-    const filePath = path.join(uploadDir, file.name);
-    await fs.promises.writeFile(filePath, buffer);
+    if (!(file instanceof File)) {
+      console.log("❌ File field is not a File instance");
+      return NextResponse.json(
+        { error: "Invalid file type", receivedType: typeof file },
+        { status: 400 }
+      );
+    }
 
-    await db.query(
-      "INSERT INTO files (name, size, path, user_id) VALUES (?, ?, ?, ?)",
-      [file.name, file.size, filePath, session.user.id]
-    );
+    console.log("✅ File validated successfully");
+    console.log(`   Name: ${file.name}`);
+    console.log(`   Size: ${file.size} bytes`);
+    console.log(`   Type: ${file.type}`);
 
-    return NextResponse.json({ success: true, fileName: file.name });
-  } catch (err: any) {
-    console.error("❌ Upload failed:", err);
+    console.log("\n🔍 === UPLOAD DEBUG END ===");
+
+    return NextResponse.json({ 
+      success: true,
+      fileName: file.name,
+      fileSize: file.size,
+      fileType: file.type
+    });
+
+  } catch (error: any) {
+    console.error("\n💥 Unexpected error:", error);
+    console.error("Stack:", error.stack);
     return NextResponse.json(
-      { error: "Internal Server Error", details: err.message },
+      { 
+        error: "Internal server error", 
+        details: error.message,
+        stack: error.stack
+      },
       { status: 500 }
     );
   }

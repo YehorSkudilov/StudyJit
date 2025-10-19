@@ -1,133 +1,303 @@
 "use client";
-export const dynamic = "force-dynamic";
 
-import React, { useEffect, useState } from "react";
-import PageHeader from "@/components/PageHeader";
-import GenericGrid from "@/components/GenericGrid";
-import FileCard from "@/components/FileCard";
-import FloatingAddButton from "@/components/FloatingAddButton";
-import FileUploadPopup from "@/components/FileUploadPopup";
-import { Item } from "@/types/Item";
-import { File } from "lucide-react";
+import { X, FilePlus, ArrowLeft, File, AlertCircle, Trash2 } from "lucide-react";
+import { useState } from "react";
 
-export default function FilesPage() {
-  const [files, setFiles] = useState<Item[]>([]);
-  const [selectedItems, setSelectedItems] = useState<string[]>([]);
-  const [isPopupOpen, setIsPopupOpen] = useState(false);
-  const [activeFolder, setActiveFolder] = useState<string | null>(null);
+type FileUploadPopupProps = {
+  isOpen: boolean;
+  onClose: () => void;
+  onFileUpload: (files: File[]) => void;
+};
 
-  const fetchFiles = async () => {
+export default function FileUploadPopup({
+  isOpen,
+  onClose,
+  onFileUpload,
+}: FileUploadPopupProps) {
+  const [inputFiles, setInputFiles] = useState<File[]>([]);
+  const [activeType, setActiveType] = useState<"upload" | null>(null);
+  const [error, setError] = useState<string>("");
+  const [uploading, setUploading] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<{succeeded: number, failed: number}>({ succeeded: 0, failed: 0 });
+
+  if (!isOpen) return null;
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files ? Array.from(e.target.files) : [];
+    setInputFiles((prev) => [...prev, ...files]);
+    setError("");
+    e.target.value = ""; // Reset input to allow selecting same file again
+  };
+
+  const handleDragOver = (e: React.DragEvent<HTMLLabelElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent<HTMLLabelElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+  };
+
+  const handleDrop = (e: React.DragEvent<HTMLLabelElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+
+    const files = e.dataTransfer.files ? Array.from(e.dataTransfer.files) : [];
+    setInputFiles((prev) => [...prev, ...files]);
+    setError("");
+  };
+
+  const handleRemoveFile = (index: number) => {
+    setInputFiles((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const handleSubmit = async () => {
+    if (inputFiles.length === 0) {
+      setError("Please select at least one file before uploading.");
+      return;
+    }
+
+    setUploading(true);
+    setError("");
+    setUploadProgress({ succeeded: 0, failed: 0 });
+
     try {
-      const res = await fetch("/api/db/files", { cache: "no-store" });
-      if (!res.ok) throw new Error("Failed to load files");
-      const data = await res.json();
-      setFiles(
-        data.map((f: any) => ({
-          id: f.id.toString(),
-          type: "file",
-          name: f.name,
-          size: f.size,
-        }))
+      // Upload files one by one
+      const results = await Promise.allSettled(
+        inputFiles.map(async (file) => {
+          const formData = new FormData();
+          formData.append("file", file);
+
+          // Temporarily use debug route
+          const response = await fetch("/api/db/files/test-upload", {
+            method: "POST",
+            body: formData,
+            // DO NOT set Content-Type header - browser will set it with boundary
+          });
+          
+          console.log("📤 Upload response:", response.status, response.statusText);
+
+          if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.error || `Failed to upload ${file.name}`);
+          }
+
+          return await response.json();
+        })
       );
-    } catch (err) {
-      console.error("❌ Error fetching files:", err);
-    }
-  };
 
-  useEffect(() => {
-    fetchFiles();
-  }, []);
+      // Count successes and failures
+      const succeeded = results.filter((r) => r.status === "fulfilled").length;
+      const failed = results.filter((r) => r.status === "rejected").length;
+      
+      setUploadProgress({ succeeded, failed });
 
-  const handleFileUpload = async (files: File[]) => {
-    let successCount = 0;
-    let errorCount = 0;
+      if (failed > 0) {
+        const failedFiles = results
+          .map((r, i) => (r.status === "rejected" ? inputFiles[i].name : null))
+          .filter(Boolean)
+          .join(", ");
+        setError(`${failed} file(s) failed to upload: ${failedFiles}`);
+      }
 
-    for (const file of files) {
-      const formData = new FormData();
-      formData.append("file", file);
-
-      try {
-        const res = await fetch("/api/db/files/upload", {
-          method: "POST",
-          body: formData,
-        });
-
-        if (!res.ok) {
-          errorCount++;
-          const error = await res.json();
-          console.error(`❌ Failed to upload ${file.name}:`, error);
+      if (succeeded > 0) {
+        // Notify parent component of successful uploads
+        onFileUpload(inputFiles.filter((_, i) => results[i].status === "fulfilled"));
+        
+        if (failed === 0) {
+          // Only close if all succeeded
+          setInputFiles([]);
+          setActiveType(null);
+          onClose();
         } else {
-          successCount++;
-          console.log(`✅ Uploaded: ${file.name}`);
+          // Remove successfully uploaded files
+          setInputFiles((prev) => 
+            prev.filter((_, i) => results[i].status === "rejected")
+          );
         }
-      } catch (err) {
-        errorCount++;
-        console.error(`❌ Upload error for ${file.name}:`, err);
       }
-    }
-
-    console.log(`📊 Upload complete: ${successCount} succeeded, ${errorCount} failed`);
-    await fetchFiles();
-
-    if (errorCount > 0) {
-      throw new Error(`${errorCount} file(s) failed to upload`);
+    } catch (err: any) {
+      setError(err.message || "Upload failed");
+    } finally {
+      setUploading(false);
     }
   };
 
-  const handleDeleteSelected = async () => {
-    for (const id of selectedItems) {
-      try {
-        const res = await fetch(`/api/db/files/${id}`, { method: "DELETE" });
-        if (!res.ok) throw new Error("Failed to delete file " + id);
-      } catch (err) {
-        console.error("❌ Delete error:", err);
-      }
-    }
-    setSelectedItems([]);
-    await fetchFiles();
+  const handleCancel = () => {
+    setInputFiles([]);
+    setActiveType(null);
+    setError("");
+    setUploadProgress({ succeeded: 0, failed: 0 });
+    onClose();
   };
 
-  const handleSelectAll = () => setSelectedItems(files.map((f) => f.id));
-  const handleDeselectAll = () => setSelectedItems([]);
-  const handleReorder = (newOrder: Item[]) => setFiles(newOrder);
+  const handleBack = () => {
+    setInputFiles([]);
+    setActiveType(null);
+    setError("");
+    setUploadProgress({ succeeded: 0, failed: 0 });
+  };
+
+  const totalSize = inputFiles.reduce((sum, file) => sum + file.size, 0);
+  const formatSize = (bytes: number) => {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  };
 
   return (
-    <div className="min-h-screen flex flex-col bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 relative">
-      <PageHeader
-        title="Files"
-        icon={File}
-        activeFolder={activeFolder}
-        goBack={() => setActiveFolder(null)}
-        selectedItems={selectedItems}
-        onDeleteSelected={handleDeleteSelected}
-        onSelectAll={handleSelectAll}
-        onDeselectAll={handleDeselectAll}
-      />
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white dark:bg-gray-800 rounded-xl p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-lg flex flex-col gap-4">
+        {/* Header */}
+        <div className="flex items-center justify-between">
+          <div className="w-16">
+            {activeType && (
+              <button
+                onClick={handleBack}
+                className="flex items-center gap-2 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
+                disabled={uploading}
+              >
+                <ArrowLeft className="w-4 h-4" />
+              </button>
+            )}
+          </div>
 
-      <main className="px-6 sm:px-20 pb-20">
-        <GenericGrid
-          items={files}
-          selectedItems={selectedItems}
-          setSelectedItems={setSelectedItems}
-          onReorder={handleReorder}
-          renderItem={(item, isSelected, onClick) => (
-            <FileCard
-              fileName={item.name}
-              fileSize={item.size}
-              selected={isSelected}
-              onClick={onClick}
-              onDoubleClick={() => console.log(`Opened ${item.name}`)}
-            />
-          )}
-        />
-      </main>
+          <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100 text-center flex-1">
+            {activeType ? "Upload Files" : "Upload New Files"}
+          </h2>
 
-      <FloatingAddButton onClick={() => setIsPopupOpen(true)} />
-      <FileUploadPopup
-        isOpen={isPopupOpen}
-        onClose={() => setIsPopupOpen(false)}
-        onFileUpload={handleFileUpload}
-      />
+          <div className="w-16 flex justify-end">
+            <button
+              onClick={handleCancel}
+              className="text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
+              disabled={uploading}
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+        </div>
+
+        {/* Content */}
+        {!activeType && (
+          <div className="flex flex-col gap-2">
+            <button
+              onClick={() => setActiveType("upload")}
+              className="flex items-center gap-2 justify-center p-3 bg-blue-600 text-white rounded hover:bg-blue-700 transition"
+            >
+              <FilePlus className="w-5 h-5" /> Upload Files
+            </button>
+          </div>
+        )}
+
+        {activeType === "upload" && (
+          <div className="flex flex-col gap-3">
+            {/* File Input */}
+            <label 
+              className={`w-full px-4 py-8 rounded-lg border-2 border-dashed cursor-pointer transition text-center ${
+                isDragging 
+                  ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20' 
+                  : 'border-gray-300 dark:border-gray-600 hover:border-blue-500 dark:hover:border-blue-500 bg-gray-50 dark:bg-gray-700/50'
+              }`}
+              onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave}
+              onDrop={handleDrop}
+            >
+              <input
+                type="file"
+                multiple
+                accept="*/*"
+                onChange={handleFileChange}
+                className="hidden"
+                disabled={uploading}
+              />
+              <FilePlus className="w-10 h-10 mx-auto mb-2 text-gray-400" />
+              <p className="text-gray-600 dark:text-gray-300 font-medium">
+                Click to select files
+              </p>
+              <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                or drag and drop (multiple files supported)
+              </p>
+            </label>
+
+            {/* File List */}
+            {inputFiles.length > 0 && (
+              <div className="space-y-2 max-h-64 overflow-y-auto">
+                <div className="flex items-center justify-between text-sm text-gray-600 dark:text-gray-400 mb-2">
+                  <span>{inputFiles.length} file(s) selected</span>
+                  <span>{formatSize(totalSize)}</span>
+                </div>
+
+                {inputFiles.map((file, index) => (
+                  <div
+                    key={`${file.name}-${index}`}
+                    className="flex items-start gap-3 p-3 bg-gray-100 dark:bg-gray-700 rounded-lg shadow-inner group"
+                  >
+                    <File className="w-6 h-6 text-blue-500 flex-shrink-0 mt-0.5" />
+                    <div className="flex-1 overflow-hidden min-w-0">
+                      <p className="text-gray-900 dark:text-gray-100 font-medium break-words">
+                        {file.name}
+                      </p>
+                      <p className="text-sm text-gray-500 dark:text-gray-400">
+                        {formatSize(file.size)}
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => handleRemoveFile(index)}
+                      className="text-gray-400 hover:text-red-500 dark:hover:text-red-400 transition flex-shrink-0 opacity-0 group-hover:opacity-100"
+                      disabled={uploading}
+                      title="Remove file"
+                    >
+                      <Trash2 className="w-5 h-5" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Upload Progress */}
+            {uploading && uploadProgress.succeeded + uploadProgress.failed > 0 && (
+              <div className="text-sm text-gray-600 dark:text-gray-400 bg-blue-50 dark:bg-blue-900/20 p-3 rounded-lg">
+                Progress: {uploadProgress.succeeded} succeeded, {uploadProgress.failed} failed
+              </div>
+            )}
+
+            {/* Error Message */}
+            {error && (
+              <div className="flex items-center gap-2 text-red-600 dark:text-red-400 text-sm bg-red-50 dark:bg-red-900/20 p-3 rounded-lg">
+                <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                <span>{error}</span>
+              </div>
+            )}
+
+            {/* Upload Button */}
+            <button
+              onClick={handleSubmit}
+              disabled={inputFiles.length === 0 || uploading}
+              className={`w-full py-3 rounded-lg font-semibold transition flex items-center justify-center gap-2 ${
+                inputFiles.length > 0 && !uploading
+                  ? "bg-blue-600 text-white hover:bg-blue-700"
+                  : "bg-gray-400 text-gray-200 cursor-not-allowed"
+              }`}
+            >
+              {uploading ? (
+                <>
+                  <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  Uploading {inputFiles.length} file(s)...
+                </>
+              ) : (
+                <>
+                  Upload {inputFiles.length > 0 ? `${inputFiles.length} File(s)` : "Files"}
+                </>
+              )}
+            </button>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
