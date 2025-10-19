@@ -9,24 +9,42 @@ export default function ProfilePage() {
 
   // Fetch profile on mount
   useEffect(() => {
+    console.log("=== ProfilePage: Starting profile fetch ===");
+    
     (async () => {
       try {
+        console.log("Fetching from /api/users...");
         const res = await fetch("/api/users");
+        
+        console.log("Response status:", res.status);
+        console.log("Response OK:", res.ok);
+        console.log("Response headers:", Object.fromEntries(res.headers.entries()));
+        
         if (res.ok) {
           const data = await res.json();
+          console.log("✅ Profile data received:", data);
+          
           setProfile({
             name: data.name || "",
             email: data.email || "",
             bio: data.bio || "",
           });
+          console.log("✅ Profile state updated successfully");
         } else {
           const error = await res.json();
+          console.error("❌ Error response:", error);
+          console.error("Status code:", res.status);
           setMessage({ type: "error", text: error.error || "Failed to load profile" });
         }
-      } catch (err) {
-        console.error("Fetch error:", err);
+      } catch (err: any) {
+        console.error("❌❌❌ Fetch error caught ❌❌❌");
+        console.error("Error type:", err.constructor?.name);
+        console.error("Error message:", err.message);
+        console.error("Error stack:", err.stack);
+        console.error("Full error:", err);
         setMessage({ type: "error", text: "Failed to load profile" });
       } finally {
+        console.log("Profile fetch completed, setting loading to false");
         setLoading(false);
       }
     })();
@@ -35,33 +53,48 @@ export default function ProfilePage() {
   // Handle form submission
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    console.log("=== ProfilePage: Starting profile update ===");
+    console.log("Profile data to submit:", profile);
+    
     setSaving(true);
     setMessage(null);
 
     try {
-      // ✅ CHANGED FROM /api/users TO /api/profile
+      console.log("Sending PATCH request to /api/profile...");
       const res = await fetch("/api/profile", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(profile),
       });
 
+      console.log("Update response status:", res.status);
+      console.log("Update response OK:", res.ok);
+
       const data = await res.json();
+      console.log("Update response data:", data);
 
       if (res.ok) {
+        console.log("✅ Profile updated successfully");
         setMessage({ type: "success", text: "Profile updated successfully!" });
       } else {
+        console.error("❌ Update failed:", data);
         setMessage({ type: "error", text: data.error || "Failed to update profile" });
       }
-    } catch (err) {
-      console.error("Update error:", err);
+    } catch (err: any) {
+      console.error("❌❌❌ Update error caught ❌❌❌");
+      console.error("Error type:", err.constructor?.name);
+      console.error("Error message:", err.message);
+      console.error("Error stack:", err.stack);
+      console.error("Full error:", err);
       setMessage({ type: "error", text: "Network error. Please try again." });
     } finally {
+      console.log("Profile update completed, setting saving to false");
       setSaving(false);
     }
   };
 
   if (loading) {
+    console.log("Rendering loading state...");
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-b from-blue-50 to-white dark:from-gray-900 dark:to-gray-800">
         <div className="text-center">
@@ -71,6 +104,8 @@ export default function ProfilePage() {
       </div>
     );
   }
+
+  console.log("Rendering profile form with data:", profile);
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-b from-blue-50 to-white dark:from-gray-900 dark:to-gray-800 text-gray-900 dark:text-gray-100 px-6 py-12">
