@@ -91,9 +91,9 @@ export default function QuizDetailsPage() {
     fetchDocuments();
   }, [quizId]);
 
-  const handleAddFile = (file: DocumentItem) => {
-    setStagedDocuments((prev) => [...prev, file]);
-  };
+const handleAddFiles = (files: DocumentItem[]) => {
+  setStagedDocuments((prev) => [...prev, ...files]);
+};
   const handleRemoveFile = (fileId: number) => {
     setStagedDocuments((prev) => prev.filter((f) => f.id !== fileId));
   };
@@ -398,12 +398,12 @@ const handleSaveAndGenerate = async () => {
       </div>
 
       {/* File Popup */}
-      <QuizAddFilePopup
-        isOpen={showFilePopup}
-        onClose={() => setShowFilePopup(false)}
-        existingFileIds={stagedDocuments.map((d) => d.id)}
-        onAddFile={handleAddFile}
-      />
+     <QuizAddFilePopup
+      isOpen={showFilePopup}
+      onClose={() => setShowFilePopup(false)}
+      existingFileIds={stagedDocuments.map((d) => d.id)}
+      onAddFiles={handleAddFiles} // ✅ Changed from onAddFile to onAddFiles
+    />
     </>
   );
 }
