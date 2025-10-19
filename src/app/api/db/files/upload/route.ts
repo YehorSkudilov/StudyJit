@@ -14,7 +14,17 @@ export async function POST(req: Request) {
     if (!session?.user?.id)
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-    const form = await req.formData();
+    let form: FormData;
+    try {
+      form = await req.formData();
+    } catch (err) {
+      console.error("❌ Failed to parse FormData:", err);
+      return NextResponse.json(
+        { error: "Bad FormData", details: "Make sure bodyParser is disabled." },
+        { status: 400 }
+      );
+    }
+
     const file = form.get("file") as File | null;
     if (!file)
       return NextResponse.json({ error: "No file uploaded" }, { status: 400 });
@@ -33,7 +43,7 @@ export async function POST(req: Request) {
       [file.name, file.size, filePath, session.user.id]
     );
 
-    return NextResponse.json({ success: true, file: file.name });
+    return NextResponse.json({ success: true });
   } catch (err: any) {
     console.error("❌ Upload failed:", err);
     return NextResponse.json(
