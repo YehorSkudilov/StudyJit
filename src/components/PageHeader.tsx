@@ -10,6 +10,13 @@ import {
   LucideIcon,
 } from "lucide-react";
 
+interface ExtraAction {
+  icon: LucideIcon;
+  label: string;
+  onClick: () => void;
+  disabled?: boolean;
+}
+
 interface PageHeaderProps {
   title: string;
   icon?: LucideIcon;
@@ -17,9 +24,9 @@ interface PageHeaderProps {
   goBack?: () => void;
   selectedItems?: string[];
   onDeleteSelected?: () => void;
-  onMoveSelected?: () => void;
   onSelectAll?: () => void;
   onDeselectAll?: () => void;
+  extraActions?: ExtraAction[];
   children?: React.ReactNode;
   color?: "blue" | "yellow" | "green" | "red";
 }
@@ -31,9 +38,9 @@ export default function PageHeader({
   goBack,
   selectedItems = [],
   onDeleteSelected,
-  onMoveSelected,
   onSelectAll,
   onDeselectAll,
+  extraActions = [],
   children,
   color = "blue",
 }: PageHeaderProps) {
@@ -56,18 +63,18 @@ export default function PageHeader({
           text-center sm:text-left gap-4 sm:gap-0
         "
       >
-        {/* Left section: back + title */}
+        {/* Left section: Back + Title */}
         <div className="flex items-center justify-center sm:justify-start gap-3 relative">
           {activeFolder && goBack && (
             <button
               onClick={goBack}
               className="p-2 sm:p-3 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full transition-colors"
+              title="Go Back"
             >
               <ChevronLeft className="w-4 h-4 sm:w-5 sm:h-5" />
             </button>
           )}
 
-          {/* 🔹 Original title + icon sizes restored */}
           <h1 className="text-2xl sm:text-4xl font-extrabold flex items-center gap-2 sm:gap-3 leading-tight">
             {Icon && (
               <Icon
@@ -78,7 +85,7 @@ export default function PageHeader({
           </h1>
         </div>
 
-        {/* Right action buttons */}
+        {/* Right section: Actions */}
         <div
           className="
             flex justify-center sm:justify-end flex-wrap gap-2 sm:gap-3
@@ -96,15 +103,22 @@ export default function PageHeader({
                 </button>
               )}
 
-              {onMoveSelected && (
+              {/* Dynamic extra actions (like Move, Download, etc.) */}
+              {extraActions.map((action, i) => (
                 <button
-                  onClick={onMoveSelected}
-                  className="p-2 sm:p-3 bg-blue-500 text-white rounded-full shadow hover:bg-blue-600 transition"
-                  title="Move Selected"
+                  key={i}
+                  onClick={action.onClick}
+                  disabled={action.disabled}
+                  className={`p-2 sm:p-3 rounded-full shadow transition text-white ${
+                    action.disabled
+                      ? "bg-gray-400 cursor-not-allowed"
+                      : "bg-blue-500 hover:bg-blue-600"
+                  }`}
+                  title={action.label}
                 >
-                  <Move className="w-4 h-4 sm:w-5 sm:h-5" />
+                  <action.icon className="w-4 h-4 sm:w-5 sm:h-5" />
                 </button>
-              )}
+              ))}
             </>
           )}
 
