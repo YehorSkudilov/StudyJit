@@ -71,10 +71,11 @@ export default function FilesPage() {
       const end = Math.min(start + CHUNK_SIZE, file.size);
       const chunk = file.slice(start, end);
 
-      const headers = {
-        "Content-Range": `bytes ${start}-${end - 1}/${file.size}`,
-        "X-Filename": encodeURIComponent(file.name),
-      };
+const headers: Record<string, string> = {
+  "Content-Range": `bytes ${start}-${end - 1}/${file.size}`,
+  "X-Filename": encodeURIComponent(file.name),
+};
+
 
       if (activeFolder) {
         headers["X-Folder-Id"] = activeFolder;
