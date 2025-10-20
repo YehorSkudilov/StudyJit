@@ -1,15 +1,16 @@
 "use client";
+
 import React, { useEffect, useState } from "react";
 import PageHeader from "@/components/PageHeader";
 import GenericGrid from "@/components/GenericGrid";
 import FileCard from "@/components/FileCard";
 import FolderCard from "@/components/FolderCard";
 import FloatingAddButton from "@/components/FloatingAddButton";
-import ActionChooserPopup from "@/components/ActionChooserPopup";
+import GenericActionPopup from "@/components/GenericActionPopup";
 import FileUploadPopup from "@/components/FileUploadPopup";
 import CreateFolderPopup from "@/components/CreateFolderPopup";
 import { Item } from "@/types/Item";
-import { File } from "lucide-react";
+import { File, FilePlus, FolderPlus } from "lucide-react";
 
 export default function FilesPage() {
   const [items, setItems] = useState<Item[]>([]);
@@ -19,18 +20,16 @@ export default function FilesPage() {
   const [isCreateFolderOpen, setIsCreateFolderOpen] = useState(false);
   const [activeFolder, setActiveFolder] = useState<string | null>(null);
 
+  /* ---------------- Fetch Files and Folders ---------------- */
   const fetchItems = async () => {
     try {
-      // Fetch files
       const filesRes = await fetch("/api/db/files", { cache: "no-store" });
       if (!filesRes.ok) throw new Error("Failed to load files");
       const filesData = await filesRes.json();
-      
-      // Fetch folders
+
       const foldersRes = await fetch("/api/db/folders", { cache: "no-store" });
       const foldersData = foldersRes.ok ? await foldersRes.json() : [];
-      
-      // Combine and map items
+
       const allItems: Item[] = [
         ...foldersData.map((f: any) => ({
           id: `folder-${f.id}`,
@@ -45,7 +44,7 @@ export default function FilesPage() {
           size: f.size,
         })),
       ];
-      
+
       setItems(allItems);
     } catch (err) {
       console.error("❌ Error fetching items:", err);
@@ -56,26 +55,25 @@ export default function FilesPage() {
     fetchItems();
   }, []);
 
-  // Upload one file in chunks with progress
+  /* ---------------- Upload File in Chunks ---------------- */
   const handleFileUpload = async (
     file: File,
     onProgress?: (progress: number) => void
   ): Promise<void> => {
-    const CHUNK_SIZE = 5 * 1024 * 1024; // 5 MB per chunk
+    const CHUNK_SIZE = 5 * 1024 * 1024;
     let start = 0;
     let part = 0;
 
-    console.log(`🚀 Starting upload: ${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MB)`);
+    console.log(`🚀 Uploading: ${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MB)`);
 
     while (start < file.size) {
       const end = Math.min(start + CHUNK_SIZE, file.size);
       const chunk = file.slice(start, end);
 
-const headers: Record<string, string> = {
-  "Content-Range": `bytes ${start}-${end - 1}/${file.size}`,
-  "X-Filename": encodeURIComponent(file.name),
-};
-
+      const headers: Record<string, string> = {
+        "Content-Range": `bytes ${start}-${end - 1}/${file.size}`,
+        "X-Filename": encodeURIComponent(file.name),
+      };
 
       if (activeFolder) {
         headers["X-Folder-Id"] = activeFolder;
@@ -102,13 +100,14 @@ const headers: Record<string, string> = {
     await fetchItems();
   };
 
+  /* ---------------- Create Folder ---------------- */
   const handleCreateFolder = async (name: string): Promise<void> => {
     const res = await fetch("/api/db/folders", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ 
+      body: JSON.stringify({
         name,
-        parentId: activeFolder 
+        parentId: activeFolder,
       }),
     });
 
@@ -120,11 +119,13 @@ const headers: Record<string, string> = {
     await fetchItems();
   };
 
+  /* ---------------- Delete Selected ---------------- */
   const handleDeleteSelected = async () => {
     for (const id of selectedItems) {
       try {
         const [type, realId] = id.split("-");
-        const endpoint = type === "folder" ? `/api/db/folders/${realId}` : `/api/db/files/${realId}`;
+        const endpoint =
+          type === "folder" ? `/api/db/folders/${realId}` : `/api/db/files/${realId}`;
         const res = await fetch(endpoint, { method: "DELETE" });
         if (!res.ok) throw new Error(`Failed to delete ${type} ${realId}`);
       } catch (err) {
@@ -135,10 +136,12 @@ const headers: Record<string, string> = {
     await fetchItems();
   };
 
+  /* ---------------- Selection Helpers ---------------- */
   const handleSelectAll = () => setSelectedItems(items.map((i) => i.id));
   const handleDeselectAll = () => setSelectedItems([]);
   const handleReorder = (newOrder: Item[]) => setItems(newOrder);
 
+  /* ---------------- Double Click ---------------- */
   const handleItemDoubleClick = (item: Item) => {
     if (item.type === "folder") {
       setActiveFolder(item.id.split("-")[1]);
@@ -147,6 +150,7 @@ const headers: Record<string, string> = {
     }
   };
 
+  /* ---------------- Render ---------------- */
   return (
     <div className="min-h-screen flex flex-col bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 relative">
       <PageHeader
@@ -192,21 +196,42 @@ const headers: Record<string, string> = {
         />
       </main>
 
+      {/* Floating Add Button */}
       <FloatingAddButton onClick={() => setIsActionChooserOpen(true)} />
-      
-      <ActionChooserPopup
+
+      {/* Generic Action Popup */}
+      <GenericActionPopup
         isOpen={isActionChooserOpen}
         onClose={() => setIsActionChooserOpen(false)}
-        onUploadFiles={() => setIsFileUploadOpen(true)}
-        onCreateFolder={() => setIsCreateFolderOpen(true)}
+        title="Choose Action"
+        actions={[
+          {
+            key: "upload",
+            title: "Upload File",
+            subtitle: "Upload one or more files",
+            color: "blue",
+            icon: FilePlus,
+            onClick: () => setIsFileUploadOpen(true),
+          },
+          {
+            key: "folder",
+            title: "Create Folder",
+            subtitle: "Organize your files",
+            color: "green",
+            icon: FolderPlus,
+            onClick: () => setIsCreateFolderOpen(true),
+          },
+        ]}
       />
 
+      {/* Upload Popup */}
       <FileUploadPopup
         isOpen={isFileUploadOpen}
         onClose={() => setIsFileUploadOpen(false)}
         onFileUpload={handleFileUpload}
       />
 
+      {/* Create Folder Popup */}
       <CreateFolderPopup
         isOpen={isCreateFolderOpen}
         onClose={() => setIsCreateFolderOpen(false)}

@@ -4,10 +4,12 @@ import React, { useState, useEffect } from "react";
 import PageHeader from "@/components/PageHeader";
 import GenericGrid from "@/components/GenericGrid";
 import FloatingAddButton from "@/components/FloatingAddButton";
-import CreateItemPopup from "@/components/CreateItemPopup";
+import GenericActionPopup from "@/components/GenericActionPopup";
+import CreateQuizPopup from "@/components/CreateQuizPopup";
+import CreateFolderPopup from "@/components/CreateFolderPopup";
 import QuizCard from "@/components/QuizCard";
 import { Item } from "@/types/Item";
-import { BookOpen } from "lucide-react";
+import { BookOpen, BookPlus, FolderPlus } from "lucide-react";
 import { useRouter } from "next/navigation";
 
 export default function DashboardPage() {
@@ -15,10 +17,15 @@ export default function DashboardPage() {
   const [folders, setFolders] = useState<Item[]>([]);
   const [activeFolder, setActiveFolder] = useState<string | null>(null);
   const [selectedItems, setSelectedItems] = useState<string[]>([]);
-  const [isPopupOpen, setPopupOpen] = useState(false);
+
+  // Popup states
+  const [isActionChooserOpen, setIsActionChooserOpen] = useState(false);
+  const [isCreateQuizOpen, setIsCreateQuizOpen] = useState(false);
+  const [isCreateFolderOpen, setIsCreateFolderOpen] = useState(false);
+
   const router = useRouter();
 
-  // ✅ Define fetchQuizzes so it can be reused
+  /* ---------------- Fetch Quizzes ---------------- */
   const fetchQuizzes = async () => {
     try {
       const res = await fetch("/api/db/getQuizzes");
@@ -50,12 +57,11 @@ export default function DashboardPage() {
     }
   };
 
-  // ✅ Load quizzes on mount
   useEffect(() => {
     fetchQuizzes();
   }, []);
 
-  // ✅ Select/deselect helpers
+  /* ---------------- Selection Helpers ---------------- */
   const handleSelectAll = () => {
     const allItems = [...folders, ...quizzes];
     setSelectedItems(allItems.map((i) => i.id));
@@ -63,88 +69,84 @@ export default function DashboardPage() {
 
   const handleDeselectAll = () => setSelectedItems([]);
 
-const handleDeleteSelected = async () => {
-  try {
-    // Filter only quizzes with numeric IDs (folders aren’t stored in DB)
-    const quizIds = quizzes
-      .filter((q) => selectedItems.includes(q.id))
-      .map((q) => q.id);
+  /* ---------------- Delete Selected ---------------- */
+  const handleDeleteSelected = async () => {
+    try {
+      const quizIds = quizzes
+        .filter((q) => selectedItems.includes(q.id))
+        .map((q) => q.id);
 
-    if (quizIds.length === 0) {
-      // Only local folders selected — remove them from state
-      setFolders((prev) => prev.filter((f) => !selectedItems.includes(f.id)));
+      if (quizIds.length === 0) {
+        setFolders((prev) => prev.filter((f) => !selectedItems.includes(f.id)));
+        setSelectedItems([]);
+        return;
+      }
+
+      const res = await fetch("/api/db/deleteQuiz", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids: quizIds }),
+      });
+
+      const data = await res.json();
+
+      if (res.ok && data.success) {
+        console.log(`🗑️ Deleted ${data.deleted} quiz(es)`);
+        await fetchQuizzes();
+      } else {
+        console.error("❌ Delete failed:", data.error);
+      }
+    } catch (err) {
+      console.error("❌ Error deleting quizzes:", err);
+    } finally {
       setSelectedItems([]);
-      return;
     }
+  };
 
-    const res = await fetch("/api/db/deleteQuiz", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ids: quizIds }),
-    });
+  /* ---------------- Create Quiz ---------------- */
+  const handleCreateQuiz = async (quizName: string, description = "") => {
+    try {
+      if (!quizName.trim()) return;
 
-    const data = await res.json();
+      const res = await fetch("/api/db/createQuiz", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: quizName.trim(),
+          description,
+          prompt: "",
+          numQuestions: 10,
+        }),
+      });
 
-    if (res.ok && data.success) {
-      console.log(`🗑️ Deleted ${data.deleted} quiz(es)`);
-      await fetchQuizzes(); // Refresh UI
-    } else {
-      console.error("❌ Delete failed:", data.error);
+      const data = await res.json();
+      if (res.ok && data.success) {
+        console.log(`✅ Quiz created with ID: ${data.quizId}`);
+        await fetchQuizzes();
+      } else {
+        console.error("❌ Failed to create quiz:", data.error);
+      }
+    } catch (err) {
+      console.error("❌ Error creating quiz:", err);
+    } finally {
+      setIsCreateQuizOpen(false);
     }
-  } catch (err) {
-    console.error("❌ Error deleting quizzes:", err);
-  } finally {
-    setSelectedItems([]);
-  }
-};
+  };
 
-
-// ✅ Create new quiz using /api/db/createQuiz
-const handleCreateQuiz = async (quizName: string, description = "") => {
-  try {
-    if (!quizName.trim()) {
-      console.error("❌ Quiz name is required");
-      return;
-    }
-
-    const res = await fetch("/api/db/createQuiz", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        name: quizName.trim(),      // ✅ FIXED: backend expects "name"
-        description,                // optional
-        prompt: "",                 // optional
-        numQuestions: 10,           // optional default
-      }),
-    });
-
-    const data = await res.json();
-    if (res.ok && data.success) {
-      console.log(`✅ Quiz created with ID: ${data.quizId}`);
-      await fetchQuizzes(); // refresh list
-    } else {
-      console.error("❌ Failed to create quiz:", data.error);
-    }
-  } catch (err) {
-    console.error("❌ Error creating quiz:", err);
-  } finally {
-    setPopupOpen(false);
-  }
-};
-
-
-  // ✅ Local folder creation
+  /* ---------------- Create Folder ---------------- */
   const handleCreateFolder = (folderName: string) => {
     if (!folderName.trim()) return;
     setFolders((prev) => [
       ...prev,
       { id: folderName, type: "folder", name: folderName },
     ]);
-    setPopupOpen(false);
+    setIsCreateFolderOpen(false);
   };
 
+  /* ---------------- Render ---------------- */
   return (
     <div className="min-h-screen flex flex-col bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 relative">
+      {/* Header */}
       <PageHeader
         title="Learning Space"
         icon={BookOpen}
@@ -156,6 +158,7 @@ const handleCreateQuiz = async (quizName: string, description = "") => {
         onDeselectAll={handleDeselectAll}
       />
 
+      {/* Main Grid */}
       <main className="px-6 sm:px-20 pb-20">
         <GenericGrid
           items={[...folders, ...quizzes]}
@@ -175,7 +178,6 @@ const handleCreateQuiz = async (quizName: string, description = "") => {
               );
             }
 
-            // ✅ Quiz Card
             return (
               <QuizCard
                 quizName={item.name}
@@ -196,13 +198,44 @@ const handleCreateQuiz = async (quizName: string, description = "") => {
       </main>
 
       {/* Floating Add Button */}
-      <FloatingAddButton onClick={() => setPopupOpen(true)} />
+      <FloatingAddButton onClick={() => setIsActionChooserOpen(true)} />
 
-      {/* Create Quiz/Folder Popup */}
-      <CreateItemPopup
-        isOpen={isPopupOpen}
-        onClose={() => setPopupOpen(false)}
+      {/* Action Chooser Popup */}
+      <GenericActionPopup
+        isOpen={isActionChooserOpen}
+        onClose={() => setIsActionChooserOpen(false)}
+        title="Create New Item"
+        actions={[
+          {
+            key: "quiz",
+            title: "Create Quiz",
+            subtitle: "Generate a new quiz",
+            color: "blue",
+            icon: BookPlus,
+            onClick: () => setIsCreateQuizOpen(true),
+          },
+          {
+            key: "folder",
+            title: "Create Folder",
+            subtitle: "Organize your quizzes",
+            color: "yellow",
+            icon: FolderPlus,
+            onClick: () => setIsCreateFolderOpen(true),
+          },
+        ]}
+      />
+
+      {/* Create Quiz Popup */}
+      <CreateQuizPopup
+        isOpen={isCreateQuizOpen}
+        onClose={() => setIsCreateQuizOpen(false)}
         onCreateQuiz={handleCreateQuiz}
+      />
+
+      {/* Create Folder Popup */}
+      <CreateFolderPopup
+        isOpen={isCreateFolderOpen}
+        onClose={() => setIsCreateFolderOpen(false)}
         onCreateFolder={handleCreateFolder}
       />
     </div>
