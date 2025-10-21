@@ -1,5 +1,4 @@
 "use client";
-
 import React, { useEffect, useState } from "react";
 import PageHeader from "@/components/PageHeader";
 import GenericGrid from "@/components/GenericGrid";
@@ -8,107 +7,62 @@ import FolderCard from "@/components/FolderCard";
 import FloatingAddButton from "@/components/FloatingAddButton";
 import FileUploadPopup from "@/components/FileUploadPopup";
 import CreateFolderPopup from "@/components/CreateFolderPopup";
-import MoveItemPopup from "@/components/MoveItemPopup";
 import GenericActionPopup from "@/components/GenericActionPopup";
 import AlertPopup from "@/components/AlertPopup";
 import { Item } from "@/types/Item";
-import { File, FilePlus, FolderPlus, MoveRight, Trash2 } from "lucide-react";
+import { File as FileIcon, FilePlus, FolderPlus, MoveRight, Trash2 } from "lucide-react";
 
-/* -------------------------------------------------------------------------- */
-/*                               FILES PAGE                                   */
-/* -------------------------------------------------------------------------- */
 export default function FilesPage() {
   const [folders, setFolders] = useState<Item[]>([]);
   const [files, setFiles] = useState<Item[]>([]);
   const [displayItems, setDisplayItems] = useState<Item[]>([]);
   const [selectedItems, setSelectedItems] = useState<string[]>([]);
   const [activeFolderId, setActiveFolderId] = useState<string | null>(null);
+  const [folderStack, setFolderStack] = useState<string[]>([]); // 🟢 Navigation stack
 
   const [isActionChooserOpen, setIsActionChooserOpen] = useState(false);
   const [isFileUploadOpen, setIsFileUploadOpen] = useState(false);
   const [isCreateFolderOpen, setIsCreateFolderOpen] = useState(false);
-  const [isMovePopupOpen, setIsMovePopupOpen] = useState(false);
   const [alertMessage, setAlertMessage] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
 
-/* ---------------- Fetch Folders ---------------- */
+  /* ---------------- Fetch Folders ---------------- */
   const fetchFolders = async (parentId: string | null) => {
-    try {
-      type FolderResponse = {
-        id: number;
-        name: string;
-        itemCount?: number;
-        parent_id?: number | null;
-      };
-
-      const res = await fetch(
-        `/api/items/folders?parent=${parentId ?? "root"}&context=files`,
-        { cache: "no-store" }
-      );
-      const data: FolderResponse[] = await res.json();
-
-      const mapped = data.map((f: FolderResponse): Item => ({
-        id: f.id.toString(),
-        name: f.name,
-        type: "folder",
-        itemCount: f.itemCount ?? 0,
-        parent_id: f.parent_id ? f.parent_id.toString() : null,
-      }));
-      setFolders(mapped);
-      return mapped;
-    } catch (err) {
-      console.error("❌ Folder fetch error:", err);
-      setAlertMessage("Failed to fetch folders.");
-      return [];
-    }
+    const res = await fetch(`/api/items/folders?parent=${parentId ?? "root"}&context=files`);
+    const data = await res.json();
+    const mapped: Item[] = data.map((f: any) => ({
+      id: f.id.toString(),
+      name: f.name,
+      type: "folder",
+      itemCount: f.itemCount ?? 0,
+      parent_id: f.parent_id ? f.parent_id.toString() : null,
+    }));
+    setFolders(mapped);
+    return mapped;
   };
 
   /* ---------------- Fetch Files ---------------- */
   const fetchFiles = async () => {
-    try {
-      type FileResponse = {
-        id: number;
-        name: string;
-        folder_id?: number | null;
-        size?: number;
-      };
-
-      const res = await fetch(`/api/items/files`, { cache: "no-store" });
-      const data: FileResponse[] = await res.json();
-
-      const mapped = data.map((f: FileResponse): Item => ({
-        id: f.id.toString(),
-        name: f.name,
-        type: "file",
-        folder_id: f.folder_id ? f.folder_id.toString() : null,
-        size: f.size ?? 0,
-      }));
-      setFiles(mapped);
-      return mapped;
-    } catch (err) {
-      console.error("❌ File fetch error:", err);
-      setAlertMessage("Failed to fetch files.");
-      return [];
-    }
+    const res = await fetch(`/api/items/files`);
+    const data = await res.json();
+    const mapped: Item[] = data.map((f: any) => ({
+      id: f.id.toString(),
+      name: f.name,
+      type: "file",
+      folder_id: f.folder_id ? f.folder_id.toString() : null,
+      size: f.size ?? 0,
+    }));
+    setFiles(mapped);
+    return mapped;
   };
 
   /* ---------------- Refresh ---------------- */
   const refreshData = async (folderId: string | null = activeFolderId) => {
-    try {
-      const [folderData, allFiles] = await Promise.all([
-        fetchFolders(folderId),
-        fetchFiles(),
-      ]);
-
-      // ✅ Only show files that belong to the current folder
-      const visibleFiles = allFiles.filter((f) =>
-        folderId === null ? f.folder_id === null : f.folder_id === folderId
-      );
-
-      setDisplayItems([...folderData, ...visibleFiles]);
-    } catch {
-      setAlertMessage("Error refreshing files.");
-    }
+    const [folderData, allFiles] = await Promise.all([fetchFolders(folderId), fetchFiles()]);
+    const visibleFiles = allFiles.filter((f) =>
+      folderId === null ? f.folder_id === null : f.folder_id === folderId
+    );
+    setDisplayItems([...folderData, ...visibleFiles]);
   };
 
   useEffect(() => {
@@ -117,13 +71,23 @@ export default function FilesPage() {
 
   /* ---------------- Folder Navigation ---------------- */
   const handleDoubleClick = (item: Item) => {
-    if (item.type === "folder") setActiveFolderId(item.id);
-    else console.log(`📂 Opened file: ${item.name}`);
+    if (item.type === "folder") {
+      setFolderStack((prev) => [...prev, activeFolderId ?? "root"]); // 🟢 remember current folder
+      setActiveFolderId(item.id);
+    }
   };
 
   const handleGoBack = () => {
-    const currentFolder = folders.find((f) => f.id === activeFolderId);
-    setActiveFolderId(currentFolder?.parent_id ?? null);
+    setFolderStack((prev) => {
+      if (prev.length === 0) {
+        setActiveFolderId(null); // 🟢 root
+        return [];
+      }
+      const newStack = [...prev];
+      const last = newStack.pop();
+      setActiveFolderId(last === "root" ? null : last ?? null);
+      return newStack;
+    });
   };
 
   /* ---------------- Folder Create ---------------- */
@@ -137,8 +101,8 @@ export default function FilesPage() {
     setIsCreateFolderOpen(false);
   };
 
-  /* ---------------- File Upload (chunked) ---------------- */
-  const handleFileUpload = async (file: File, onProgress?: (p: number) => void) => {
+  /* ---------------- ✅ File Upload (chunked) ---------------- */
+  const handleFileUpload = async (file: globalThis.File, onProgress?: (p: number) => void) => {
     const CHUNK_SIZE = 5 * 1024 * 1024; // 5MB
     let start = 0;
 
@@ -164,55 +128,84 @@ export default function FilesPage() {
     await refreshData(activeFolderId);
   };
 
-  /* ---------------- Move ---------------- */
-  const handleMoveItems = async (newFolderId: string | null) => {
-    for (const id of selectedItems) {
-      const item = displayItems.find((i) => i.id === id);
-      if (!item) continue;
-
-      if (item.type === "file") {
-        await fetch(`/api/items/files/move/${item.id}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ folder_id: newFolderId }),
-        });
-      } else if (item.type === "folder") {
-        await fetch(`/api/items/folders/move/${item.id}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ parent_id: newFolderId, context: "files" }),
-        });
+  /* ---------------- Drag → Drop onto folder ---------------- */
+  const handleDropOnFolder = async (source: Item | Item[], destinationFolderId: string) => {
+    try {
+      const sources = Array.isArray(source) ? source : [source];
+      for (const s of sources) {
+        if (s.type === "file") {
+          await fetch(`/api/items/files/move/${s.id}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ folder_id: destinationFolderId }),
+          });
+        } else if (s.type === "folder" && s.id !== destinationFolderId) {
+          await fetch(`/api/items/folders/move/${s.id}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ parent_id: destinationFolderId, context: "files" }),
+          });
+        }
       }
+      await refreshData(activeFolderId);
+    } catch (err) {
+      console.error("❌ Drop-on-folder failed:", err);
+      setAlertMessage("Move failed. Please try again.");
     }
-    setSelectedItems([]);
-    await refreshData(activeFolderId);
+  };
+
+  /* ---------------- ✅ Drop onto “move to parent” bar ---------------- */
+  const handleDropToParent = async (source: Item | Item[]) => {
+    try {
+      const sources = Array.isArray(source) ? source : [source];
+      if (!activeFolderId) {
+        setAlertMessage("Already at root — cannot move higher.");
+        return;
+      }
+
+      const currentFolder = folders.find((f) => f.id === activeFolderId);
+      const parentId = currentFolder?.parent_id ?? null;
+
+      for (const s of sources) {
+        if (s.type === "file") {
+          await fetch(`/api/items/files/move/${s.id}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ folder_id: parentId }),
+          });
+        } else if (s.type === "folder") {
+          if (s.id === parentId) continue;
+          await fetch(`/api/items/folders/move/${s.id}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ parent_id: parentId, context: "files" }),
+          });
+        }
+      }
+      await refreshData(activeFolderId);
+    } catch (e) {
+      console.error("❌ Move-to-parent failed:", e);
+      setAlertMessage("Failed to move item(s) to parent folder.");
+    }
   };
 
   /* ---------------- Delete ---------------- */
   const confirmDeleteAction = async () => {
     setConfirmDelete(false);
-    const folderIds = displayItems
-      .filter((i) => i.type === "folder" && selectedItems.includes(i.id))
-      .map((f) => f.id);
-    const fileIds = displayItems
-      .filter((i) => i.type === "file" && selectedItems.includes(i.id))
-      .map((f) => f.id);
-
-    if (fileIds.length > 0) {
+    const folderIds = displayItems.filter((i) => i.type === "folder" && selectedItems.includes(i.id)).map((f) => f.id);
+    const fileIds = displayItems.filter((i) => i.type === "file" && selectedItems.includes(i.id)).map((f) => f.id);
+    if (fileIds.length)
       await fetch("/api/items/files/delete", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ids: fileIds }),
       });
-    }
-    if (folderIds.length > 0) {
+    if (folderIds.length)
       await fetch("/api/items/folders/delete", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ids: folderIds, context: "files" }),
       });
-    }
-    setSelectedItems([]);
     await refreshData(activeFolderId);
   };
 
@@ -221,14 +214,15 @@ export default function FilesPage() {
     <div className="min-h-screen flex flex-col bg-gray-50 dark:bg-gray-900">
       <PageHeader
         title="Files"
-        icon={File}
+        icon={FileIcon}
         activeFolder={activeFolderId}
         goBack={handleGoBack}
+        showBack={folderStack.length > 0 || !!activeFolderId} // 🟢 optional: hide back in root
         selectedItems={selectedItems}
         onSelectAll={() => setSelectedItems(displayItems.map((i) => i.id))}
         onDeselectAll={() => setSelectedItems([])}
         extraActions={[
-          { icon: MoveRight, label: "Move", onClick: () => setIsMovePopupOpen(true), disabled: !selectedItems.length },
+          { icon: MoveRight, label: "Move", onClick: () => setAlertMessage("Use drag & drop"), disabled: !selectedItems.length },
           { icon: Trash2, label: "Delete", color: "red", onClick: () => setConfirmDelete(true), disabled: !selectedItems.length },
         ]}
       />
@@ -238,6 +232,8 @@ export default function FilesPage() {
           items={displayItems}
           selectedItems={selectedItems}
           setSelectedItems={setSelectedItems}
+          onDropOnFolder={handleDropOnFolder}
+          onDropToParent={handleDropToParent}
           renderItem={(item, isSelected, onClick) =>
             item.type === "folder" ? (
               <FolderCard
@@ -260,7 +256,6 @@ export default function FilesPage() {
         />
       </main>
 
-      {/* Floating Add */}
       <FloatingAddButton onClick={() => setIsActionChooserOpen(true)} />
       <GenericActionPopup
         isOpen={isActionChooserOpen}
@@ -271,46 +266,19 @@ export default function FilesPage() {
           { key: "folder", title: "Create Folder", subtitle: "Organize files", color: "yellow", icon: FolderPlus, onClick: () => setIsCreateFolderOpen(true) },
         ]}
       />
+      <FileUploadPopup
+        isOpen={isFileUploadOpen}
+        onClose={() => setIsFileUploadOpen(false)}
+        onFileUpload={handleFileUpload}
+      />
+      <CreateFolderPopup
+        isOpen={isCreateFolderOpen}
+        onClose={() => setIsCreateFolderOpen(false)}
+        onCreateFolder={handleCreateFolder}
+      />
 
-      {/* Popups */}
-      <FileUploadPopup isOpen={isFileUploadOpen} onClose={() => setIsFileUploadOpen(false)} onFileUpload={handleFileUpload} />
-      <CreateFolderPopup isOpen={isCreateFolderOpen} onClose={() => setIsCreateFolderOpen(false)} onCreateFolder={handleCreateFolder} />
-<MoveItemPopup
-  isOpen={isMovePopupOpen}
-  onClose={() => setIsMovePopupOpen(false)}
-  folders={folders
-    // 🧠 Filter out selected folder(s) so you can't move inside itself
-    .filter((f) => !selectedItems.includes(f.id))
-    .map((f: Item) => ({
-      id: f.id.toString(),
-      name: f.name,
-      parent_id: (f as any).parent_id ?? null,
-    }))
-  }
-  onMove={handleMoveItems}
-  showRoot={
-    // ✅ show Root only if at least one selected item is NOT in root
-    selectedItems.some((id) => {
-      const item = displayItems.find((i) => i.id === id);
-      if (!item) return false;
-      if (item.type === "folder") return item.parent_id !== null;
-      if (item.type === "file") return item.folder_id !== null;
-      return false;
-    })
-  }
-/>
-
-
-
-
-      {/* Alerts */}
       {alertMessage && <AlertPopup message={alertMessage} onClose={() => setAlertMessage(null)} />}
-      {confirmDelete && (
-        <AlertPopup
-          message={`Delete ${selectedItems.length} item(s)? This cannot be undone.`}
-          onClose={confirmDeleteAction}
-        />
-      )}
+      {confirmDelete && <AlertPopup message={`Delete ${selectedItems.length} item(s)?`} onClose={confirmDeleteAction} />}
     </div>
   );
 }

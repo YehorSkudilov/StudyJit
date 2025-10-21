@@ -4,7 +4,6 @@ import React from "react";
 import {
   ChevronLeft,
   Trash2,
-  Move,
   CheckSquare,
   XSquare,
   LucideIcon,
@@ -16,7 +15,7 @@ interface ExtraAction {
   label: string;
   onClick: () => void;
   disabled?: boolean;
-  color?: "blue" | "red" | "green" | "yellow"; // ✅ added color support
+  color?: "blue" | "red" | "green" | "yellow";
 }
 
 interface PageHeaderProps {
@@ -24,6 +23,7 @@ interface PageHeaderProps {
   icon?: LucideIcon;
   activeFolder?: string | null;
   goBack?: () => void;
+  showBack?: boolean; // ✅ added this line
   selectedItems?: string[];
   onDeleteSelected?: () => void;
   onSelectAll?: () => void;
@@ -39,6 +39,7 @@ export default function PageHeader({
   icon: Icon,
   activeFolder,
   goBack,
+  showBack = false, // ✅ default false
   selectedItems = [],
   onDeleteSelected,
   onSelectAll,
@@ -68,7 +69,7 @@ export default function PageHeader({
       >
         {/* Left section: Back + Title */}
         <div className="flex items-center justify-center sm:justify-start gap-3 relative">
-          {activeFolder && goBack && (
+          {showBack && goBack && ( // ✅ use showBack prop
             <button
               onClick={goBack}
               className="p-2 sm:p-3 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full transition-colors"
@@ -89,14 +90,9 @@ export default function PageHeader({
         </div>
 
         {/* Right section: Actions */}
-        <div
-          className="
-            flex justify-center sm:justify-end flex-wrap gap-2 sm:gap-3
-          "
-        >
+        <div className="flex justify-center sm:justify-end flex-wrap gap-2 sm:gap-3">
           {hasSelection && (
             <>
-              {/* Optional delete button */}
               {onDeleteSelected && (
                 <button
                   onClick={onDeleteSelected}
@@ -107,7 +103,6 @@ export default function PageHeader({
                 </button>
               )}
 
-              {/* Extra actions (e.g., Move, Share, etc.) */}
               {extraActions.map((action, i) => {
                 const colorClass = action.disabled
                   ? "bg-gray-400 cursor-not-allowed"
@@ -134,7 +129,6 @@ export default function PageHeader({
             </>
           )}
 
-          {/* Always visible controls */}
           {onSelectAll && (
             <button
               onClick={onSelectAll}

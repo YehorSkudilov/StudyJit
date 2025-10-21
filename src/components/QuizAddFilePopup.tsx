@@ -1,6 +1,14 @@
 "use client";
 import React, { useEffect, useState } from "react";
-import { Folder, FolderOpen, File, Search, ChevronRight, ChevronDown, Check } from "lucide-react";
+import {
+  Folder,
+  FolderOpen,
+  File,
+  Search,
+  ChevronRight,
+  ChevronDown,
+  Check,
+} from "lucide-react";
 
 interface FileItem {
   id: number;
@@ -54,33 +62,44 @@ export default function QuizAddFilePopup({
           fetch("/api/items/folders?context=files"),
           fetch("/api/items/files"),
         ]);
+
         const folders: FolderItem[] = await foldersRes.json();
         const files: FileItem[] = await filesRes.json();
 
+        // Exclude files already attached to quiz
         const filteredFiles = files.filter((f) => !existingFileIds.includes(f.id));
 
+        // Build folder map: parent_id -> list of folders/files
         const folderMap = new Map<number | null, TreeNode[]>();
 
+        // First, group folders by parent
         folders.forEach((f) => {
-          const node: TreeNode = { id: f.id, name: f.name, type: "folder", children: [] };
           const parent = f.parent_id ?? null;
+          const node: TreeNode = { id: f.id, name: f.name, type: "folder", children: [] };
           if (!folderMap.has(parent)) folderMap.set(parent, []);
           folderMap.get(parent)!.push(node);
         });
 
+        // Then, group files by folder
         filteredFiles.forEach((f) => {
-          const node: TreeNode = { id: f.id, name: f.name, size: f.size, type: "file" };
           const parent = f.folder_id ?? null;
+          const node: TreeNode = { id: f.id, name: f.name, type: "file", size: f.size };
           if (!folderMap.has(parent)) folderMap.set(parent, []);
           folderMap.get(parent)!.push(node);
         });
 
-        const buildTree = (parent: number | null): TreeNode[] =>
-          (folderMap.get(parent) || []).map((n) =>
-            n.type === "folder" ? { ...n, children: buildTree(n.id) } : n
-          );
+        // ✅ Recursive builder — ensures nested folders resolve correctly
+        const buildTree = (parentId: number | null): TreeNode[] => {
+          return (folderMap.get(parentId) || []).map((n) => {
+            if (n.type === "folder") {
+              return { ...n, children: buildTree(n.id) };
+            }
+            return n;
+          });
+        };
 
-        setTree(buildTree(null));
+        const treeData = buildTree(null);
+        setTree(treeData);
       } catch (err) {
         console.error("❌ Failed to load folder/file tree:", err);
       }
@@ -112,8 +131,14 @@ export default function QuizAddFilePopup({
     const selected: FileItem[] = [];
     const traverse = (nodes: TreeNode[]) => {
       for (const n of nodes) {
-        if (n.type === "file" && selectedFiles.has(n.id))
-          selected.push({ id: n.id, name: n.name, size: n.size ?? 0, type: "file" });
+        if (n.type === "file" && selectedFiles.has(n.id)) {
+          selected.push({
+            id: n.id,
+            name: n.name,
+            size: n.size ?? 0,
+            type: "file",
+          });
+        }
         if (n.children) traverse(n.children);
       }
     };
@@ -122,9 +147,9 @@ export default function QuizAddFilePopup({
     onClose();
   };
 
-  /* ---------------- Render Tree Recursively ---------------- */
+  /* ---------------- Recursive Tree Render ---------------- */
   const renderTree = (nodes: TreeNode[], depth = 0) => (
-    <ul className="ml-2">
+    <ul className="ml-1">
       {nodes
         .filter((n) => n.name.toLowerCase().includes(search.toLowerCase()))
         .map((node) => (
@@ -156,7 +181,9 @@ export default function QuizAddFilePopup({
                   ) : (
                     <Folder className="w-4 h-4 text-yellow-500 mr-2" />
                   )}
-                  <span className="font-medium text-gray-800 dark:text-gray-200">{node.name}</span>
+                  <span className="font-medium text-gray-800 dark:text-gray-200">
+                    {node.name}
+                  </span>
                 </>
               ) : (
                 <>
@@ -176,13 +203,14 @@ export default function QuizAddFilePopup({
                     {node.name}
                   </span>
                   {node.size && (
-                    <span className="text-xs text-gray-400">
+                    <span className="text-xs text-gray-400 ml-2">
                       {(node.size / 1024).toFixed(1)} KB
                     </span>
                   )}
                 </>
               )}
             </div>
+            {/* ✅ Recursive children rendering */}
             {node.children &&
               node.children.length > 0 &&
               expanded.has(node.id) &&
@@ -201,7 +229,7 @@ export default function QuizAddFilePopup({
           Add Files to Quiz
         </h2>
 
-        {/* Search */}
+        {/* 🔍 Search Bar */}
         <div className="relative mb-3">
           <Search className="absolute left-3 top-2.5 text-gray-400 w-4 h-4" />
           <input
@@ -214,7 +242,7 @@ export default function QuizAddFilePopup({
           />
         </div>
 
-        {/* Tree list */}
+        {/* 📁 Tree */}
         <div className="flex-1 overflow-y-auto border border-gray-200 dark:border-gray-700 rounded-lg p-2">
           {tree.length === 0 ? (
             <p className="text-gray-500 dark:text-gray-400 text-center py-8">
@@ -225,7 +253,7 @@ export default function QuizAddFilePopup({
           )}
         </div>
 
-        {/* Footer Buttons */}
+        {/* 🧭 Footer Buttons */}
         <div className="mt-4 flex justify-end gap-2">
           <button
             onClick={onClose}

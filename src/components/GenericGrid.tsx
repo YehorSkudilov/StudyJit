@@ -1,15 +1,18 @@
 "use client";
-import React, { useRef, useEffect } from "react";
+import React, { useRef, useEffect, useState, useMemo } from "react";
 import { Item } from "@/types/Item";
-
 import {
   DndContext,
   closestCenter,
   DragEndEvent,
+  DragStartEvent,
+  DragOverEvent,
   KeyboardSensor,
   PointerSensor,
   useSensor,
   useSensors,
+  useDroppable,
+  DragOverlay,
 } from "@dnd-kit/core";
 import {
   arrayMove,
@@ -18,13 +21,102 @@ import {
   rectSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+import { motion, AnimatePresence } from "framer-motion";
 
-interface SortableItemProps {
+/* -------------------- SortableItem -------------------- */
+function SortableItem({
+  id,
+  item,
+  children,
+  disableSort,
+}: {
   id: string;
+  item: Item;
   children: React.ReactNode;
+  disableSort?: boolean;
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
+    useSortable({
+      id,
+      data: { item },
+      disabled: !!disableSort,
+    });
+
+  const style: React.CSSProperties = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    cursor: disableSort ? "pointer" : isDragging ? "grabbing" : "grab",
+    height: "100%",
+    opacity: isDragging ? 0.3 : 1,
+  };
+
+  return (
+    <div ref={setNodeRef} style={style} {...attributes} {...listeners}>
+      {children}
+    </div>
+  );
 }
 
-interface GenericGridProps {
+/* -------------------- DropToParentZone -------------------- */
+function DropToParentZone() {
+  const { setNodeRef, isOver } = useDroppable({ id: "drop-to-parent" });
+  return (
+    <motion.div
+      ref={setNodeRef}
+      initial={{ opacity: 0, y: -10 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -10 }}
+      transition={{ duration: 0.2 }}
+      className={`w-full h-14 mb-4 flex items-center justify-center rounded-lg border-2 border-dashed transition
+        ${
+          isOver
+            ? "border-blue-500 bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300"
+            : "border-gray-400/50 text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"
+        }`}
+    >
+      Drop here to move up one level
+    </motion.div>
+  );
+}
+
+/* -------------------- FolderDropWrapper -------------------- */
+function FolderDropWrapper({
+  id,
+  children,
+  onHoverChange,
+}: {
+  id: string;
+  children: React.ReactNode;
+  onHoverChange?: (hover: boolean) => void;
+}) {
+  const { setNodeRef, isOver } = useDroppable({ id });
+  useEffect(() => {
+    onHoverChange?.(isOver);
+  }, [isOver]);
+  return (
+    <div
+      ref={setNodeRef}
+      className={`transition rounded-xl ${
+        isOver
+          ? "ring-4 ring-blue-400 ring-offset-2 dark:ring-blue-500 scale-[1.02]"
+          : "ring-0"
+      }`}
+    >
+      {children}
+    </div>
+  );
+}
+
+/* -------------------- GenericGrid -------------------- */
+export default function GenericGrid({
+  items,
+  selectedItems,
+  setSelectedItems,
+  renderItem,
+  onReorder,
+  onDropOnFolder,
+  onDropToParent,
+}: {
   items: Item[];
   selectedItems: string[];
   setSelectedItems: React.Dispatch<React.SetStateAction<string[]>>;
@@ -34,115 +126,172 @@ interface GenericGridProps {
     onClick: (e: React.MouseEvent) => void
   ) => React.ReactNode;
   onReorder?: (newOrder: Item[]) => void;
-}
-
-/* -------------------- SortableItem -------------------- */
-function SortableItem({ id, children }: SortableItemProps) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
-    useSortable({ id });
-
-  const style: React.CSSProperties = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-    cursor: isDragging ? "grabbing" : "pointer",
-    height: "100%",
-  };
-
-  return (
-    <div
-      ref={setNodeRef}
-      style={style}
-      {...attributes}
-      {...listeners}
-      // Prevent text selection highlight on shift/drag
-      onMouseDown={(e) => e.preventDefault()}
-    >
-      {children}
-    </div>
-  );
-}
-
-/* -------------------- GenericGrid (with multi-select) -------------------- */
-export default function GenericGrid({
-  items,
-  selectedItems,
-  setSelectedItems,
-  renderItem,
-  onReorder,
-}: GenericGridProps) {
+  onDropOnFolder?: (source: Item | Item[], destinationFolderId: string) => void | Promise<void>;
+  onDropToParent?: (source: Item | Item[]) => void | Promise<void>;
+}) {
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
     useSensor(KeyboardSensor)
   );
 
   const lastClickedIndex = useRef<number | null>(null);
+  const [draggingItems, setDraggingItems] = useState<Item[]>([]);
+  const [isOverFolder, setIsOverFolder] = useState(false);
 
-  useEffect(() => {
-    // Disable global text selection inside the grid while clicking
-    const preventSelect = (e: Event) => e.preventDefault();
-    document.addEventListener("selectstart", preventSelect);
-    return () => document.removeEventListener("selectstart", preventSelect);
-  }, []);
+  /* -------------------- Drag Events -------------------- */
+  const handleDragStart = (evt: DragStartEvent) => {
+    const draggedItem = evt.active.data?.current?.item as Item | undefined;
+    if (!draggedItem) return;
 
-  const handleDragEnd = (event: DragEndEvent) => {
-    const { active, over } = event;
-    if (!over || active.id === over.id) return;
-
-    const oldIndex = items.findIndex((i) => i.id === active.id);
-    const newIndex = items.findIndex((i) => i.id === over.id);
-    const newOrder = arrayMove(items, oldIndex, newIndex);
-    onReorder?.(newOrder);
+    // If multiple items selected and this item is part of that selection, drag all
+    if (selectedItems.includes(draggedItem.id) && selectedItems.length > 1) {
+      const selected = items.filter((i) => selectedItems.includes(i.id));
+      setDraggingItems(selected);
+    } else {
+      setDraggingItems([draggedItem]);
+    }
   };
 
+  const handleDragOver = (evt: DragOverEvent) => {
+    const overId = evt.over?.id?.toString();
+    const hoveredItem = items.find((i) => i.id === overId);
+    setIsOverFolder(hoveredItem?.type === "folder");
+  };
+
+  const handleDragEnd = async (event: DragEndEvent) => {
+    const { active, over } = event;
+    setIsOverFolder(false);
+
+    if (!active || !over || draggingItems.length === 0) {
+      setDraggingItems([]);
+      return;
+    }
+
+    const overItem = over?.data?.current?.item as Item;
+    const isMulti = draggingItems.length > 1;
+
+    // ✅ Drop onto parent zone
+    if (over.id === "drop-to-parent") {
+      for (const item of draggingItems) await onDropToParent?.(item);
+      setDraggingItems([]);
+      return;
+    }
+
+    // ✅ Drop onto folder
+    if (overItem?.type === "folder") {
+      for (const item of draggingItems) {
+        if (item.id !== overItem.id) await onDropOnFolder?.(item, overItem.id);
+      }
+      setDraggingItems([]);
+      return;
+    }
+
+    // ✅ Single-item reordering
+    if (!isMulti && !isOverFolder) {
+      const activeItem = active.data?.current?.item as Item;
+    if (!activeItem) return;
+      const oldIndex = items.findIndex((i) => i.id === activeItem.id);
+      const newIndex = items.findIndex((i) => i.id === over.id);
+      if (oldIndex !== -1 && newIndex !== -1) {
+        const newOrder = arrayMove(items, oldIndex, newIndex);
+        onReorder?.(newOrder);
+      }
+    }
+
+    setDraggingItems([]);
+  };
+
+  /* -------------------- Selection -------------------- */
   const handleItemClick = (e: React.MouseEvent, itemId: string) => {
-    e.preventDefault(); // stop native highlight
+    e.stopPropagation();
     const index = items.findIndex((i) => i.id === itemId);
     const isSelected = selectedItems.includes(itemId);
 
-    // ✅ SHIFT — Select range
     if (e.shiftKey && lastClickedIndex.current !== null) {
       const start = Math.min(lastClickedIndex.current, index);
       const end = Math.max(lastClickedIndex.current, index);
       const range = items.slice(start, end + 1).map((i) => i.id);
-      const newSelected = Array.from(new Set([...selectedItems, ...range]));
-      setSelectedItems(newSelected);
-    }
-
-    // ✅ CTRL/CMD — Toggle single
-    else if (e.ctrlKey || e.metaKey) {
-      if (isSelected)
-        setSelectedItems((prev) => prev.filter((id) => id !== itemId));
-      else setSelectedItems((prev) => [...prev, itemId]);
+      setSelectedItems((prev) => Array.from(new Set([...prev, ...range])));
+    } else if (e.ctrlKey || e.metaKey) {
+      setSelectedItems((prev) =>
+        isSelected ? prev.filter((id) => id !== itemId) : [...prev, itemId]
+      );
       lastClickedIndex.current = index;
-    }
-
-    // ✅ Normal click — Select single
-    else {
-      if (isSelected && selectedItems.length === 1) setSelectedItems([]);
-      else setSelectedItems([itemId]);
+    } else {
+      setSelectedItems(isSelected && selectedItems.length === 1 ? [] : [itemId]);
       lastClickedIndex.current = index;
     }
   };
 
+  /* -------------------- Render -------------------- */
+  const visibleItems = useMemo(() => {
+    if (draggingItems.length === 0) return items;
+    const draggedIds = draggingItems.map((i) => i.id);
+    return items.filter((i) => !draggedIds.includes(i.id));
+  }, [items, draggingItems]);
+
+  const mainDragged = draggingItems[0];
+
   return (
-    <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-      <SortableContext items={items.map((item) => item.id)} strategy={rectSortingStrategy}>
-        <div
-          className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 items-stretch [grid-auto-rows:1fr] select-none"
-          // Disable drag-select region highlight
-          onMouseDown={(e) => e.preventDefault()}
-        >
-          {items.map((item) => (
-            <SortableItem key={item.id} id={item.id}>
-              {renderItem(
-                item,
-                selectedItems.includes(item.id),
-                (e) => handleItemClick(e, item.id)
-              )}
-            </SortableItem>
-          ))}
+    <DndContext
+      sensors={sensors}
+      collisionDetection={closestCenter}
+      onDragStart={handleDragStart}
+      onDragOver={handleDragOver}
+      onDragEnd={handleDragEnd}
+    >
+      {/* ✅ Only show the "Drop here" zone while dragging */}
+      <AnimatePresence>{draggingItems.length > 0 && <DropToParentZone />}</AnimatePresence>
+
+      <SortableContext
+        items={!isOverFolder ? visibleItems.map((i) => i.id) : []}
+        strategy={rectSortingStrategy}
+      >
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 items-stretch [grid-auto-rows:1fr] select-none">
+          {items.map((item) => {
+            const content = renderItem(
+              item,
+              selectedItems.includes(item.id),
+              (e) => handleItemClick(e, item.id)
+            );
+
+            return (
+              <SortableItem key={item.id} id={item.id} item={item}>
+                {item.type === "folder" ? (
+                  <FolderDropWrapper
+                    id={item.id}
+                    onHoverChange={(hover) => setIsOverFolder(hover)}
+                  >
+                    {content}
+                  </FolderDropWrapper>
+                ) : (
+                  content
+                )}
+              </SortableItem>
+            );
+          })}
         </div>
       </SortableContext>
+
+      {/* 🌟 Drag Overlay for one or multiple items */}
+      <DragOverlay adjustScale={false}>
+        {draggingItems.length > 0 && mainDragged && (
+          <motion.div
+            initial={{ opacity: 0.6 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.15 }}
+            className="relative shadow-2xl rounded-xl pointer-events-none"
+          >
+            {renderItem(mainDragged, true, () => {})}
+            {draggingItems.length > 1 && (
+              <div className="absolute bottom-2 right-2 bg-blue-600 text-white text-xs px-2 py-1 rounded-full shadow-md">
+                +{draggingItems.length - 1} more
+              </div>
+            )}
+          </motion.div>
+        )}
+      </DragOverlay>
     </DndContext>
   );
 }
