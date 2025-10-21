@@ -38,12 +38,14 @@ export async function GET(
         prompt,
         num_questions,
         generation_status,
-        last_score
+        last_score,
+        queue_number      -- ✅ ADD THIS LINE
       FROM quizzes
       WHERE id = ? AND user_id = ?
       `,
       [quizId, userId]
     );
+
 
     if (quizRows.length === 0) {
       return NextResponse.json({ error: "Quiz not found" }, { status: 404 });
