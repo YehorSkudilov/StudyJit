@@ -247,7 +247,6 @@ export default function FilesPage() {
         onSelectAll={() => setSelectedItems(displayItems.map((i) => i.id))}
         onDeselectAll={() => setSelectedItems([])}
         extraActions={[
-          { icon: MoveRight, label: "Move", onClick: () => setAlertMessage("Use drag & drop"), disabled: !selectedItems.length },
           { icon: Trash2, label: "Delete", color: "red", onClick: () => setConfirmDelete(true), disabled: !selectedItems.length },
         ]}
       />
