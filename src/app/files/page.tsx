@@ -202,38 +202,46 @@ export default function FilesPage() {
     }
   };
 
-  const handleDropToParent = async (source: Item | Item[]) => {
-    try {
-      const sources = Array.isArray(source) ? source : [source];
-      if (!activeFolderId) {
-        setAlertMessage("Already at root — cannot move higher.");
-        return;
-      }
-
-      const currentFolder = folders.find((f) => f.id === activeFolderId);
-      const parentId = currentFolder?.parent_id ?? null;
-
-      for (const s of sources) {
-        if (s.type === "file") {
-          await fetch(`/api/items/files/move/${s.id}`, {
-            method: "PATCH",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ folder_id: parentId }),
-          });
-        } else if (s.type === "folder") {
-          if (s.id === parentId) continue;
-          await fetch(`/api/items/folders/move/${s.id}`, {
-            method: "PATCH",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ parent_id: parentId, context: "files" }),
-          });
-        }
-      }
-      await refreshData(activeFolderId);
-    } catch {
-      setAlertMessage("Failed to move item(s) to parent folder.");
+const handleDropToParent = async (source: Item | Item[]) => {
+  try {
+    const sources = Array.isArray(source) ? source : [source];
+    if (!activeFolderId) {
+      setAlertMessage("Already at root — cannot move higher.");
+      return;
     }
-  };
+
+    const currentFolder = folders.find((f) => f.id === activeFolderId);
+    const parentId = currentFolder?.parent_id ?? null;
+
+    for (const s of sources) {
+      if (s.type === "file") {
+        await fetch(`/api/items/files/move/${s.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ folder_id: parentId }),
+        });
+      } else if (s.type === "folder") {
+        if (s.id === parentId) continue;
+        await fetch(`/api/items/folders/move/${s.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ parent_id: parentId, context: "files" }),
+        });
+      }
+    }
+
+    // 🟡 Instead of just refreshing current folder, go up one level automatically
+    if (parentId !== undefined) {
+      handleGoBack();
+    } else {
+      await refreshData(parentId);
+    }
+
+  } catch {
+    setAlertMessage("Failed to move item(s) to parent folder.");
+  }
+};
+
 
   /* ---------------- Delete ---------------- */
   const confirmDeleteAction = async () => {
