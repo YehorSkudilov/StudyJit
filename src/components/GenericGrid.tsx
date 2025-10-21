@@ -263,6 +263,25 @@ const visibleItems = useMemo(() => {
         strategy={rectSortingStrategy}
       >
 <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 items-stretch [grid-auto-rows:1fr] select-none">
+  {visibleItems.map((item) => {
+    const isSelected = selectedItems.includes(item.id);
+    const content = renderItem(item, isSelected, (e) =>
+      handleItemClick(e, item.id)
+    );
+
+    return (
+      <SortableItem key={item.id} id={item.id} item={item}>
+        <FolderDropWrapper
+          id={item.id}
+          onHoverChange={(hover) => setIsOverFolder(hover)}
+        >
+          {content}
+        </FolderDropWrapper>
+      </SortableItem>
+    );
+  })}
+</div>
+
 
       </SortableContext>
 
