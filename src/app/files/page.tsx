@@ -10,7 +10,7 @@ import CreateFolderPopup from "@/components/CreateFolderPopup";
 import GenericActionPopup from "@/components/GenericActionPopup";
 import AlertPopup from "@/components/AlertPopup";
 import { Item } from "@/types/Item";
-import { File as FileIcon, FilePlus, FolderPlus, MoveRight, Trash2 } from "lucide-react";
+import { File as FileIcon, FilePlus, FolderPlus, Folder, Trash2 } from "lucide-react";
 
 type FolderCrumb = { id: string | null; name: string };
 
@@ -266,7 +266,8 @@ export default function FilesPage() {
     <div className="min-h-screen flex flex-col bg-gray-50 dark:bg-gray-900">
 <PageHeader
   title={activeFolderName}
-  icon={activeFolderId ? FolderPlus : FileIcon} // shows folder icon when inside
+  icon={activeFolderId ? Folder  : FileIcon} // shows folder icon when inside
+  color={activeFolderId ? "yellow" : "blue"}
   goBack={handleGoBack}
   showBack={folderStack.length > 0 || !!activeFolderId}
   activeFolder={activeFolderName}

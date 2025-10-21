@@ -272,6 +272,7 @@ export default function LearningSpace() {
       <PageHeader
         title={activeFolderName}
         icon={activeFolderId ? Folder : BookOpen} // 🟢 Dynamically switch icon
+        color={activeFolderId ? "yellow" : "blue"}
         goBack={handleGoBack}
         showBack={folderStack.length > 0 || !!activeFolderId}
         activeFolder={activeFolderName}
