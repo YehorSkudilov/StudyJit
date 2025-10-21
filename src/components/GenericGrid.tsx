@@ -261,13 +261,15 @@ export default function GenericGrid({
   /* -------------------- Selection -------------------- */
   const handleItemClick = (e: React.MouseEvent, itemId: string) => {
     e.stopPropagation();
-    const index = items.findIndex((i) => i.id === itemId);
+
+    // ✅ Use the visible (sorted) order for selection logic
+    const index = visibleItems.findIndex((i) => i.id === itemId);
     const isSelected = selectedItems.includes(itemId);
 
     if (e.shiftKey && lastClickedIndex.current !== null) {
       const start = Math.min(lastClickedIndex.current, index);
       const end = Math.max(lastClickedIndex.current, index);
-      const range = items.slice(start, end + 1).map((i) => i.id);
+      const range = visibleItems.slice(start, end + 1).map((i) => i.id);
       setSelectedItems((prev) => Array.from(new Set([...prev, ...range])));
     } else if (e.ctrlKey || e.metaKey) {
       setSelectedItems((prev) =>
@@ -279,6 +281,7 @@ export default function GenericGrid({
       lastClickedIndex.current = index;
     }
   };
+
 
   /* -------------------- Sort visible items -------------------- */
   const visibleItems = useMemo(() => {
