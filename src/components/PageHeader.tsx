@@ -23,7 +23,7 @@ interface PageHeaderProps {
   icon?: LucideIcon;
   activeFolder?: string | null;
   goBack?: () => void;
-  showBack?: boolean; // ✅ added this line
+  showBack?: boolean;
   selectedItems?: string[];
   onDeleteSelected?: () => void;
   onSelectAll?: () => void;
@@ -39,7 +39,7 @@ export default function PageHeader({
   icon: Icon,
   activeFolder,
   goBack,
-  showBack = false, // ✅ default false
+  showBack = false,
   selectedItems = [],
   onDeleteSelected,
   onSelectAll,
@@ -60,16 +60,11 @@ export default function PageHeader({
   };
 
   return (
-    <section className="px-4 sm:px-10 py-6 sm:py-10 relative">
-      <div
-        className="
-          flex flex-col sm:flex-row sm:items-center sm:justify-between
-          text-center sm:text-left gap-4 sm:gap-0
-        "
-      >
-        {/* Left section: Back + Title */}
-        <div className="flex items-center justify-center sm:justify-start gap-3 relative">
-          {showBack && goBack && ( // ✅ use showBack prop
+    <section className="relative px-4 sm:px-10 py-6 sm:py-10">
+      <div className="relative flex items-center justify-between">
+        {/* ← Left: Back Button */}
+        <div className="flex items-center gap-2">
+          {showBack && goBack && (
             <button
               onClick={goBack}
               className="p-2 sm:p-3 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full transition-colors"
@@ -78,19 +73,22 @@ export default function PageHeader({
               <ChevronLeft className="w-4 h-4 sm:w-5 sm:h-5" />
             </button>
           )}
+        </div>
 
-          <h1 className="text-2xl sm:text-4xl font-extrabold flex items-center gap-2 sm:gap-3 leading-tight">
-            {Icon && (
-              <Icon
-                className={`w-6 h-6 sm:w-8 sm:h-8 ${colorClasses[color].split(" ")[0]}`}
-              />
-            )}
-            <span className="truncate max-w-[80vw]">{activeFolder || title}</span>
+        {/* 🧭 Center: Title */}
+        <div className="absolute left-1/2 transform -translate-x-1/2 text-center flex items-center gap-2">
+          {Icon && (
+            <Icon
+              className={`w-6 h-6 sm:w-8 sm:h-8 ${colorClasses[color].split(" ")[0]}`}
+            />
+          )}
+          <h1 className="text-2xl sm:text-4xl font-extrabold truncate max-w-[70vw] leading-tight">
+            {activeFolder || title}
           </h1>
         </div>
 
-        {/* Right section: Actions */}
-        <div className="flex justify-center sm:justify-end flex-wrap gap-2 sm:gap-3">
+        {/* → Right: Actions */}
+        <div className="flex items-center justify-end gap-2 sm:gap-3">
           {hasSelection && (
             <>
               {onDeleteSelected && (
