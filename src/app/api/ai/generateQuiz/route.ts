@@ -10,9 +10,30 @@ import OpenAI from "openai";
 /*                               GLOBAL CONSTANTS                             */
 /* -------------------------------------------------------------------------- */
 
-const SUPPORTED_EXTENSIONS = [".pdf", ".txt", ".doc", ".docx", ".ppt", ".pptx", ".csv", ".json", ".md", ".html", ".xml", ".rtf"];
+const SUPPORTED_EXTENSIONS = [
+  ".pdf",
+  ".txt",
+  ".doc",
+  ".docx",
+  ".ppt",
+  ".pptx",
+  ".csv",
+  ".json",
+  ".md",
+  ".html",
+  ".xml",
+  ".rtf",
+];
 const IMAGE_EXTENSIONS = [".jpg", ".jpeg", ".png", ".gif", ".webp"];
-const AUDIO_EXTENSIONS = [".mp3", ".mp4", ".mpeg", ".mpga", ".m4a", ".wav", ".webm"];
+const AUDIO_EXTENSIONS = [
+  ".mp3",
+  ".mp4",
+  ".mpeg",
+  ".mpga",
+  ".m4a",
+  ".wav",
+  ".webm",
+];
 
 /* -------------------------------------------------------------------------- */
 /*                           JSON EXTRACTION FUNCTION                         */
@@ -52,8 +73,10 @@ function extractAndParseJSON(text: string): any {
         const openBrackets = (jsonStr.match(/\[/g) || []).length;
         const closeBrackets = (jsonStr.match(/\]/g) || []).length;
 
-        if (openBrackets > closeBrackets) jsonStr += "]".repeat(openBrackets - closeBrackets);
-        if (openBraces > closeBraces) jsonStr += "}".repeat(openBraces - closeBraces);
+        if (openBrackets > closeBrackets)
+          jsonStr += "]".repeat(openBrackets - closeBrackets);
+        if (openBraces > closeBraces)
+          jsonStr += "}".repeat(openBraces - closeBraces);
 
         const parsed = JSON.parse(jsonStr);
         if (parsed?.questions && Array.isArray(parsed.questions)) {
@@ -84,42 +107,35 @@ function extractAndParseJSON(text: string): any {
 /*                           MAIN PROCESS FUNCTION                            */
 /* -------------------------------------------------------------------------- */
 async function processQuiz(req: NextRequest): Promise<NextResponse> {
-  const session = await getServerSession(authOptions);
-  if (!session?.user?.id) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  // ⚙️ Allow processQuiz to run with or without a real session
+  const session = await getServerSession(authOptions).catch(() => null);
+  const form = await req.formData();
+  const quizId = Number(form.get("quizId")) || 0;
+
+  // Fallback: get user_id directly from DB (since session isn't available in background)
+  const [quizRows]: any = await db.query(
+    "SELECT id, user_id FROM quizzes WHERE id = ?",
+    [quizId]
+  );
+  if (!quizRows.length) {
+    return NextResponse.json({ error: "Quiz not found" }, { status: 404 });
   }
 
-  const userId = Number(session.user.id);
+  const userId = Number(quizRows[0].user_id);
+
   const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY! });
-  let quizId = 0;
 
   try {
-    const form = await req.formData();
     const message = form.get("message")?.toString() || "";
-    quizId = Number(form.get("quizId")) || 0;
     const quizName = form.get("quizName")?.toString() || "Untitled Quiz";
     const numQuestions = Number(form.get("numQuestions")) || 10;
 
-    if (!quizId) {
-      return NextResponse.json({ error: "Missing quizId" }, { status: 400 });
-    }
-
     console.log(`📝 Generating quiz: ${quizName} (${numQuestions} questions)`);
 
-    // Validate ownership
-    const [quizRows]: any = await db.query(
-      "SELECT id, user_id FROM quizzes WHERE id = ?",
-      [quizId]
+    await db.execute(
+      `UPDATE quizzes SET generation_status = 'pending' WHERE id = ? AND user_id = ?`,
+      [quizId, userId]
     );
-
-    if (!quizRows.length || quizRows[0].user_id !== userId) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-    }
-
-await db.execute(
-  `UPDATE quizzes SET generation_status = 'pending' WHERE id = ? AND user_id = ?`,
-  [quizId, userId]
-);
 
     // Fetch linked files
     const [fileRows]: any = await db.query(
@@ -141,7 +157,9 @@ await db.execute(
       else if (AUDIO_EXTENSIONS.includes(ext)) audioFiles.push(file);
     }
 
-    console.log(`📊 ${documentFiles.length} docs, ${imageFiles.length} images, ${audioFiles.length} audio`);
+    console.log(
+      `📊 ${documentFiles.length} docs, ${imageFiles.length} images, ${audioFiles.length} audio`
+    );
 
     // Upload documents
     const documentFileIds: string[] = [];
@@ -188,7 +206,6 @@ await db.execute(
       }
     }
 
-    // Create assistant
     const tools: any[] = [];
     if (documentFiles.length > 0) tools.push({ type: "file_search" });
 
@@ -202,23 +219,22 @@ await db.execute(
 
     console.log(`✅ Assistant created: ${assistant.id}`);
 
-    // Instruction building
     let instruction = `Generate ${numQuestions} quiz questions in JSON format.\n\n`;
     instruction += `Respond with ONLY a single JSON object.\n\n`;
     if (message.trim()) instruction += `Topic: ${message}\n\n`;
     if (documentFiles.length > 0) instruction += `Analyze all documents.\n\n`;
     if (imageFiles.length > 0) instruction += `Analyze all images.\n\n`;
-    if (audioFiles.length > 0) instruction += `Audio transcriptions:\n${audioTranscriptions}\n\n`;
+    if (audioFiles.length > 0)
+      instruction += `Audio transcriptions:\n${audioTranscriptions}\n\n`;
 
     instruction += `Output ONLY this JSON structure:\n{"questions":[{"id":1,"question":"...","options":["A","B","C","D"],"correct":"A"}]}`;
 
     const messageContent: any[] = [{ type: "text", text: instruction }];
-
     for (const fileId of imageFileIds) {
       messageContent.push({ type: "image_file", image_file: { file_id: fileId } });
     }
 
-    const attachments: any[] = documentFileIds.map(fileId => ({
+    const attachments: any[] = documentFileIds.map((fileId) => ({
       file_id: fileId,
       tools: [{ type: "file_search" }],
     }));
@@ -264,7 +280,9 @@ await db.execute(
       .map((q: any, i: number) => ({
         id: q.id || i + 1,
         question: q.question || `Question ${i + 1}`,
-        options: Array.isArray(q.options) ? q.options.slice(0, 4) : ["A", "B", "C", "D"],
+        options: Array.isArray(q.options)
+          ? q.options.slice(0, 4)
+          : ["A", "B", "C", "D"],
         correct: q.correct || q.answer || q.options?.[0] || "A",
       }));
 
@@ -302,7 +320,10 @@ await db.execute(
         [quizId, userId]
       );
     }
-    return NextResponse.json({ error: error.message || "Failed to generate quiz" }, { status: 500 });
+    return NextResponse.json(
+      { error: error.message || "Failed to generate quiz" },
+      { status: 500 }
+    );
   }
 }
 
@@ -332,7 +353,21 @@ async function runNextJob() {
   console.log(`🚀 Starting quiz generation: ${quizId}`);
 
   try {
-    // Construct a new request each time to avoid FormData reuse issues
+    // ✅ Immediately mark as pending before processing
+    const [rows]: any = await db.query(
+      "SELECT user_id FROM quizzes WHERE id = ?",
+      [quizId]
+    );
+    if (rows.length > 0) {
+      await db.execute(
+        "UPDATE quizzes SET generation_status = 'pending' WHERE id = ? AND user_id = ?",
+        [quizId, rows[0].user_id]
+      );
+    }
+
+    // Small delay to ensure frontend catches the pending state
+    await new Promise((r) => setTimeout(r, 1000));
+
     const reqClone = new NextRequest("http://localhost/api/internal", {
       method: "POST",
       body: payload,
@@ -343,16 +378,15 @@ async function runNextJob() {
   } catch (err) {
     console.error(`❌ Quiz ${quizId} failed:`, err);
     try {
-      await db.execute(
-        `UPDATE quizzes SET generation_status = 'failed' WHERE id = ?`,
-        [quizId]
-      );
+      await db.execute(`UPDATE quizzes SET generation_status = 'failed' WHERE id = ?`, [
+        quizId,
+      ]);
     } catch (e) {
       console.error("⚠️ Could not mark quiz as failed:", e);
     }
   } finally {
     isRunning = false;
-    setTimeout(runNextJob, 250); // small delay to avoid race
+    setTimeout(runNextJob, 250); // trigger next job
   }
 }
 
@@ -368,15 +402,20 @@ async function enqueueQuizJob(quizId: number, form: FormData) {
   runNextJob();
 }
 
-
 /* -------------------------------------------------------------------------- */
 /*                                 POST ROUTE                                 */
 /* -------------------------------------------------------------------------- */
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
   try {
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
     const form = await req.formData();
     const quizId = Number(form.get("quizId"));
+    const userId = Number(session.user.id);
 
     if (!quizId) {
       return NextResponse.json({ error: "Missing quizId" }, { status: 400 });
@@ -384,8 +423,8 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
     // Mark as queued in DB (not pending yet)
     await db.execute(
-      `UPDATE quizzes SET generation_status = 'queued' WHERE id = ?`,
-      [quizId]
+      `UPDATE quizzes SET generation_status = 'queued' WHERE id = ? AND user_id = ?`,
+      [quizId, userId]
     );
 
     enqueueQuizJob(quizId, form);
