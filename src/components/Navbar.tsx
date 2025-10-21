@@ -8,7 +8,7 @@ import AccountMenu from '@/components/AccountMenu';
 import Image from 'next/image';
 
 const tabs = [
-  { href: '/dashboard', label: 'Dashboard' },
+  { href: '/learningSpace', label: 'LearningSpace' },
   { href: '/files', label: 'Files' },
 ];
 

@@ -60,7 +60,7 @@ export default function QuizPage() {
     const storedId = sessionStorage.getItem("selectedQuizId");
     if (!storedId) {
       setShowPopup(true);
-      setTimeout(() => router.push("/dashboard"), 2000);
+      setTimeout(() => router.push("/learningSpace"), 2000);
       return;
     }
 

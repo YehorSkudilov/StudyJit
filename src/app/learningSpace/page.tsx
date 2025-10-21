@@ -16,7 +16,7 @@ import { useRouter } from "next/navigation";
 
 type FolderCrumb = { id: string | null; name: string };
 
-export default function DashboardPage() {
+export default function LearningSpace() {
   const [folders, setFolders] = useState<Item[]>([]);
   const [quizzes, setQuizzes] = useState<Item[]>([]);
   const [displayItems, setDisplayItems] = useState<Item[]>([]);

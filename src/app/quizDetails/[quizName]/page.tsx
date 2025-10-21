@@ -48,9 +48,9 @@ export default function QuizDetailsPage() {
   useEffect(() => {
     const storedId = sessionStorage.getItem("selectedQuizId");
     if (!storedId) {
-      setAlertMessage("⚠️ No quiz selected. Returning to dashboard...");
+      setAlertMessage("⚠️ No quiz selected. Returning to learningSpace...");
       setShowAlert(true);
-      setTimeout(() => router.push("/dashboard"), 2000);
+      setTimeout(() => router.push("/learningSpace"), 2000);
       return;
     }
 

@@ -54,7 +54,7 @@ export default function AuthForm() {
         return;
       }
 
-      router.push("/dashboard");
+      router.push("/learningSpace");
     } catch (err) {
       setError("Server error");
     }
