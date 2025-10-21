@@ -117,6 +117,10 @@ async function initDatabase() {
     console.log("✅ Updated ENUM with 'queued' value");
   }
 
+  // ✅ NEW: queue_number for queue position tracking
+  console.log("🧭 Ensuring 'queue_number' exists on quizzes...");
+  await ensureColumnExists("quizzes", "queue_number", "INT NULL");
+
   // ✅ Link quizzes to folders and add last_score
   await ensureColumnExists("quizzes", "folder_id", "INT NULL");
   await ensureColumnExists("quizzes", "last_score", "DECIMAL(5,2) NULL");
@@ -141,7 +145,7 @@ async function initDatabase() {
   // 🧹 Cleanup
   await dropOldColumns();
 
-  console.log("✅ Database schema synchronized successfully.");
+  console.log("✅ Database schema synchronized successfully (queue_number supported).");
   return { success: true };
 }
 

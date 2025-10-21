@@ -33,6 +33,7 @@ export default function QuizDetailsPage() {
   const [numQuestions, setNumQuestions] = useState<number>(10);
   const [generationStatus, setGenerationStatus] = useState<GenerationStatus>(null);
   const [lastScore, setLastScore] = useState<number | null>(null);
+  const [queueNumber, setQueueNumber] = useState<number | null>(null);
 
   const [originalDocuments, setOriginalDocuments] = useState<DocumentItem[]>([]);
   const [stagedDocuments, setStagedDocuments] = useState<DocumentItem[]>([]);
@@ -67,6 +68,7 @@ export default function QuizDetailsPage() {
         setGenerationStatus(data.generation_status || null);
         setNumQuestions(data.num_questions || 10);
         setLastScore(data.last_score ?? null);
+        setQueueNumber(data.queue_number ?? null);
       } catch (err) {
         console.error("❌ Failed to load quiz:", err);
         setAlertMessage("❌ Failed to load quiz details.");
@@ -182,6 +184,7 @@ export default function QuizDetailsPage() {
       if (res.ok && data?.status === "queued") {
         console.log("🕒 Quiz queued for generation:", data);
         setGenerationStatus("queued");
+        setQueueNumber(data?.queueNumber ?? null);
 
         await fetch("/api/items/quizzes/status/update", {
           method: "PATCH",
@@ -191,6 +194,7 @@ export default function QuizDetailsPage() {
       } else if (res.ok && data?.success === true) {
         console.log("✅ Quiz generation started immediately:", data);
         setGenerationStatus("pending");
+        setQueueNumber(null);
 
         await fetch("/api/items/quizzes/status/update", {
           method: "PATCH",
@@ -200,6 +204,7 @@ export default function QuizDetailsPage() {
       } else {
         console.error("❌ Quiz generation failed to start:", data || rawText);
         setGenerationStatus("failed");
+        setQueueNumber(null);
 
         await fetch("/api/items/quizzes/status/update", {
           method: "PATCH",
@@ -215,6 +220,7 @@ export default function QuizDetailsPage() {
     } catch (err: any) {
       console.error("💥 Uncaught error during quiz generation:", err);
       setGenerationStatus("failed");
+      setQueueNumber(null);
       setAlertMessage("❌ Failed to save or generate quiz. See console for details.");
       setShowAlert(true);
       setTimeout(() => router.refresh(), 1500);
@@ -227,13 +233,13 @@ export default function QuizDetailsPage() {
       case "queued":
         return (
           <span className="px-2 py-1 text-xs rounded-full bg-blue-500 text-white">
-            Queued
+            Queued {queueNumber ? `(#${queueNumber})` : ""}
           </span>
         );
       case "pending":
         return (
           <span className="px-2 py-1 text-xs rounded-full bg-yellow-500 text-white">
-            Pending
+            Processing
           </span>
         );
       case "success":
@@ -257,10 +263,9 @@ export default function QuizDetailsPage() {
     }
   };
 
-   /* ---------------------- 🔁 Poll Quiz Status ---------------------- */
+  /* ---------------------- 🔁 Poll Quiz Status ---------------------- */
   useEffect(() => {
     if (!quizId) return;
-
     // Only poll if status isn't final
     if (generationStatus === "success" || generationStatus === "failed") return;
 
@@ -269,9 +274,16 @@ export default function QuizDetailsPage() {
         const res = await fetch(`/api/items/quizzes/get/${quizId}`);
         if (res.ok) {
           const data = await res.json();
-          if (data.generation_status !== generationStatus) {
-            console.log("🔄 Updated status:", data.generation_status);
+          if (
+            data.generation_status !== generationStatus ||
+            data.queue_number !== queueNumber
+          ) {
+            console.log("🔄 Updated status or queue number:", {
+              status: data.generation_status,
+              queue_number: data.queue_number,
+            });
             setGenerationStatus(data.generation_status);
+            setQueueNumber(data.queue_number ?? null);
           }
         }
       } catch (err) {
@@ -280,13 +292,14 @@ export default function QuizDetailsPage() {
     }, 4000); // check every 4s
 
     return () => clearInterval(interval);
-  }, [quizId, generationStatus]);
-
+  }, [quizId, generationStatus, queueNumber]);
 
   /* ---------------------- Render ---------------------- */
   return (
     <>
-      {showAlert && <AlertPopup message={alertMessage} onClose={() => setShowAlert(false)} />}
+      {showAlert && (
+        <AlertPopup message={alertMessage} onClose={() => setShowAlert(false)} />
+      )}
 
       <div className="min-h-screen bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 flex flex-col px-3 sm:px-8 md:px-20 py-6 sm:py-10 gap-6">
         <div className="relative p-4 sm:p-8 bg-white dark:bg-gray-800 rounded-xl shadow flex flex-col gap-6 max-w-4xl w-full mx-auto">
@@ -322,7 +335,11 @@ export default function QuizDetailsPage() {
                       : "text-gray-600 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600"
                   }`}
                 >
-                  {editingName ? <Check className="w-4 h-4" /> : <Edit2 className="w-4 h-4" />}
+                  {editingName ? (
+                    <Check className="w-4 h-4" />
+                  ) : (
+                    <Edit2 className="w-4 h-4" />
+                  )}
                 </button>
               </div>
 
@@ -345,7 +362,9 @@ export default function QuizDetailsPage() {
                     </span>
                   </p>
                 ) : (
-                  <p className="text-sm text-gray-500 dark:text-gray-500 italic">No previous attempts</p>
+                  <p className="text-sm text-gray-500 dark:text-gray-500 italic">
+                    No previous attempts
+                  </p>
                 )}
               </div>
             </div>
@@ -363,7 +382,11 @@ export default function QuizDetailsPage() {
                     : "text-gray-600 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600"
                 }`}
               >
-                {editingDescription ? <Check className="w-4 h-4" /> : <Edit2 className="w-4 h-4" />}
+                {editingDescription ? (
+                  <Check className="w-4 h-4" />
+                ) : (
+                  <Edit2 className="w-4 h-4" />
+                )}
               </button>
             </h2>
             {editingDescription ? (
@@ -382,7 +405,9 @@ export default function QuizDetailsPage() {
 
           {/* Documents */}
           <section className="flex flex-col gap-2">
-            <h2 className="text-sm font-medium text-gray-500 dark:text-gray-400 uppercase">Documents</h2>
+            <h2 className="text-sm font-medium text-gray-500 dark:text-gray-400 uppercase">
+              Documents
+            </h2>
             <div className="flex gap-2 overflow-x-auto py-1">
               <div
                 className="flex-shrink-0 flex flex-col items-center justify-center rounded-lg bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-200 cursor-pointer hover:bg-gray-300 dark:hover:bg-gray-500 transition w-16 h-16 sm:w-20 sm:h-20"
@@ -398,7 +423,10 @@ export default function QuizDetailsPage() {
                   className="relative flex-shrink-0 flex flex-col items-center justify-center rounded-lg shadow transition-colors w-16 h-16 sm:w-20 sm:h-20 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600"
                 >
                   <FileText className="w-5 h-5 mb-1" />
-                  <span className="text-[10px] sm:text-xs text-center truncate w-full px-1" title={doc.name}>
+                  <span
+                    className="text-[10px] sm:text-xs text-center truncate w-full px-1"
+                    title={doc.name}
+                  >
                     {doc.name}
                   </span>
                   <button
@@ -417,7 +445,9 @@ export default function QuizDetailsPage() {
 
           {/* Number of Questions */}
           <section className="flex flex-col gap-2">
-            <h2 className="text-sm font-medium text-gray-500 dark:text-gray-400 uppercase">Number of Questions</h2>
+            <h2 className="text-sm font-medium text-gray-500 dark:text-gray-400 uppercase">
+              Number of Questions
+            </h2>
             <div className="flex items-center gap-3 sm:gap-4">
               <input
                 type="range"
@@ -435,7 +465,9 @@ export default function QuizDetailsPage() {
 
           {/* Prompt + Buttons */}
           <section className="flex flex-col gap-3">
-            <h2 className="text-sm font-medium text-gray-500 dark:text-gray-400 uppercase">Prompt</h2>
+            <h2 className="text-sm font-medium text-gray-500 dark:text-gray-400 uppercase">
+              Prompt
+            </h2>
             <textarea
               className="w-full p-3 sm:p-4 rounded border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm sm:text-base focus:ring-2 focus:ring-blue-500"
               rows={5}
