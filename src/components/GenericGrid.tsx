@@ -258,29 +258,40 @@ export default function GenericGrid({
     return () => clearTimeout(timer);
   }, [draggingItems.length]);
 
-  /* -------------------- Selection -------------------- */
-  const handleItemClick = (e: React.MouseEvent, itemId: string) => {
-    e.stopPropagation();
+/* -------------------- Selection -------------------- */
+const lastClickedId = useRef<string | null>(null);
 
-    // ✅ Use the visible (sorted) order for selection logic
-    const index = visibleItems.findIndex((i) => i.id === itemId);
-    const isSelected = selectedItems.includes(itemId);
+const handleItemClick = (e: React.MouseEvent, itemId: string) => {
+  e.stopPropagation();
 
-    if (e.shiftKey && lastClickedIndex.current !== null) {
-      const start = Math.min(lastClickedIndex.current, index);
-      const end = Math.max(lastClickedIndex.current, index);
-      const range = visibleItems.slice(start, end + 1).map((i) => i.id);
-      setSelectedItems((prev) => Array.from(new Set([...prev, ...range])));
-    } else if (e.ctrlKey || e.metaKey) {
-      setSelectedItems((prev) =>
-        isSelected ? prev.filter((id) => id !== itemId) : [...prev, itemId]
-      );
-      lastClickedIndex.current = index;
-    } else {
-      setSelectedItems(isSelected && selectedItems.length === 1 ? [] : [itemId]);
-      lastClickedIndex.current = index;
-    }
-  };
+  const isSelected = selectedItems.includes(itemId);
+
+  // Find indices fresh from current sorted order
+  const currentIndex = visibleItems.findIndex((i) => i.id === itemId);
+  const lastIndex = lastClickedId.current
+    ? visibleItems.findIndex((i) => i.id === lastClickedId.current)
+    : -1;
+
+  if (e.shiftKey && lastIndex !== -1) {
+    // Shift-click → select a range
+    const start = Math.min(lastIndex, currentIndex);
+    const end = Math.max(lastIndex, currentIndex);
+    const range = visibleItems.slice(start, end + 1).map((i) => i.id);
+    setSelectedItems((prev) => Array.from(new Set([...prev, ...range])));
+  } else if (e.ctrlKey || e.metaKey) {
+    // Ctrl / Cmd → toggle individual item
+    setSelectedItems((prev) =>
+      isSelected ? prev.filter((id) => id !== itemId) : [...prev, itemId]
+    );
+  } else {
+    // Normal click → single select / deselect
+    setSelectedItems(isSelected && selectedItems.length === 1 ? [] : [itemId]);
+  }
+
+  // Always remember the last clicked ID, not index
+  lastClickedId.current = itemId;
+};
+
 
 
   /* -------------------- Sort visible items -------------------- */
