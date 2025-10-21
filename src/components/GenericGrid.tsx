@@ -231,11 +231,20 @@ export default function GenericGrid({
   };
 
   /* -------------------- Render -------------------- */
-  const visibleItems = useMemo(() => {
-    if (draggingItems.length === 0) return items;
-    const draggedIds = draggingItems.map((i) => i.id);
-    return items.filter((i) => !draggedIds.includes(i.id));
-  }, [items, draggingItems]);
+// ✅ Automatically sort items alphabetically by name
+const visibleItems = useMemo(() => {
+  const base = draggingItems.length === 0
+    ? items
+    : items.filter((i) => !draggingItems.some((d) => d.id === i.id));
+
+  // Sort folders first, then files, both alphabetically by name
+  return [...base].sort((a, b) => {
+    if (a.type === "folder" && b.type !== "folder") return -1;
+    if (a.type !== "folder" && b.type === "folder") return 1;
+    return a.name.localeCompare(b.name, undefined, { sensitivity: "base" });
+  });
+}, [items, draggingItems]);
+
 
   const mainDragged = draggingItems[0];
 
