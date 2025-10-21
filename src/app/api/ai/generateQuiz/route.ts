@@ -221,7 +221,7 @@ async function runNextJob() {
   console.log(`🚀 Processing quiz ${quizId}`);
 
   try {
-    await db.execute(`UPDATE quizzes SET generation_status = 'pending', queue_number = NULL WHERE id = ?`, [quizId]);
+await db.execute(`UPDATE quizzes SET generation_status = 'pending', queue_number = NULL WHERE id = ?`, [quizId]);
     await new Promise((r) => setTimeout(r, 800));
     const reqClone = new NextRequest("http://localhost/api/internal", { method: "POST", body: payload });
     await processQuiz(reqClone);
@@ -266,10 +266,11 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     );
 
     const queueNumber = count + 1;
-    await db.execute(
-      `UPDATE quizzes SET generation_status = 'queued', queue_number = ? WHERE id = ? AND user_id = ?`,
-      [queueNumber, quizId, userId]
-    );
+await db.execute(
+  `UPDATE quizzes SET generation_status = 'pending' WHERE id = ? AND user_id = ?`,
+  [quizId, userId]
+);
+
 
     enqueueQuizJob(quizId, form);
     return NextResponse.json({ success: true, status: "queued", quizId, queueNumber });
