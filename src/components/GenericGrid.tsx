@@ -55,10 +55,18 @@ function SortableItem({
     opacity: isDragging ? 0.3 : 1,
     touchAction: "none",
     userSelect: "none",
+    outline: "none", // ✅ remove blue border
   };
 
   return (
-    <div ref={setNodeRef} style={style} {...attributes} {...listeners}>
+    <div
+      ref={setNodeRef}
+      style={style}
+      {...attributes}
+      {...listeners}
+      tabIndex={-1} // ✅ prevent focus outline from appearing on Shift-click
+      className="[&:focus]:outline-none [&:focus-visible]:outline-none"
+    >
       {children}
     </div>
   );
