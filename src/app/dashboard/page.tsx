@@ -14,13 +14,17 @@ import { Item } from "@/types/Item";
 import { BookOpen, BookPlus, FolderPlus, MoveRight, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 
+type FolderCrumb = { id: string | null; name: string };
+
 export default function DashboardPage() {
   const [folders, setFolders] = useState<Item[]>([]);
   const [quizzes, setQuizzes] = useState<Item[]>([]);
   const [displayItems, setDisplayItems] = useState<Item[]>([]);
   const [selectedItems, setSelectedItems] = useState<string[]>([]);
+
   const [activeFolderId, setActiveFolderId] = useState<string | null>(null);
-  const [folderStack, setFolderStack] = useState<string[]>([]);
+  const [activeFolderName, setActiveFolderName] = useState<string>("Learning Space");
+  const [folderStack, setFolderStack] = useState<FolderCrumb[]>([]); // ← stores id+name
 
   const [isActionChooserOpen, setIsActionChooserOpen] = useState(false);
   const [isCreateQuizOpen, setIsCreateQuizOpen] = useState(false);
@@ -59,7 +63,7 @@ export default function DashboardPage() {
       name: q.name,
       type: "quiz",
       folder_id: q.folder_id ? q.folder_id.toString() : null,
-      last_score: q.last_score ?? null, // ✅ include score
+      last_score: q.last_score ?? null,
     }));
     setQuizzes(mapped);
     return mapped;
@@ -81,8 +85,15 @@ export default function DashboardPage() {
   /* ---------------- Folder Navigation ---------------- */
   const handleDoubleClick = (item: Item) => {
     if (item.type === "folder") {
-      if (activeFolderId) setFolderStack((prev) => [...prev, activeFolderId]);
+      // push current folder crumb (or root) before entering new folder
+      const currentCrumb: FolderCrumb = {
+        id: activeFolderId,
+        name: activeFolderName,
+      };
+      setFolderStack((prev) => [...prev, currentCrumb]);
+
       setActiveFolderId(item.id);
+      setActiveFolderName(item.name);
     } else if (item.type === "quiz") {
       sessionStorage.setItem("selectedQuizId", String(item.id));
       router.push(`/quizDetails/${encodeURIComponent(item.name)}`);
@@ -92,11 +103,14 @@ export default function DashboardPage() {
   const handleGoBack = () => {
     if (folderStack.length > 0) {
       const prevStack = [...folderStack];
-      const previous = prevStack.pop() || null;
+      const last = prevStack.pop()!;
       setFolderStack(prevStack);
-      setActiveFolderId(previous);
+      setActiveFolderId(last.id);
+      setActiveFolderName(last.name || "Learning Space");
     } else {
+      // back to root
       setActiveFolderId(null);
+      setActiveFolderName("Learning Space");
     }
   };
 
@@ -215,7 +229,7 @@ export default function DashboardPage() {
   return (
     <div className="min-h-screen flex flex-col bg-gray-50 dark:bg-gray-900">
       <PageHeader
-        title="Learning Space"
+        title={activeFolderName}    
         icon={BookOpen}
         activeFolder={activeFolderId}
         goBack={handleGoBack}
@@ -259,7 +273,7 @@ export default function DashboardPage() {
             ) : (
               <QuizCard
                 quizName={item.name}
-                lastScore={item.last_score ?? null} // ✅ Pass score to card
+                lastScore={item.last_score ?? null}
                 selected={isSelected}
                 onClick={onClick}
                 onDoubleClick={() => handleDoubleClick(item)}
