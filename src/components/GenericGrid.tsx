@@ -22,7 +22,6 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { motion, AnimatePresence } from "framer-motion";
-import { Edit2, Check, X } from "lucide-react";
 
 /* -------------------- SortableItem -------------------- */
 function SortableItem({
@@ -141,30 +140,6 @@ export default function GenericGrid({
   const [draggingItems, setDraggingItems] = useState<Item[]>([]);
   const [isOverFolder, setIsOverFolder] = useState(false);
   const [showDropZone, setShowDropZone] = useState(false);
-  const [renamingId, setRenamingId] = useState<string | null>(null);
-  const [renameValue, setRenameValue] = useState("");
-
-  /* -------------------- Rename Logic -------------------- */
-  const handleRename = async (id: string) => {
-    if (!renameValue.trim()) return;
-    try {
-      const res = await fetch(`/api/items/folders/rename/${id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: renameValue.trim(), context }),
-      });
-      if (!res.ok) throw new Error((await res.json()).error || "Failed to rename");
-      const data = await res.json();
-      setRenamingId(null);
-      const renamed = items.map((i) =>
-        i.id === id ? { ...i, name: data.name } : i
-      );
-      onReorder?.(renamed);
-    } catch (err) {
-      console.error("❌ Rename error:", err);
-      setRenamingId(null);
-    }
-  };
 
   /* -------------------- Drag Events -------------------- */
   const handleDragStart = (evt: DragStartEvent) => {
@@ -281,7 +256,6 @@ export default function GenericGrid({
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 items-stretch [grid-auto-rows:1fr] select-none">
           {items.map((item) => {
             const isSelected = selectedItems.includes(item.id);
-            const isRenaming = renamingId === item.id;
             const content = renderItem(item, isSelected, (e) =>
               handleItemClick(e, item.id)
             );
@@ -292,56 +266,7 @@ export default function GenericGrid({
                   id={item.id}
                   onHoverChange={(hover) => setIsOverFolder(hover)}
                 >
-                  <div className="relative group">
-                    {content}
-
-                    {/* 📝 Inline Rename Overlay */}
-                    {item.type === "folder" && (
-                      <div
-                        className={`absolute inset-x-0 bottom-2 flex items-center justify-center transition ${
-                          isRenaming ? "opacity-100" : "opacity-0 group-hover:opacity-100"
-                        }`}
-                      >
-                        {isRenaming ? (
-                          <div className="flex items-center gap-2 bg-white dark:bg-gray-700 px-2 py-1 rounded shadow">
-                            <input
-                              type="text"
-                              value={renameValue}
-                              onChange={(e) => setRenameValue(e.target.value)}
-                              onKeyDown={(e) => {
-                                if (e.key === "Enter") handleRename(item.id);
-                                if (e.key === "Escape") setRenamingId(null);
-                              }}
-                              className="px-1 py-0.5 bg-transparent border-b border-gray-400 focus:outline-none text-sm dark:text-gray-200"
-                              autoFocus
-                            />
-                            <button
-                              onClick={() => handleRename(item.id)}
-                              className="text-green-600 hover:text-green-700"
-                            >
-                              <Check className="w-4 h-4" />
-                            </button>
-                            <button
-                              onClick={() => setRenamingId(null)}
-                              className="text-red-500 hover:text-red-600"
-                            >
-                              <X className="w-4 h-4" />
-                            </button>
-                          </div>
-                        ) : (
-                          <button
-                            onClick={() => {
-                              setRenamingId(item.id);
-                              setRenameValue(item.name);
-                            }}
-                            className="p-1 rounded-full bg-white/80 dark:bg-gray-700/80 hover:bg-blue-100 dark:hover:bg-blue-800 transition text-gray-700 dark:text-gray-200 shadow"
-                          >
-                            <Edit2 className="w-4 h-4" />
-                          </button>
-                        )}
-                      </div>
-                    )}
-                  </div>
+                  {content}
                 </FolderDropWrapper>
               </SortableItem>
             );

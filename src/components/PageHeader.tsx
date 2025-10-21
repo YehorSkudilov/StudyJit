@@ -1,11 +1,13 @@
 "use client";
 
-import React from "react";
+import React, { useState, useEffect } from "react";
 import {
   ChevronLeft,
   Trash2,
   CheckSquare,
   XSquare,
+  Pencil,
+  Check,
   LucideIcon,
 } from "lucide-react";
 
@@ -22,6 +24,8 @@ interface PageHeaderProps {
   title: string;
   icon?: LucideIcon;
   activeFolder?: string | null;
+  canRename?: boolean;
+  onRename?: (newName: string) => Promise<void>;
   goBack?: () => void;
   showBack?: boolean;
   selectedItems?: string[];
@@ -38,6 +42,8 @@ export default function PageHeader({
   title,
   icon: Icon,
   activeFolder,
+  canRename = false,
+  onRename,
   goBack,
   showBack = false,
   selectedItems = [],
@@ -49,6 +55,41 @@ export default function PageHeader({
   color = "blue",
 }: PageHeaderProps) {
   const hasSelection = selectedItems.length > 0;
+
+  const [editing, setEditing] = useState(false);
+  const [newName, setNewName] = useState(activeFolder || title);
+
+  // 🧩 FIX: keep rename input synced with latest folder name
+  useEffect(() => {
+    setNewName(activeFolder || title);
+  }, [activeFolder, title]);
+
+  // 🧩 FIX: keep rename input synced with latest folder name
+useEffect(() => {
+  setNewName(activeFolder || title);
+}, [activeFolder, title]);
+
+// 🧭 Reset rename mode when navigating to another folder
+useEffect(() => {
+  setEditing(false);
+}, [activeFolder]);
+
+  const handleRenameConfirm = async () => {
+    if (newName.trim() && onRename) {
+      await onRename(newName.trim());
+      setEditing(false);
+    }
+  };
+
+  const handleKeyDown = async (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      await handleRenameConfirm();
+    } else if (e.key === "Escape") {
+      setEditing(false);
+      setNewName(activeFolder || title);
+    }
+  };
 
   const colorClasses = {
     blue: "text-blue-600 dark:text-blue-400 ring-blue-500 bg-blue-500 hover:bg-blue-600",
@@ -75,16 +116,57 @@ export default function PageHeader({
           )}
         </div>
 
-        {/* 🧭 Center: Title */}
-        <div className="absolute left-1/2 transform -translate-x-1/2 text-center flex items-center gap-2">
+        {/* 🧭 Center: Title + Rename */}
+        <div className="absolute left-1/2 transform -translate-x-1/2 text-center flex items-center gap-3">
           {Icon && (
             <Icon
               className={`w-6 h-6 sm:w-8 sm:h-8 ${colorClasses[color].split(" ")[0]}`}
             />
           )}
-          <h1 className="text-2xl sm:text-4xl font-extrabold truncate max-w-[70vw] leading-tight">
-            {activeFolder || title}
-          </h1>
+
+          {!editing ? (
+            <>
+              <h1 className="text-2xl sm:text-4xl font-extrabold truncate max-w-[65vw] leading-tight">
+                {activeFolder || title}
+              </h1>
+              {canRename && (
+                <button
+                  onClick={() => setEditing(true)}
+                  title="Rename Folder"
+                  className="text-gray-500 hover:text-gray-700 dark:text-gray-300 dark:hover:text-white"
+                >
+                  <Pencil className="w-5 h-5" />
+                </button>
+              )}
+            </>
+          ) : (
+            <div className="flex items-center gap-2">
+              <input
+                className="border border-gray-400 dark:border-gray-600 rounded-lg px-3 py-1 text-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none"
+                value={newName}
+                onChange={(e) => setNewName(e.target.value)}
+                onKeyDown={handleKeyDown}
+                autoFocus
+              />
+              <button
+                onClick={handleRenameConfirm}
+                className="p-1 text-green-600 hover:text-green-700"
+                title="Confirm Rename"
+              >
+                <Check className="w-5 h-5" />
+              </button>
+              <button
+                onClick={() => {
+                  setEditing(false);
+                  setNewName(activeFolder || title);
+                }}
+                className="p-1 text-gray-500 hover:text-gray-700"
+                title="Cancel"
+              >
+                <XSquare className="w-5 h-5" />
+              </button>
+            </div>
+          )}
         </div>
 
         {/* → Right: Actions */}

@@ -11,7 +11,14 @@ import QuizCard from "@/components/QuizCard";
 import FolderCard from "@/components/FolderCard";
 import AlertPopup from "@/components/AlertPopup";
 import { Item } from "@/types/Item";
-import { BookOpen, BookPlus, FolderPlus, MoveRight, Trash2 } from "lucide-react";
+import {
+  BookOpen,
+  BookPlus,
+  FolderPlus,
+  MoveRight,
+  Trash2,
+  Folder, // 🟡 Add folder icon
+} from "lucide-react";
 import { useRouter } from "next/navigation";
 
 type FolderCrumb = { id: string | null; name: string };
@@ -123,6 +130,30 @@ export default function LearningSpace() {
     } else {
       setActiveFolderId(null);
       setActiveFolderName("Learning Space");
+    }
+  };
+
+  /* ---------------- Folder Rename ---------------- */
+  const handleRenameFolder = async (newName: string) => {
+    if (!activeFolderId) return;
+    try {
+      const res = await fetch(`/api/items/folders/rename/${activeFolderId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: newName, context: "quizzes" }),
+      });
+
+      if (!res.ok) {
+        const err = await res.json();
+        setAlertMessage(err.error || "Rename failed.");
+        return;
+      }
+
+      const data = await res.json();
+      setActiveFolderName(data.name);
+      await refreshData(activeFolderId);
+    } catch {
+      setAlertMessage("Rename failed. Please try again.");
     }
   };
 
@@ -240,19 +271,16 @@ export default function LearningSpace() {
     <div className="min-h-screen flex flex-col bg-gray-50 dark:bg-gray-900">
       <PageHeader
         title={activeFolderName}
-        icon={BookOpen}
+        icon={activeFolderId ? Folder : BookOpen} // 🟢 Dynamically switch icon
         goBack={handleGoBack}
         showBack={folderStack.length > 0 || !!activeFolderId}
+        activeFolder={activeFolderName}
+        canRename={!!activeFolderId} // rename only when inside folder
+        onRename={handleRenameFolder}
         selectedItems={selectedItems}
         onSelectAll={() => setSelectedItems(displayItems.map((i) => i.id))}
         onDeselectAll={() => setSelectedItems([])}
         extraActions={[
-          {
-            icon: MoveRight,
-            label: "Move",
-            onClick: () => setAlertMessage("Use drag & drop to move items."),
-            disabled: !selectedItems.length,
-          },
           {
             icon: Trash2,
             label: "Delete",
@@ -293,6 +321,7 @@ export default function LearningSpace() {
       </main>
 
       <FloatingAddButton onClick={() => setIsActionChooserOpen(true)} />
+
       <GenericActionPopup
         isOpen={isActionChooserOpen}
         onClose={() => setIsActionChooserOpen(false)}
@@ -316,18 +345,23 @@ export default function LearningSpace() {
           },
         ]}
       />
+
       <CreateQuizPopup
         isOpen={isCreateQuizOpen}
         onClose={() => setIsCreateQuizOpen(false)}
         onCreateQuiz={handleCreateQuiz}
       />
+
       <CreateFolderPopup
         isOpen={isCreateFolderOpen}
         onClose={() => setIsCreateFolderOpen(false)}
         onCreateFolder={handleCreateFolder}
       />
 
-      {alertMessage && <AlertPopup message={alertMessage} onClose={() => setAlertMessage(null)} />}
+      {alertMessage && (
+        <AlertPopup message={alertMessage} onClose={() => setAlertMessage(null)} />
+      )}
+
       {confirmDelete && (
         <AlertPopup
           message={`Delete ${selectedItems.length} item(s)? This cannot be undone.`}
