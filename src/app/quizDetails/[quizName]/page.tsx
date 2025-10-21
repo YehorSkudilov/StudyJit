@@ -257,6 +257,32 @@ export default function QuizDetailsPage() {
     }
   };
 
+   /* ---------------------- 🔁 Poll Quiz Status ---------------------- */
+  useEffect(() => {
+    if (!quizId) return;
+
+    // Only poll if status isn't final
+    if (generationStatus === "success" || generationStatus === "failed") return;
+
+    const interval = setInterval(async () => {
+      try {
+        const res = await fetch(`/api/items/quizzes/get/${quizId}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.generation_status !== generationStatus) {
+            console.log("🔄 Updated status:", data.generation_status);
+            setGenerationStatus(data.generation_status);
+          }
+        }
+      } catch (err) {
+        console.warn("⚠️ Failed to poll quiz status:", err);
+      }
+    }, 4000); // check every 4s
+
+    return () => clearInterval(interval);
+  }, [quizId, generationStatus]);
+
+
   /* ---------------------- Render ---------------------- */
   return (
     <>
