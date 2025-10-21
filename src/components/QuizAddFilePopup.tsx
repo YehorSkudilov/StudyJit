@@ -186,7 +186,7 @@ export default function QuizAddFilePopup({
         if (newSet.size >= MAX_SELECTION) {
           setLimitWarning(true);
           setTimeout(() => setLimitWarning(false), 2000);
-          return prev; // don’t add more than 10
+          return prev;
         }
         newSet.add(id);
       }
@@ -307,9 +307,14 @@ export default function QuizAddFilePopup({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-      <div className="bg-white dark:bg-gray-800 rounded-lg p-6 shadow-xl w-[520px] max-h-[85vh] flex flex-col">
-        <h2 className="text-xl font-semibold mb-4 text-center text-gray-900 dark:text-gray-100">
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 px-4 sm:px-0">
+      <div
+        className="bg-white dark:bg-gray-800 rounded-t-2xl sm:rounded-2xl shadow-xl
+                   w-[90vw] sm:w-full sm:max-w-lg
+                   max-h-[85vh] overflow-y-auto
+                   p-5 sm:p-6 flex flex-col"
+      >
+        <h2 className="text-lg sm:text-xl font-semibold mb-4 text-center text-gray-900 dark:text-gray-100">
           Add Files to Quiz
         </h2>
 
@@ -322,14 +327,15 @@ export default function QuizAddFilePopup({
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="w-full pl-9 pr-3 py-2 rounded border border-gray-300 dark:border-gray-600 
-              bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500"
+                       bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-gray-100 
+                       focus:ring-2 focus:ring-blue-500 text-sm sm:text-base"
           />
         </div>
 
         {/* 📁 Tree */}
         <div className="flex-1 overflow-y-auto border border-gray-200 dark:border-gray-700 rounded-lg p-2">
           {tree.length === 0 ? (
-            <p className="text-gray-500 dark:text-gray-400 text-center py-8">
+            <p className="text-gray-500 dark:text-gray-400 text-center py-8 text-sm sm:text-base">
               No folders or files found.
             </p>
           ) : (
@@ -345,18 +351,19 @@ export default function QuizAddFilePopup({
         )}
 
         {/* 🧭 Footer Buttons */}
-        <div className="mt-4 flex justify-end gap-2">
+        <div className="mt-4 flex flex-col sm:flex-row sm:justify-end gap-2">
           <button
             onClick={onClose}
             className="px-4 py-2 rounded bg-gray-300 dark:bg-gray-600 
-              text-gray-800 dark:text-gray-200 hover:bg-gray-400 dark:hover:bg-gray-500 transition"
+                       text-gray-800 dark:text-gray-200 hover:bg-gray-400 
+                       dark:hover:bg-gray-500 transition text-sm sm:text-base"
           >
             Cancel
           </button>
           <button
             onClick={handleAddFiles}
             disabled={selectedFiles.size === 0}
-            className={`px-4 py-2 rounded transition
+            className={`px-4 py-2 rounded transition text-sm sm:text-base
               ${
                 selectedFiles.size > 0
                   ? "bg-blue-500 text-white hover:bg-blue-600"

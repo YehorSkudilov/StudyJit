@@ -104,15 +104,20 @@ export default function FileUploadPopup({
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-      <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-md p-6 flex flex-col gap-5 max-h-[85vh]">
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 px-4 sm:px-0">
+      <div
+        className="bg-white dark:bg-gray-800 rounded-t-2xl sm:rounded-2xl shadow-xl 
+                   w-[90vw] sm:w-full sm:max-w-md 
+                   max-h-[85vh] overflow-y-auto 
+                   p-5 sm:p-6 flex flex-col gap-5"
+      >
         {/* Header */}
         <div className="flex items-center justify-between border-b border-gray-200 dark:border-gray-700 pb-3">
-          <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 flex-1 text-center">
+          <div className="w-12 sm:w-16"></div>
+          <h2 className="text-lg sm:text-xl font-bold text-gray-900 dark:text-gray-100 flex-1 text-center">
             Upload Files
           </h2>
-
-          <div className="flex justify-end">
+          <div className="w-12 sm:w-16 flex justify-end">
             <button
               onClick={handleCancel}
               disabled={isUploading}
@@ -136,9 +141,9 @@ export default function FileUploadPopup({
               : "border-gray-300 dark:border-gray-600"
           }`}
         >
-          <div className="flex flex-col items-center justify-center gap-2 text-gray-500 dark:text-gray-300">
+          <div className="flex flex-col items-center justify-center gap-2 text-gray-500 dark:text-gray-300 text-center">
             <UploadCloud className="w-8 h-8" />
-            <p className="text-sm text-center">
+            <p className="text-sm">
               Drag & drop files here or{" "}
               <label
                 htmlFor="fileInput"
@@ -160,7 +165,7 @@ export default function FileUploadPopup({
 
           {/* File List */}
           {inputFiles.length > 0 && (
-            <div className="max-h-[45vh] overflow-y-auto flex flex-col gap-3 pr-1">
+            <div className="max-h-[40vh] overflow-y-auto flex flex-col gap-3 pr-1">
               {inputFiles.map((file) => (
                 <div
                   key={file.name}
@@ -211,10 +216,11 @@ export default function FileUploadPopup({
             </div>
           )}
 
+          {/* Upload Button */}
           <button
             onClick={handleSubmit}
             disabled={inputFiles.length === 0 || isUploading}
-            className={`w-full py-2.5 rounded-lg font-medium transition flex items-center justify-center gap-2 ${
+            className={`w-full py-2 sm:py-2.5 rounded-lg font-medium transition flex items-center justify-center gap-2 text-base sm:text-lg ${
               inputFiles.length > 0 && !isUploading
                 ? "bg-blue-600 text-white hover:bg-blue-700"
                 : "bg-gray-400 text-gray-200 cursor-not-allowed"

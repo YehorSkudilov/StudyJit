@@ -51,15 +51,20 @@ export default function CreateQuizPopup({
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-      <div className="bg-white dark:bg-gray-800 rounded-xl p-6 w-full max-w-sm shadow-lg flex flex-col gap-4">
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 px-4 sm:px-0">
+      <div
+        className="bg-white dark:bg-gray-800 rounded-t-2xl sm:rounded-xl shadow-xl 
+                   w-[90vw] sm:w-full sm:max-w-sm 
+                   max-h-[85vh] overflow-y-auto 
+                   p-5 sm:p-6 flex flex-col gap-4"
+      >
         {/* Header */}
         <div className="flex items-center justify-between">
-          <div className="w-16"></div>
-          <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100 flex-1 text-center">
+          <div className="w-12 sm:w-16"></div>
+          <h2 className="text-lg sm:text-xl font-bold text-gray-900 dark:text-gray-100 flex-1 text-center">
             New Quiz
           </h2>
-          <div className="w-16 flex justify-end">
+          <div className="w-12 sm:w-16 flex justify-end">
             <button
               onClick={handleCancel}
               disabled={isSubmitting}
@@ -81,7 +86,7 @@ export default function CreateQuizPopup({
           disabled={isSubmitting}
           className="w-full px-4 py-2 rounded border border-gray-300 dark:border-gray-600 
                      focus:outline-none focus:ring-2 focus:ring-blue-500 
-                     dark:bg-gray-700 dark:text-gray-100 disabled:opacity-50"
+                     dark:bg-gray-700 dark:text-gray-100 disabled:opacity-50 text-base sm:text-lg"
         />
 
         <textarea
@@ -91,7 +96,8 @@ export default function CreateQuizPopup({
           disabled={isSubmitting}
           className="w-full px-4 py-2 rounded border border-gray-300 dark:border-gray-600 
                      focus:outline-none focus:ring-2 focus:ring-blue-500 
-                     dark:bg-gray-700 dark:text-gray-100 resize-none h-24 disabled:opacity-50"
+                     dark:bg-gray-700 dark:text-gray-100 resize-none 
+                     h-24 disabled:opacity-50 text-base sm:text-lg"
         />
 
         {error && (
@@ -104,7 +110,8 @@ export default function CreateQuizPopup({
         <button
           onClick={handleSubmit}
           disabled={isSubmitting}
-          className={`w-full py-2 rounded flex justify-center items-center gap-2 text-white font-medium transition ${
+          className={`w-full py-2 sm:py-2.5 rounded-lg flex justify-center items-center gap-2 
+                     text-white font-medium text-base sm:text-lg transition ${
             isSubmitting
               ? "bg-gray-400 cursor-not-allowed"
               : "bg-blue-600 hover:bg-blue-700"

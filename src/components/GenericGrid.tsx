@@ -9,6 +9,7 @@ import {
   DragOverEvent,
   KeyboardSensor,
   PointerSensor,
+  TouchSensor,
   useSensor,
   useSensors,
   useDroppable,
@@ -48,6 +49,7 @@ function SortableItem({
     cursor: disableSort ? "pointer" : isDragging ? "grabbing" : "grab",
     height: "100%",
     opacity: isDragging ? 0.3 : 1,
+    touchAction: "none", // important for mobile drag!
   };
 
   return (
@@ -131,8 +133,10 @@ export default function GenericGrid({
   onDropToParent?: (source: Item | Item[]) => void | Promise<void>;
   context?: "files" | "quizzes";
 }) {
+  /* -------------------- Sensors -------------------- */
   const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 150, tolerance: 8 } }),
     useSensor(KeyboardSensor)
   );
 
@@ -170,13 +174,13 @@ export default function GenericGrid({
     const overItem = over?.data?.current?.item as Item;
     const isMulti = draggingItems.length > 1;
 
-    // ✅ Drop onto parent zone
+    // Drop onto parent zone
     if (over.id === "drop-to-parent") {
       for (const item of draggingItems) await onDropToParent?.(item);
       return;
     }
 
-    // ✅ Drop onto folder
+    // Drop onto folder
     if (overItem?.type === "folder") {
       for (const item of draggingItems) {
         if (item.id !== overItem.id) await onDropOnFolder?.(item, overItem.id);
@@ -184,7 +188,7 @@ export default function GenericGrid({
       return;
     }
 
-    // ✅ Reordering
+    // Reordering
     if (!isMulti && !isOverFolder) {
       const activeItem = active.data?.current?.item as Item;
       if (!activeItem) return;
@@ -197,7 +201,7 @@ export default function GenericGrid({
     }
   };
 
-  /* -------------------- Delay the drop zone -------------------- */
+  /* -------------------- Delay drop zone -------------------- */
   useEffect(() => {
     let timer: NodeJS.Timeout | undefined;
     if (draggingItems.length > 0) {
@@ -230,24 +234,22 @@ export default function GenericGrid({
     }
   };
 
-  /* -------------------- Render -------------------- */
-// ✅ Automatically sort items alphabetically by name
-const visibleItems = useMemo(() => {
-  const base = draggingItems.length === 0
-    ? items
-    : items.filter((i) => !draggingItems.some((d) => d.id === i.id));
+  /* -------------------- Sort visible items -------------------- */
+  const visibleItems = useMemo(() => {
+    const base = draggingItems.length === 0
+      ? items
+      : items.filter((i) => !draggingItems.some((d) => d.id === i.id));
 
-  // Sort folders first, then files, both alphabetically by name
-  return [...base].sort((a, b) => {
-    if (a.type === "folder" && b.type !== "folder") return -1;
-    if (a.type !== "folder" && b.type === "folder") return 1;
-    return a.name.localeCompare(b.name, undefined, { sensitivity: "base" });
-  });
-}, [items, draggingItems]);
-
+    return [...base].sort((a, b) => {
+      if (a.type === "folder" && b.type !== "folder") return -1;
+      if (a.type !== "folder" && b.type === "folder") return 1;
+      return a.name.localeCompare(b.name, undefined, { sensitivity: "base" });
+    });
+  }, [items, draggingItems]);
 
   const mainDragged = draggingItems[0];
 
+  /* -------------------- Render -------------------- */
   return (
     <DndContext
       sensors={sensors}
@@ -262,27 +264,25 @@ const visibleItems = useMemo(() => {
         items={!isOverFolder ? visibleItems.map((i) => i.id) : []}
         strategy={rectSortingStrategy}
       >
-<div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 items-stretch [grid-auto-rows:1fr] select-none">
-  {visibleItems.map((item) => {
-    const isSelected = selectedItems.includes(item.id);
-    const content = renderItem(item, isSelected, (e) =>
-      handleItemClick(e, item.id)
-    );
+        <div className="grid gap-4 grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 items-stretch [grid-auto-rows:1fr] select-none">
+          {visibleItems.map((item) => {
+            const isSelected = selectedItems.includes(item.id);
+            const content = renderItem(item, isSelected, (e) =>
+              handleItemClick(e, item.id)
+            );
 
-    return (
-      <SortableItem key={item.id} id={item.id} item={item}>
-        <FolderDropWrapper
-          id={item.id}
-          onHoverChange={(hover) => setIsOverFolder(hover)}
-        >
-          {content}
-        </FolderDropWrapper>
-      </SortableItem>
-    );
-  })}
-</div>
-
-
+            return (
+              <SortableItem key={item.id} id={item.id} item={item}>
+                <FolderDropWrapper
+                  id={item.id}
+                  onHoverChange={(hover) => setIsOverFolder(hover)}
+                >
+                  {content}
+                </FolderDropWrapper>
+              </SortableItem>
+            );
+          })}
+        </div>
       </SortableContext>
 
       {/* 🌟 Drag Overlay */}

@@ -55,24 +55,18 @@ export default function PageHeader({
   color = "blue",
 }: PageHeaderProps) {
   const hasSelection = selectedItems.length > 0;
-
   const [editing, setEditing] = useState(false);
   const [newName, setNewName] = useState(activeFolder || title);
 
-  // 🧩 FIX: keep rename input synced with latest folder name
+  // keep rename input synced with latest folder name
   useEffect(() => {
     setNewName(activeFolder || title);
   }, [activeFolder, title]);
 
-  // 🧩 FIX: keep rename input synced with latest folder name
-useEffect(() => {
-  setNewName(activeFolder || title);
-}, [activeFolder, title]);
-
-// 🧭 Reset rename mode when navigating to another folder
-useEffect(() => {
-  setEditing(false);
-}, [activeFolder]);
+  // reset rename mode when navigating to another folder
+  useEffect(() => {
+    setEditing(false);
+  }, [activeFolder]);
 
   const handleRenameConfirm = async () => {
     if (newName.trim() && onRename) {
@@ -92,41 +86,32 @@ useEffect(() => {
   };
 
   const colorClasses = {
-    blue: "text-blue-600 dark:text-blue-400 ring-blue-500 bg-blue-500 hover:bg-blue-600",
-    yellow:
-      "text-yellow-500 dark:text-yellow-400 ring-yellow-500 bg-yellow-500 hover:bg-yellow-600",
-    green:
-      "text-green-500 dark:text-green-400 ring-green-500 bg-green-500 hover:bg-green-600",
-    red: "text-red-500 dark:text-red-400 ring-red-500 bg-red-500 hover:bg-red-600",
+    blue: "text-blue-600 dark:text-blue-400",
+    yellow: "text-yellow-500 dark:text-yellow-400",
+    green: "text-green-500 dark:text-green-400",
+    red: "text-red-500 dark:text-red-400",
   };
 
   return (
-    <section className="relative px-4 sm:px-10 py-6 sm:py-10">
-      <div className="relative flex items-center justify-between">
-        {/* ← Left: Back Button */}
-        <div className="flex items-center gap-2">
+    <section className="relative px-4 sm:px-8 py-4 sm:py-6 border-b border-gray-200 dark:border-gray-700">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
+        {/* ← Left: Back + Title */}
+        <div className="flex items-center gap-2 sm:gap-3 flex-wrap justify-center sm:justify-start">
           {showBack && goBack && (
             <button
               onClick={goBack}
-              className="p-2 sm:p-3 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full transition-colors"
+              className="p-2 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full transition-colors"
               title="Go Back"
             >
-              <ChevronLeft className="w-4 h-4 sm:w-5 sm:h-5" />
+              <ChevronLeft className="w-5 h-5" />
             </button>
           )}
-        </div>
 
-        {/* 🧭 Center: Title + Rename */}
-        <div className="absolute left-1/2 transform -translate-x-1/2 text-center flex items-center gap-3">
-          {Icon && (
-            <Icon
-              className={`w-6 h-6 sm:w-8 sm:h-8 ${colorClasses[color].split(" ")[0]}`}
-            />
-          )}
+          {Icon && <Icon className={`w-6 h-6 ${colorClasses[color]}`} />}
 
           {!editing ? (
             <>
-              <h1 className="text-2xl sm:text-4xl font-extrabold truncate max-w-[65vw] leading-tight">
+              <h1 className="text-xl sm:text-3xl font-bold truncate max-w-[70vw] text-center sm:text-left">
                 {activeFolder || title}
               </h1>
               {canRename && (
@@ -142,7 +127,7 @@ useEffect(() => {
           ) : (
             <div className="flex items-center gap-2">
               <input
-                className="border border-gray-400 dark:border-gray-600 rounded-lg px-3 py-1 text-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none"
+                className="border border-gray-400 dark:border-gray-600 rounded-lg px-2 py-1 text-base bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none w-40 sm:w-60"
                 value={newName}
                 onChange={(e) => setNewName(e.target.value)}
                 onKeyDown={handleKeyDown}
@@ -169,63 +154,59 @@ useEffect(() => {
           )}
         </div>
 
-        {/* → Right: Actions */}
-        <div className="flex items-center justify-end gap-2 sm:gap-3">
-          {hasSelection && (
-            <>
-              {onDeleteSelected && (
-                <button
-                  onClick={onDeleteSelected}
-                  className="p-2 sm:p-3 bg-red-500 text-white rounded-full shadow hover:bg-red-600 transition"
-                  title="Delete Selected"
-                >
-                  <Trash2 className="w-4 h-4 sm:w-5 sm:h-5" />
-                </button>
-              )}
-
-              {extraActions.map((action, i) => {
-                const colorClass = action.disabled
-                  ? "bg-gray-400 cursor-not-allowed"
-                  : action.color === "red"
-                  ? "bg-red-500 hover:bg-red-600"
-                  : action.color === "green"
-                  ? "bg-green-500 hover:bg-green-600"
-                  : action.color === "yellow"
-                  ? "bg-yellow-500 hover:bg-yellow-600"
-                  : "bg-blue-500 hover:bg-blue-600";
-
-                return (
-                  <button
-                    key={i}
-                    onClick={action.onClick}
-                    disabled={action.disabled}
-                    className={`p-2 sm:p-3 rounded-full shadow transition text-white ${colorClass}`}
-                    title={action.label}
-                  >
-                    <action.icon className="w-4 h-4 sm:w-5 sm:h-5" />
-                  </button>
-                );
-              })}
-            </>
+        {/* ↓ Second line: Actions */}
+        <div className="flex flex-wrap items-center justify-center sm:justify-end gap-2 sm:gap-3 mt-2 sm:mt-0">
+          {hasSelection && onDeleteSelected && (
+            <button
+              onClick={onDeleteSelected}
+              className="p-2 bg-red-500 text-white rounded-full shadow hover:bg-red-600 transition"
+              title="Delete Selected"
+            >
+              <Trash2 className="w-4 h-4" />
+            </button>
           )}
+
+          {extraActions.map((action, i) => {
+            const colorClass = action.disabled
+              ? "bg-gray-400 cursor-not-allowed"
+              : action.color === "red"
+              ? "bg-red-500 hover:bg-red-600"
+              : action.color === "green"
+              ? "bg-green-500 hover:bg-green-600"
+              : action.color === "yellow"
+              ? "bg-yellow-500 hover:bg-yellow-600"
+              : "bg-blue-500 hover:bg-blue-600";
+
+            return (
+              <button
+                key={i}
+                onClick={action.onClick}
+                disabled={action.disabled}
+                className={`p-2 rounded-full shadow transition text-white ${colorClass}`}
+                title={action.label}
+              >
+                <action.icon className="w-4 h-4" />
+              </button>
+            );
+          })}
 
           {onSelectAll && (
             <button
               onClick={onSelectAll}
-              className="p-2 sm:p-3 bg-green-500 text-white rounded-full shadow hover:bg-green-600 transition"
+              className="p-2 bg-green-500 text-white rounded-full shadow hover:bg-green-600 transition"
               title="Select All"
             >
-              <CheckSquare className="w-4 h-4 sm:w-5 sm:h-5" />
+              <CheckSquare className="w-4 h-4" />
             </button>
           )}
 
           {onDeselectAll && (
             <button
               onClick={onDeselectAll}
-              className="p-2 sm:p-3 bg-gray-400 text-white rounded-full shadow hover:bg-gray-500 transition"
+              className="p-2 bg-gray-400 text-white rounded-full shadow hover:bg-gray-500 transition"
               title="Deselect All"
             >
-              <XSquare className="w-4 h-4 sm:w-5 sm:h-5" />
+              <XSquare className="w-4 h-4" />
             </button>
           )}
 
