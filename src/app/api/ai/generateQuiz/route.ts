@@ -6,32 +6,20 @@ import db from "@/lib/db";
 import fs from "fs";
 import OpenAI from "openai";
 
-const queue: (() => Promise<void>)[] = [];
-let active = false;
-
-async function runNext() {
-  if (active || queue.length === 0) return;
-  active = true;
-  const job = queue.shift()!;
-  try {
-    await job();
-  } catch (err) {
-    console.error("❌ Job error:", err);
-  } finally {
-    active = false;
-    runNext();
-  }
-}
+/* -------------------------------------------------------------------------- */
+/*                               GLOBAL CONSTANTS                             */
+/* -------------------------------------------------------------------------- */
 
 const SUPPORTED_EXTENSIONS = [".pdf", ".txt", ".doc", ".docx", ".ppt", ".pptx", ".csv", ".json", ".md", ".html", ".xml", ".rtf"];
 const IMAGE_EXTENSIONS = [".jpg", ".jpeg", ".png", ".gif", ".webp"];
 const AUDIO_EXTENSIONS = [".mp3", ".mp4", ".mpeg", ".mpga", ".m4a", ".wav", ".webm"];
 
-// Enhanced JSON extraction
+/* -------------------------------------------------------------------------- */
+/*                           JSON EXTRACTION FUNCTION                         */
+/* -------------------------------------------------------------------------- */
 function extractAndParseJSON(text: string): any {
   console.log("🔍 Attempting to parse response...");
-  
-  // Try direct parse first
+
   try {
     const parsed = JSON.parse(text);
     if (parsed?.questions && Array.isArray(parsed.questions)) {
@@ -40,10 +28,7 @@ function extractAndParseJSON(text: string): any {
     }
   } catch {}
 
-  // Remove markdown code blocks
-  let cleaned = text.replace(/```json\s*/gi, '').replace(/```\s*/g, '');
-  
-  // Try parsing cleaned version
+  let cleaned = text.replace(/```json\s*/gi, "").replace(/```\s*/g, "");
   try {
     const parsed = JSON.parse(cleaned);
     if (parsed?.questions && Array.isArray(parsed.questions)) {
@@ -52,7 +37,6 @@ function extractAndParseJSON(text: string): any {
     }
   } catch {}
 
-  // Extract JSON object with questions array
   const jsonPatterns = [
     /\{[\s\S]*?"questions"\s*:\s*\[[\s\S]*?\]\s*\}/,
     /\{[^{}]*"questions"[^{}]*\[[^\]]*\][^{}]*\}/,
@@ -62,23 +46,15 @@ function extractAndParseJSON(text: string): any {
     const match = text.match(pattern);
     if (match) {
       try {
-        // Handle potential truncation by ensuring proper JSON closure
         let jsonStr = match[0];
-        
-        // Count braces to detect truncation
         const openBraces = (jsonStr.match(/\{/g) || []).length;
         const closeBraces = (jsonStr.match(/\}/g) || []).length;
         const openBrackets = (jsonStr.match(/\[/g) || []).length;
         const closeBrackets = (jsonStr.match(/\]/g) || []).length;
-        
-        // Attempt to close unclosed structures
-        if (openBrackets > closeBrackets) {
-          jsonStr += ']'.repeat(openBrackets - closeBrackets);
-        }
-        if (openBraces > closeBraces) {
-          jsonStr += '}'.repeat(openBraces - closeBraces);
-        }
-        
+
+        if (openBrackets > closeBrackets) jsonStr += "]".repeat(openBrackets - closeBrackets);
+        if (openBraces > closeBraces) jsonStr += "}".repeat(openBraces - closeBraces);
+
         const parsed = JSON.parse(jsonStr);
         if (parsed?.questions && Array.isArray(parsed.questions)) {
           console.log("✅ Pattern-based JSON extraction successful");
@@ -90,7 +66,6 @@ function extractAndParseJSON(text: string): any {
     }
   }
 
-  // Last resort: extract questions array directly
   const questionsMatch = text.match(/"questions"\s*:\s*(\[[^\]]*\])/);
   if (questionsMatch) {
     try {
@@ -105,6 +80,9 @@ function extractAndParseJSON(text: string): any {
   return null;
 }
 
+/* -------------------------------------------------------------------------- */
+/*                           MAIN PROCESS FUNCTION                            */
+/* -------------------------------------------------------------------------- */
 async function processQuiz(req: NextRequest): Promise<NextResponse> {
   const session = await getServerSession(authOptions);
   if (!session?.user?.id) {
@@ -133,7 +111,7 @@ async function processQuiz(req: NextRequest): Promise<NextResponse> {
       "SELECT id, user_id FROM quizzes WHERE id = ?",
       [quizId]
     );
-    
+
     if (!quizRows.length || quizRows[0].user_id !== userId) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
@@ -210,120 +188,63 @@ async function processQuiz(req: NextRequest): Promise<NextResponse> {
       }
     }
 
-    // Create assistant with stricter JSON enforcement
+    // Create assistant
     const tools: any[] = [];
     if (documentFiles.length > 0) tools.push({ type: "file_search" });
 
     const assistant = await openai.beta.assistants.create({
       model: "gpt-4o",
       name: "Quiz Generator",
-      instructions: `You are a quiz generator. You MUST respond with ONLY valid JSON. NO explanations, NO markdown, NO text before or after.
-
-CRITICAL: Your entire response must be a single JSON object starting with { and ending with }
-
-ANALYZE all provided content thoroughly and create questions covering the full breadth of material.
-
-JSON FORMAT (REQUIRED):
-{
-  "questions": [
-    {
-      "id": 1,
-      "question": "Clear question text?",
-      "options": ["Option A", "Option B", "Option C", "Option D"],
-      "correct": "Option A"
-    }
-  ]
-}
-
-RULES:
-- Generate EXACTLY the requested number of questions
-- Each question has exactly 4 options
-- The "correct" field must match one option exactly
-- Cover ALL material: main concepts, details, and important facts
-- Distribute questions evenly across all content
-- NO text outside the JSON object
-- NO markdown code blocks
-- NO explanations
-
-RESPOND WITH ONLY THE JSON OBJECT.`,
+      instructions: `You are a quiz generator. Respond ONLY with valid JSON. No markdown or text outside the JSON object.`,
       tools: tools.length > 0 ? tools : undefined,
-      response_format: { type: "json_object" }, // Force JSON response
+      response_format: { type: "json_object" },
     });
 
     console.log(`✅ Assistant created: ${assistant.id}`);
 
-    // Build instruction with emphasis on JSON-only output
+    // Instruction building
     let instruction = `Generate ${numQuestions} quiz questions in JSON format.\n\n`;
-    
-    instruction += `IMPORTANT: Respond with ONLY the JSON object. Start with { and end with }. No other text.\n\n`;
-
-    if (message.trim()) {
-      instruction += `Topic: ${message}\n\n`;
-    }
-
-    if (documentFiles.length > 0) {
-      instruction += `Analyze all ${documentFiles.length} document(s) thoroughly. Create questions covering the full breadth of content.\n\n`;
-    }
-
-    if (imageFiles.length > 0) {
-      instruction += `Analyze all ${imageFiles.length} image(s). Create questions about visual content.\n\n`;
-    }
-
-    if (audioFiles.length > 0) {
-      instruction += `Audio transcriptions:\n${audioTranscriptions}\n\n`;
-    }
-
-    if (!documentFiles.length && !imageFiles.length && !audioFiles.length) {
-      instruction = `Generate ${numQuestions} quiz questions on: "${message || 'general knowledge'}"\n\n`;
-    }
+    instruction += `Respond with ONLY a single JSON object.\n\n`;
+    if (message.trim()) instruction += `Topic: ${message}\n\n`;
+    if (documentFiles.length > 0) instruction += `Analyze all documents.\n\n`;
+    if (imageFiles.length > 0) instruction += `Analyze all images.\n\n`;
+    if (audioFiles.length > 0) instruction += `Audio transcriptions:\n${audioTranscriptions}\n\n`;
 
     instruction += `Output ONLY this JSON structure:\n{"questions":[{"id":1,"question":"...","options":["A","B","C","D"],"correct":"A"}]}`;
 
-    // Build message content
     const messageContent: any[] = [{ type: "text", text: instruction }];
 
-    // Add images
     for (const fileId of imageFileIds) {
-      messageContent.push({
-        type: "image_file",
-        image_file: { file_id: fileId },
-      });
+      messageContent.push({ type: "image_file", image_file: { file_id: fileId } });
     }
 
-    // Prepare document attachments
     const attachments: any[] = documentFileIds.map(fileId => ({
       file_id: fileId,
       tools: [{ type: "file_search" }],
     }));
 
-    // Create thread
     const thread = await openai.beta.threads.create({
-      messages: [{
-        role: "user",
-        content: messageContent,
-        attachments: attachments.length > 0 ? attachments : undefined,
-      }],
+      messages: [
+        {
+          role: "user",
+          content: messageContent,
+          attachments: attachments.length > 0 ? attachments : undefined,
+        },
+      ],
     });
 
     console.log(`✅ Thread created: ${thread.id}`);
 
-    // Run assistant with longer timeout for large files
-    console.log("🤖 Running assistant...");
     const run = await openai.beta.threads.runs.createAndPoll(thread.id, {
       assistant_id: assistant.id,
-      max_prompt_tokens: 100000, // Increase token limit for large files
-      max_completion_tokens: 16000, // Increase completion tokens
+      max_prompt_tokens: 100000,
+      max_completion_tokens: 16000,
     });
 
     if (run.status !== "completed") {
-      console.error(`❌ Run status: ${run.status}`);
-      if (run.last_error) {
-        console.error(`❌ Error details:`, run.last_error);
-      }
       throw new Error(`Assistant run failed: ${run.status}`);
     }
 
-    // Get response
     const messages = await openai.beta.threads.messages.list(thread.id);
     const lastMessage = messages.data[0];
     if (!lastMessage) throw new Error("No response from assistant");
@@ -332,43 +253,25 @@ RESPOND WITH ONLY THE JSON OBJECT.`,
     for (const block of lastMessage.content) {
       if (block.type === "text") text += block.text.value;
     }
-    text = text.trim();
 
-    console.log("📩 Response length:", text.length);
-    console.log("📩 Response preview:", text.substring(0, 500));
-
-    // Enhanced JSON parsing
-    const parsed = extractAndParseJSON(text);
-
+    const parsed = extractAndParseJSON(text.trim());
     if (!parsed?.questions || !Array.isArray(parsed.questions)) {
-      console.error("❌ Failed to extract valid JSON structure");
-      console.error("📄 Full response:", text);
-      throw new Error("Could not extract valid questions from response. The file might be too large or complex.");
+      throw new Error("Could not extract valid questions from response.");
     }
 
-    if (parsed.questions.length === 0) {
-      throw new Error("No questions were generated. Please try with a smaller file or fewer questions.");
-    }
-
-    // Format and validate questions
     const formattedQuestions = parsed.questions
-      .filter((q: any) => q.question && q.options) // Filter out invalid questions
+      .filter((q: any) => q.question && q.options)
       .map((q: any, i: number) => ({
         id: q.id || i + 1,
         question: q.question || `Question ${i + 1}`,
-        options: Array.isArray(q.options) && q.options.length >= 2
-          ? q.options.slice(0, 4) // Limit to 4 options
-          : ["Option A", "Option B", "Option C", "Option D"],
-        correct: q.correct || q.answer || (Array.isArray(q.options) ? q.options[0] : "Option A"),
+        options: Array.isArray(q.options) ? q.options.slice(0, 4) : ["A", "B", "C", "D"],
+        correct: q.correct || q.answer || q.options?.[0] || "A",
       }));
 
-    console.log(`✅ Successfully parsed ${formattedQuestions.length} questions`);
-
     if (formattedQuestions.length === 0) {
-      throw new Error("No valid questions could be extracted from the response.");
+      throw new Error("No valid questions extracted.");
     }
 
-    // Cleanup
     try {
       await openai.beta.assistants.delete(assistant.id);
       for (const fileId of [...documentFileIds, ...imageFileIds]) {
@@ -378,13 +281,12 @@ RESPOND WITH ONLY THE JSON OBJECT.`,
       console.warn("⚠️ Cleanup warning:", err);
     }
 
-    // Save to DB
     const result = await addQuestionsToQuiz(quizId, formattedQuestions, userId);
     await db.execute(
       `UPDATE quizzes SET generation_status = 'success' WHERE id = ? AND user_id = ?`,
       [quizId, userId]
     );
-    
+
     console.log(`✅ Quiz complete: ${result.questionCount} questions saved`);
 
     return NextResponse.json({
@@ -392,33 +294,85 @@ RESPOND WITH ONLY THE JSON OBJECT.`,
       quizId,
       questionCount: result.questionCount,
     });
-
   } catch (error: any) {
     console.error("❌ Error:", error);
-    console.error("❌ Stack:", error.stack);
-    
     if (quizId > 0) {
       await db.execute(
         `UPDATE quizzes SET generation_status = 'failed' WHERE id = ? AND user_id = ?`,
         [quizId, userId]
       );
     }
-    
-    return NextResponse.json(
-      { error: error.message || "Failed to generate quiz" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: error.message || "Failed to generate quiz" }, { status: 500 });
   }
 }
 
-export async function POST(req: NextRequest): Promise<NextResponse> {
-  return new Promise<NextResponse>((resolve) => {
-    queue.push(async () => {
-      console.log(`🚀 Starting quiz generation`);
-      const response = await processQuiz(req);
-      console.log("✅ Job finished");
-      resolve(response);
-    });
-    runNext();
+/* -------------------------------------------------------------------------- */
+/*                           CONCURRENT QUEUE SYSTEM                          */
+/* -------------------------------------------------------------------------- */
+
+const activeQuizzes = new Map<number, boolean>();
+const globalQueue: (() => Promise<void>)[] = [];
+let isProcessing = false;
+
+async function processQueue() {
+  if (isProcessing) return;
+  isProcessing = true;
+
+  while (globalQueue.length > 0) {
+    const job = globalQueue.shift();
+    if (!job) continue;
+
+    try {
+      await job();
+    } catch (err) {
+      console.error("❌ Queue job failed:", err);
+    }
+  }
+
+  isProcessing = false;
+}
+
+function enqueueQuizJob(quizId: number, job: () => Promise<void>) {
+  if (activeQuizzes.get(quizId)) {
+    console.warn(`⚠️ Quiz ${quizId} is already running. Skipping.`);
+    return;
+  }
+
+  activeQuizzes.set(quizId, true);
+
+  globalQueue.push(async () => {
+    try {
+      console.log(`🚀 Starting generation for quiz ${quizId}`);
+      await job();
+    } finally {
+      activeQuizzes.delete(quizId);
+      console.log(`✅ Finished quiz ${quizId}`);
+    }
   });
+
+  processQueue();
+}
+
+/* -------------------------------------------------------------------------- */
+/*                                 POST ROUTE                                 */
+/* -------------------------------------------------------------------------- */
+
+export async function POST(req: NextRequest): Promise<NextResponse> {
+  try {
+    const form = await req.clone().formData();
+    const quizId = Number(form.get("quizId"));
+    if (!quizId) {
+      return NextResponse.json({ error: "Missing quizId" }, { status: 400 });
+    }
+
+    enqueueQuizJob(quizId, async () => {
+      const res = await processQuiz(req);
+      console.log(`🎯 Quiz ${quizId} generation result:`, res.status);
+    });
+
+return NextResponse.json({ success: true, status: "queued", quizId });
+  } catch (err: any) {
+    console.error("❌ Failed to enqueue quiz job:", err);
+    return NextResponse.json({ error: err.message }, { status: 500 });
+  }
 }

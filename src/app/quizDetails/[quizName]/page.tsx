@@ -185,14 +185,19 @@ export default function QuizDetailsPage() {
         console.warn("⚠️ Response was not valid JSON.");
       }
 
-      if (res.ok && data?.success) {
-        console.log("✅ Quiz generation successful:", data);
-        setGenerationStatus("success");
+      // 🟢 FIX: Recognize both queued and success
+      if (res.ok && (data?.success || data?.status === "queued")) {
+        console.log("✅ Quiz generation queued:", data);
+        setGenerationStatus("pending");
+
         await fetch("/api/items/quizzes/status/update", {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ id: quizId, status: "success" }),
+          body: JSON.stringify({ id: quizId, status: "pending" }),
         });
+      } else if (res.ok && data?.success === true) {
+        console.log("✅ Quiz generation successful:", data);
+        setGenerationStatus("success");
       } else {
         console.error("❌ Quiz generation failed:", data || rawText);
         setGenerationStatus("failed");
@@ -201,17 +206,17 @@ export default function QuizDetailsPage() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ id: quizId, status: "failed" }),
         });
-        setAlertMessage("❌ Quiz generation failed. See console for details.");
+        setAlertMessage("❌ Quiz generation failed to start. Please try again.");
         setShowAlert(true);
       }
 
-      setTimeout(() => router.refresh(), 800);
+      setTimeout(() => router.refresh(), 1000);
     } catch (err: any) {
       console.error("💥 Uncaught error during quiz generation:", err);
       setGenerationStatus("failed");
       setAlertMessage("❌ Failed to save or generate quiz. See console for details.");
       setShowAlert(true);
-      setTimeout(() => router.refresh(), 800);
+      setTimeout(() => router.refresh(), 1000);
     }
   };
 
