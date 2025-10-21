@@ -259,54 +259,77 @@ export default function GenericGrid({
   }, [draggingItems.length]);
 
 /* -------------------- Selection -------------------- */
-const lastClickedId = useRef<string | null>(null);
+const anchorIdRef = useRef<string | null>(null);   // persistent anchor for Shift ranges
+const lastFocusedIdRef = useRef<string | null>(null); // optional (for accessibility/focus)
 
 const handleItemClick = (e: React.MouseEvent, itemId: string) => {
   e.stopPropagation();
-
   const isSelected = selectedItems.includes(itemId);
 
-  // Find indices fresh from current sorted order
-  const currentIndex = visibleItems.findIndex((i) => i.id === itemId);
-  const lastIndex = lastClickedId.current
-    ? visibleItems.findIndex((i) => i.id === lastClickedId.current)
-    : -1;
+  const idxOf = (id: string | null) =>
+    id ? visibleItems.findIndex((i) => i.id === id) : -1;
 
-  if (e.shiftKey && lastIndex !== -1) {
-    // Shift-click → select a range
-    const start = Math.min(lastIndex, currentIndex);
-    const end = Math.max(lastIndex, currentIndex);
-    const range = visibleItems.slice(start, end + 1).map((i) => i.id);
-    setSelectedItems((prev) => Array.from(new Set([...prev, ...range])));
-  } else if (e.ctrlKey || e.metaKey) {
-    // Ctrl / Cmd → toggle individual item
+  const currentIndex = idxOf(itemId);
+  let anchorIndex = idxOf(anchorIdRef.current);
+
+  // If there is no anchor yet, start it at the current item
+  if (anchorIndex === -1) {
+    anchorIdRef.current = itemId;
+    anchorIndex = currentIndex;
+  }
+
+  if (e.shiftKey) {
+    // Compute range between anchor and current
+    const start = Math.min(anchorIndex, currentIndex);
+    const end = Math.max(anchorIndex, currentIndex);
+    const rangeIds = visibleItems.slice(start, end + 1).map((i) => i.id);
+
+    if (e.ctrlKey || e.metaKey) {
+      // Additive range
+      setSelectedItems((prev) => Array.from(new Set([...prev, ...rangeIds])));
+    } else {
+      // Replace with the range (Finder/Explorer behavior)
+      setSelectedItems(rangeIds);
+    }
+
+    // IMPORTANT: do NOT move the anchor on Shift-click
+    lastFocusedIdRef.current = itemId;
+    return;
+  }
+
+  if (e.ctrlKey || e.metaKey) {
+    // Toggle single item
     setSelectedItems((prev) =>
       isSelected ? prev.filter((id) => id !== itemId) : [...prev, itemId]
     );
-  } else {
-    // Normal click → single select / deselect
-    setSelectedItems(isSelected && selectedItems.length === 1 ? [] : [itemId]);
+    // Update anchor to this item (Windows/Finder do this)
+    anchorIdRef.current = itemId;
+    lastFocusedIdRef.current = itemId;
+    return;
   }
 
-  // Always remember the last clicked ID, not index
-  lastClickedId.current = itemId;
+  // Plain click: single-select (or clear if it's the same sole item)
+  setSelectedItems(isSelected && selectedItems.length === 1 ? [] : [itemId]);
+  anchorIdRef.current = itemId;        // move anchor on normal click
+  lastFocusedIdRef.current = itemId;
 };
 
 
 
   /* -------------------- Sort visible items -------------------- */
-  const visibleItems = useMemo(() => {
-    const base =
-      draggingItems.length === 0
-        ? items
-        : items.filter((i) => !draggingItems.some((d) => d.id === i.id));
+const visibleItems = useMemo(() => {
+  const base =
+    draggingItems.length === 0
+      ? items
+      : items.filter((i) => !draggingItems.some((d) => d.id === i.id));
 
-    return [...base].sort((a, b) => {
-      if (a.type === "folder" && b.type !== "folder") return -1;
-      if (a.type !== "folder" && b.type === "folder") return 1;
-      return a.name.localeCompare(b.name, undefined, { sensitivity: "base" });
-    });
-  }, [items, draggingItems]);
+  return [...base].sort((a, b) => {
+    if (a.type === "folder" && b.type !== "folder") return -1;
+    if (a.type !== "folder" && b.type === "folder") return 1;
+    return a.name.localeCompare(b.name, undefined, { sensitivity: "base" });
+  });
+}, [items, draggingItems]);
+
 
   const mainDragged = draggingItems[0];
 
