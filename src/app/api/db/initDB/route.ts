@@ -97,11 +97,25 @@ async function initDatabase() {
       description TEXT,
       prompt TEXT,
       num_questions INT DEFAULT 10,
-      generation_status ENUM('never_generated','pending','success','failed') DEFAULT 'never_generated',
+      generation_status ENUM('never_generated','queued','pending','success','failed') DEFAULT 'never_generated',
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
     );
   `);
+
+  // ✅ Upgrade ENUM if needed
+  const [enumCheck]: any = await db.query(`SHOW COLUMNS FROM quizzes LIKE 'generation_status'`);
+  const enumType = enumCheck[0]?.Type || "";
+  if (!enumType.includes("queued")) {
+    console.log("🟡 Updating 'generation_status' ENUM to include 'queued'...");
+    await db.query(`
+      ALTER TABLE quizzes 
+      MODIFY COLUMN generation_status 
+      ENUM('never_generated','queued','pending','success','failed') 
+      DEFAULT 'never_generated';
+    `);
+    console.log("✅ Updated ENUM with 'queued' value");
+  }
 
   // ✅ Link quizzes to folders and add last_score
   await ensureColumnExists("quizzes", "folder_id", "INT NULL");
