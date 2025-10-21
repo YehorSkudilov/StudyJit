@@ -17,7 +17,6 @@ async function ensureColumnExists(
 
 /* ------------------------- Utility: Drop Old Columns ------------------------- */
 async function dropOldColumns() {
-  // 🧩 Drop legacy folder_path/path from quizzes
   const [quizCols]: any = await db.query(`SHOW COLUMNS FROM quizzes`);
   const quizColNames = quizCols.map((c: any) => c.Field);
 
@@ -29,7 +28,6 @@ async function dropOldColumns() {
     }
   }
 
-  // 🧩 Drop legacy path from folders
   const [folderCols]: any = await db.query(`SHOW COLUMNS FROM folders`);
   const folderColNames = folderCols.map((c: any) => c.Field);
   if (folderColNames.includes("path")) {
@@ -41,7 +39,6 @@ async function dropOldColumns() {
 
 /* --------------------------- Database Setup --------------------------- */
 async function initDatabase() {
-  /* USERS */
   await db.query(`
     CREATE TABLE IF NOT EXISTS users (
       id INT AUTO_INCREMENT PRIMARY KEY,
@@ -53,7 +50,6 @@ async function initDatabase() {
     );
   `);
 
-  /* FOLDERS (shared for both files + quizzes, with context) */
   await db.query(`
     CREATE TABLE IF NOT EXISTS folders (
       id INT AUTO_INCREMENT PRIMARY KEY,
@@ -64,7 +60,6 @@ async function initDatabase() {
     );
   `);
 
-  // ✅ Ensure hierarchy + context
   await ensureColumnExists("folders", "parent_id", "INT NULL");
   await ensureColumnExists(
     "folders",
@@ -72,7 +67,6 @@ async function initDatabase() {
     "ENUM('quizzes','files') NOT NULL DEFAULT 'quizzes'"
   );
 
-  /* FILES */
   await db.query(`
     CREATE TABLE IF NOT EXISTS files (
       id INT AUTO_INCREMENT PRIMARY KEY,
@@ -85,10 +79,10 @@ async function initDatabase() {
     );
   `);
 
-  // ✅ Link files to folders
+  // ✅ Fix: Ensure 'path' column exists for file reading
   await ensureColumnExists("files", "folder_id", "INT NULL");
+  await ensureColumnExists("files", "path", "TEXT NULL");
 
-  /* QUIZZES */
   await db.query(`
     CREATE TABLE IF NOT EXISTS quizzes (
       id INT AUTO_INCREMENT PRIMARY KEY,
@@ -103,7 +97,6 @@ async function initDatabase() {
     );
   `);
 
-  // ✅ Upgrade ENUM if needed
   const [enumCheck]: any = await db.query(`SHOW COLUMNS FROM quizzes LIKE 'generation_status'`);
   const enumType = enumCheck[0]?.Type || "";
   if (!enumType.includes("queued")) {
@@ -117,15 +110,9 @@ async function initDatabase() {
     console.log("✅ Updated ENUM with 'queued' value");
   }
 
-  // ✅ NEW: queue_number for queue position tracking
-  console.log("🧭 Ensuring 'queue_number' exists on quizzes...");
-  await ensureColumnExists("quizzes", "queue_number", "INT NULL");
-
-  // ✅ Link quizzes to folders and add last_score
   await ensureColumnExists("quizzes", "folder_id", "INT NULL");
   await ensureColumnExists("quizzes", "last_score", "DECIMAL(5,2) NULL");
 
-  /* QUIZ QUESTIONS */
   await db.query(`
     CREATE TABLE IF NOT EXISTS quiz_questions (
       id INT AUTO_INCREMENT PRIMARY KEY,
@@ -142,10 +129,9 @@ async function initDatabase() {
     );
   `);
 
-  // 🧹 Cleanup
   await dropOldColumns();
 
-  console.log("✅ Database schema synchronized successfully (queue_number supported).");
+  console.log("✅ Database schema synchronized successfully (path supported).");
   return { success: true };
 }
 
