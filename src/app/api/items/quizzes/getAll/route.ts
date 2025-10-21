@@ -24,7 +24,14 @@ export async function GET(req: NextRequest) {
 
     if (folder === "root" || !folder) {
       const [rows] = await db.query<RowDataPacket[]>(
-        `SELECT id, name, description, generation_status, num_questions, folder_id
+        `SELECT 
+           id, 
+           name, 
+           description, 
+           generation_status, 
+           num_questions, 
+           folder_id, 
+           last_score
          FROM quizzes
          WHERE user_id = ? AND folder_id IS NULL
          ORDER BY id DESC`,
@@ -33,7 +40,14 @@ export async function GET(req: NextRequest) {
       quizRows = rows;
     } else {
       const [rows] = await db.query<RowDataPacket[]>(
-        `SELECT id, name, description, generation_status, num_questions, folder_id
+        `SELECT 
+           id, 
+           name, 
+           description, 
+           generation_status, 
+           num_questions, 
+           folder_id, 
+           last_score
          FROM quizzes
          WHERE user_id = ? AND folder_id = ?
          ORDER BY id DESC`,
@@ -51,7 +65,15 @@ export async function GET(req: NextRequest) {
     const placeholders = quizIds.map(() => "?").join(", ");
 
     const [questionRows] = await db.query<RowDataPacket[]>(
-      `SELECT id, quiz_id, question, option_a, option_b, option_c, option_d, correct_answer
+      `SELECT 
+         id, 
+         quiz_id, 
+         question, 
+         option_a, 
+         option_b, 
+         option_c, 
+         option_d, 
+         correct_answer
        FROM quiz_questions
        WHERE quiz_id IN (${placeholders})`,
       quizIds
@@ -64,6 +86,7 @@ export async function GET(req: NextRequest) {
       generation_status: quiz.generation_status,
       num_questions: quiz.num_questions,
       folder_id: quiz.folder_id,
+      last_score: quiz.last_score, // ✅ include here
       questions: questionRows
         .filter((q) => q.quiz_id === quiz.id)
         .map((q) => ({

@@ -20,7 +20,7 @@ export default function DashboardPage() {
   const [displayItems, setDisplayItems] = useState<Item[]>([]);
   const [selectedItems, setSelectedItems] = useState<string[]>([]);
   const [activeFolderId, setActiveFolderId] = useState<string | null>(null);
-  const [folderStack, setFolderStack] = useState<string[]>([]); // ✅ track navigation history
+  const [folderStack, setFolderStack] = useState<string[]>([]);
 
   const [isActionChooserOpen, setIsActionChooserOpen] = useState(false);
   const [isCreateQuizOpen, setIsCreateQuizOpen] = useState(false);
@@ -48,7 +48,7 @@ export default function DashboardPage() {
     return mapped;
   };
 
-  /* ---------------- Fetch Quizzes ---------------- */
+  /* ---------------- Fetch Quizzes (with score) ---------------- */
   const fetchQuizzes = async (folderId: string | null) => {
     const res = await fetch(`/api/items/quizzes/getAll?folder=${folderId ?? "root"}`, {
       cache: "no-store",
@@ -59,6 +59,7 @@ export default function DashboardPage() {
       name: q.name,
       type: "quiz",
       folder_id: q.folder_id ? q.folder_id.toString() : null,
+      last_score: q.last_score ?? null, // ✅ include score
     }));
     setQuizzes(mapped);
     return mapped;
@@ -80,7 +81,6 @@ export default function DashboardPage() {
   /* ---------------- Folder Navigation ---------------- */
   const handleDoubleClick = (item: Item) => {
     if (item.type === "folder") {
-      // ✅ push the current folder ID before moving deeper
       if (activeFolderId) setFolderStack((prev) => [...prev, activeFolderId]);
       setActiveFolderId(item.id);
     } else if (item.type === "quiz") {
@@ -91,13 +91,12 @@ export default function DashboardPage() {
 
   const handleGoBack = () => {
     if (folderStack.length > 0) {
-      // ✅ pop back one level
       const prevStack = [...folderStack];
       const previous = prevStack.pop() || null;
       setFolderStack(prevStack);
       setActiveFolderId(previous);
     } else {
-      setActiveFolderId(null); // root level
+      setActiveFolderId(null);
     }
   };
 
@@ -127,7 +126,6 @@ export default function DashboardPage() {
   const handleDropOnFolder = async (source: Item | Item[], destinationFolderId: string) => {
     try {
       const sources = Array.isArray(source) ? source : [source];
-
       for (const s of sources) {
         if (s.type === "quiz") {
           await fetch(`/api/items/quizzes/move/${s.id}`, {
@@ -143,7 +141,6 @@ export default function DashboardPage() {
           });
         }
       }
-
       await refreshData(activeFolderId);
     } catch (err) {
       console.error("❌ Drop-on-folder failed:", err);
@@ -151,7 +148,7 @@ export default function DashboardPage() {
     }
   };
 
-  /* ---------------- ✅ Drop onto “move to parent” bar ---------------- */
+  /* ---------------- Drop onto “move to parent” bar ---------------- */
   const handleDropToParent = async (source: Item | Item[]) => {
     try {
       const sources = Array.isArray(source) ? source : [source];
@@ -222,7 +219,7 @@ export default function DashboardPage() {
         icon={BookOpen}
         activeFolder={activeFolderId}
         goBack={handleGoBack}
-        showBack={folderStack.length > 0 || !!activeFolderId} // ✅ ensures proper back visibility
+        showBack={folderStack.length > 0 || !!activeFolderId}
         selectedItems={selectedItems}
         onSelectAll={() => setSelectedItems(displayItems.map((i) => i.id))}
         onDeselectAll={() => setSelectedItems([])}
@@ -262,6 +259,7 @@ export default function DashboardPage() {
             ) : (
               <QuizCard
                 quizName={item.name}
+                lastScore={item.last_score ?? null} // ✅ Pass score to card
                 selected={isSelected}
                 onClick={onClick}
                 onDoubleClick={() => handleDoubleClick(item)}

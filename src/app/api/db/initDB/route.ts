@@ -103,8 +103,9 @@ async function initDatabase() {
     );
   `);
 
-  // ✅ Link quizzes to folders
+  // ✅ Link quizzes to folders and add last_score
   await ensureColumnExists("quizzes", "folder_id", "INT NULL");
+  await ensureColumnExists("quizzes", "last_score", "DECIMAL(5,2) NULL");
 
   /* QUIZ QUESTIONS */
   await db.query(`

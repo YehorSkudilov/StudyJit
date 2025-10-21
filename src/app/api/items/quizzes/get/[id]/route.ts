@@ -1,13 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/authOptions"; // ✅ Correct import
+import { authOptions } from "@/lib/authOptions";
 import db from "@/lib/db";
 import { RowDataPacket } from "mysql2";
 
 /**
  * GET /api/db/getQuiz/[id]
  * Fetch a single quiz with its details and questions.
- * Only accessible to the quiz owner.
  */
 export async function GET(
   _req: NextRequest,
@@ -38,7 +37,8 @@ export async function GET(
         description,
         prompt,
         num_questions,
-        generation_status
+        generation_status,
+        last_score
       FROM quizzes
       WHERE id = ? AND user_id = ?
       `,

@@ -69,7 +69,7 @@ export default function QuizPage() {
 
     const fetchQuiz = async () => {
       try {
-        const res = await fetch(`/api/db/getQuiz/${id}`);
+        const res = await fetch(`/api/items/quizzes/get/${id}`);
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || "Failed to load quiz");
 
@@ -106,24 +106,46 @@ export default function QuizPage() {
   };
 
   // ✅ Correct score calculation
-  const submitQuiz = () => {
-    let total = 0;
-    questions.forEach((q) => {
-      const correctIndex = getCorrectAnswerIndex(q);
-      const selected = answers[q.id];
-      if (
-        selected &&
-        q.options[correctIndex]?.trim().toLowerCase() ===
-          selected.trim().toLowerCase()
-      ) {
-        total++;
-      }
-    });
+// ✅ Correct score calculation + update in DB
+const submitQuiz = async () => {
+  let total = 0;
+  questions.forEach((q) => {
+    const correctIndex = getCorrectAnswerIndex(q);
+    const selected = answers[q.id];
+    if (
+      selected &&
+      q.options[correctIndex]?.trim().toLowerCase() ===
+        selected.trim().toLowerCase()
+    ) {
+      total++;
+    }
+  });
 
-    setScore(total);
-    setSubmitted(true);
-    setShowConfirmIncomplete(false);
-  };
+  const calculatedScore = total;
+  setScore(calculatedScore);
+  setSubmitted(true);
+  setShowConfirmIncomplete(false);
+
+  // ✅ Send updated score to the backend
+  try {
+    if (quizId) {
+      const res = await fetch("/api/items/quizzes/update", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: quizId,
+          lastScore: (calculatedScore / questions.length) * 100, // store as percentage
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to update score");
+      console.log("✅ Score updated:", data);
+    }
+  } catch (err) {
+    console.error("❌ Failed to update quiz score:", err);
+  }
+};
 
   const handleSubmit = () => {
     const answeredCount = Object.keys(answers).length;
