@@ -1,4 +1,5 @@
 "use client";
+
 import React, { useEffect, useState } from "react";
 import {
   Folder,
@@ -8,6 +9,7 @@ import {
   ChevronRight,
   ChevronDown,
   Check,
+  X,
 } from "lucide-react";
 
 interface FileItem {
@@ -309,24 +311,36 @@ export default function QuizAddFilePopup({
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 px-4 sm:px-0">
       <div
-        className="bg-white dark:bg-gray-800 rounded-t-2xl sm:rounded-2xl shadow-xl
+        className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl
                    w-[90vw] sm:w-full sm:max-w-lg
                    max-h-[85vh] overflow-y-auto
-                   p-5 sm:p-6 flex flex-col"
+                   p-5 sm:p-6 flex flex-col gap-4"
       >
-        <h2 className="text-lg sm:text-xl font-semibold mb-4 text-center text-gray-900 dark:text-gray-100">
-          Add Files to Quiz
-        </h2>
+        {/* Header */}
+        <div className="flex items-center justify-between">
+          <div className="w-12 sm:w-16"></div>
+          <h2 className="text-lg sm:text-xl font-semibold text-center text-gray-900 dark:text-gray-100 flex-1">
+            Add Files to Quiz
+          </h2>
+          <div className="w-12 sm:w-16 flex justify-end">
+            <button
+              onClick={onClose}
+              className="text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 transition"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+        </div>
 
         {/* 🔍 Search Bar */}
-        <div className="relative mb-3">
+        <div className="relative">
           <Search className="absolute left-3 top-2.5 text-gray-400 w-4 h-4" />
           <input
             type="text"
             placeholder="Search folders or files..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-9 pr-3 py-2 rounded border border-gray-300 dark:border-gray-600 
+            className="w-full pl-9 pr-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 
                        bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-gray-100 
                        focus:ring-2 focus:ring-blue-500 text-sm sm:text-base"
           />
@@ -343,32 +357,31 @@ export default function QuizAddFilePopup({
           )}
         </div>
 
-        {/* ⚠️ Limit warning */}
+        {/* ⚠️ Limit Warning */}
         {limitWarning && (
           <p className="text-red-500 text-sm text-center mt-2">
             You can select up to {MAX_SELECTION} files only.
           </p>
         )}
 
-        {/* 🧭 Footer Buttons */}
-        <div className="mt-4 flex flex-col sm:flex-row sm:justify-end gap-2">
+        {/* 🧭 Footer */}
+        <div className="flex flex-col sm:flex-row sm:justify-end gap-2 mt-3">
           <button
             onClick={onClose}
-            className="px-4 py-2 rounded bg-gray-300 dark:bg-gray-600 
+            className="px-4 py-2 rounded-lg bg-gray-300 dark:bg-gray-600 
                        text-gray-800 dark:text-gray-200 hover:bg-gray-400 
-                       dark:hover:bg-gray-500 transition text-sm sm:text-base"
+                       dark:hover:bg-gray-500 transition text-sm sm:text-base active:scale-[0.98]"
           >
             Cancel
           </button>
           <button
             onClick={handleAddFiles}
             disabled={selectedFiles.size === 0}
-            className={`px-4 py-2 rounded transition text-sm sm:text-base
-              ${
-                selectedFiles.size > 0
-                  ? "bg-blue-500 text-white hover:bg-blue-600"
-                  : "bg-gray-200 dark:bg-gray-700 text-gray-400 dark:text-gray-500 cursor-not-allowed"
-              }`}
+            className={`px-4 py-2 rounded-lg text-sm sm:text-base transition-all active:scale-[0.98] ${
+              selectedFiles.size > 0
+                ? "bg-blue-600 text-white hover:bg-blue-700 shadow-md"
+                : "bg-gray-200 dark:bg-gray-700 text-gray-400 dark:text-gray-500 cursor-not-allowed"
+            }`}
           >
             Add {selectedFiles.size > 0 ? `(${selectedFiles.size})` : ""}
           </button>

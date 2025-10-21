@@ -129,10 +129,37 @@ export default function GenericGrid({
     onClick: (e: React.MouseEvent) => void
   ) => React.ReactNode;
   onReorder?: (newOrder: Item[]) => void;
-  onDropOnFolder?: (source: Item | Item[], destinationFolderId: string) => void | Promise<void>;
+  onDropOnFolder?: (
+    source: Item | Item[],
+    destinationFolderId: string
+  ) => void | Promise<void>;
   onDropToParent?: (source: Item | Item[]) => void | Promise<void>;
   context?: "files" | "quizzes";
 }) {
+  /* -------------------- Prevent browser Shift-selection -------------------- */
+  useEffect(() => {
+    const handleSelectStart = (e: Event) => e.preventDefault();
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Shift") {
+        document.addEventListener("selectstart", handleSelectStart);
+      }
+    };
+    const handleKeyUp = (e: KeyboardEvent) => {
+      if (e.key === "Shift") {
+        document.removeEventListener("selectstart", handleSelectStart);
+      }
+    };
+
+    document.addEventListener("keydown", handleKeyDown);
+    document.addEventListener("keyup", handleKeyUp);
+
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown);
+      document.removeEventListener("keyup", handleKeyUp);
+      document.removeEventListener("selectstart", handleSelectStart);
+    };
+  }, []);
+
   /* -------------------- Sensors -------------------- */
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
@@ -170,8 +197,10 @@ export default function GenericGrid({
     setDraggingItems([]);
     setShowDropZone(false);
 
-    if (!active || !over) return;
-    const overItem = over?.data?.current?.item as Item;
+    // If no valid drop target, do nothing
+    if (!active || !over || active.id === over.id) return;
+
+    const overItem = over?.data?.current?.item as Item | undefined;
     const isMulti = draggingItems.length > 1;
 
     // Drop onto parent zone
@@ -188,17 +217,17 @@ export default function GenericGrid({
       return;
     }
 
-    // Reordering
-    if (!isMulti && !isOverFolder) {
-      const activeItem = active.data?.current?.item as Item;
-      if (!activeItem) return;
-      const oldIndex = items.findIndex((i) => i.id === activeItem.id);
-      const newIndex = items.findIndex((i) => i.id === over.id);
-      if (oldIndex !== -1 && newIndex !== -1) {
-        const newOrder = arrayMove(items, oldIndex, newIndex);
-        onReorder?.(newOrder);
-      }
-    }
+    // Reorder only if dropped on another item
+    const activeItem = active.data?.current?.item as Item | undefined;
+    if (!activeItem || !overItem) return;
+
+    const oldIndex = items.findIndex((i) => i.id === activeItem.id);
+    const newIndex = items.findIndex((i) => i.id === overItem.id);
+
+    if (oldIndex === -1 || newIndex === -1 || oldIndex === newIndex) return;
+
+    const newOrder = arrayMove(items, oldIndex, newIndex);
+    onReorder?.(newOrder);
   };
 
   /* -------------------- Delay drop zone -------------------- */
@@ -236,9 +265,10 @@ export default function GenericGrid({
 
   /* -------------------- Sort visible items -------------------- */
   const visibleItems = useMemo(() => {
-    const base = draggingItems.length === 0
-      ? items
-      : items.filter((i) => !draggingItems.some((d) => d.id === i.id));
+    const base =
+      draggingItems.length === 0
+        ? items
+        : items.filter((i) => !draggingItems.some((d) => d.id === i.id));
 
     return [...base].sort((a, b) => {
       if (a.type === "folder" && b.type !== "folder") return -1;

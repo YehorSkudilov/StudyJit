@@ -106,13 +106,13 @@ export default function FileUploadPopup({
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 px-4 sm:px-0">
       <div
-        className="bg-white dark:bg-gray-800 rounded-t-2xl sm:rounded-2xl shadow-xl 
+        className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl 
                    w-[90vw] sm:w-full sm:max-w-md 
                    max-h-[85vh] overflow-y-auto 
                    p-5 sm:p-6 flex flex-col gap-5"
       >
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-gray-200 dark:border-gray-700 pb-3">
+        <div className="flex items-center justify-between">
           <div className="w-12 sm:w-16"></div>
           <h2 className="text-lg sm:text-xl font-bold text-gray-900 dark:text-gray-100 flex-1 text-center">
             Upload Files
@@ -121,7 +121,7 @@ export default function FileUploadPopup({
             <button
               onClick={handleCancel}
               disabled={isUploading}
-              className={`text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 ${
+              className={`text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 transition ${
                 isUploading ? "opacity-50 cursor-not-allowed" : ""
               }`}
             >
@@ -198,7 +198,7 @@ export default function FileUploadPopup({
                   {!isUploading && (
                     <button
                       onClick={() => handleRemoveFile(file.name)}
-                      className="text-red-500 hover:text-red-700"
+                      className="text-red-500 hover:text-red-700 transition"
                       title="Remove File"
                     >
                       <Trash2 className="w-4 h-4" />
@@ -209,6 +209,7 @@ export default function FileUploadPopup({
             </div>
           )}
 
+          {/* Error Message */}
           {error && (
             <div className="flex items-center gap-2 text-red-600 dark:text-red-400 text-sm">
               <AlertCircle className="w-4 h-4" />
@@ -220,9 +221,10 @@ export default function FileUploadPopup({
           <button
             onClick={handleSubmit}
             disabled={inputFiles.length === 0 || isUploading}
-            className={`w-full py-2 sm:py-2.5 rounded-lg font-medium transition flex items-center justify-center gap-2 text-base sm:text-lg ${
+            className={`w-full py-2 sm:py-2.5 rounded-lg font-medium flex items-center justify-center gap-2 
+                       text-base sm:text-lg transition-all active:scale-[0.98] ${
               inputFiles.length > 0 && !isUploading
-                ? "bg-blue-600 text-white hover:bg-blue-700"
+                ? "bg-blue-600 text-white hover:bg-blue-700 shadow-md"
                 : "bg-gray-400 text-gray-200 cursor-not-allowed"
             }`}
           >

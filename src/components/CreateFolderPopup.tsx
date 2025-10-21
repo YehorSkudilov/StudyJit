@@ -34,7 +34,7 @@ export default function CreateFolderPopup({
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 px-4 sm:px-0">
       <div
-        className="bg-white dark:bg-gray-800 rounded-t-2xl sm:rounded-xl shadow-xl
+        className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl 
                    w-[90vw] sm:w-full sm:max-w-sm 
                    max-h-[85vh] overflow-y-auto 
                    p-5 sm:p-6 flex flex-col gap-4"
@@ -48,7 +48,7 @@ export default function CreateFolderPopup({
           <div className="w-12 sm:w-16 flex justify-end">
             <button
               onClick={handleCancel}
-              className="text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
+              className="text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 transition"
             >
               <X className="w-5 h-5" />
             </button>
@@ -61,7 +61,7 @@ export default function CreateFolderPopup({
           placeholder="Enter Folder Name"
           value={folderName}
           onChange={(e) => setFolderName(e.target.value)}
-          className="w-full px-4 py-2 rounded border border-gray-300 dark:border-gray-600 
+          className="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 
                      focus:outline-none focus:ring-2 focus:ring-blue-500 
                      dark:bg-gray-700 dark:text-gray-100 text-base sm:text-lg"
         />
@@ -70,7 +70,8 @@ export default function CreateFolderPopup({
         <button
           onClick={handleSubmit}
           className="w-full bg-yellow-500 text-white py-2 sm:py-2.5 rounded-lg 
-                     hover:bg-yellow-600 transition flex justify-center items-center gap-2 text-base sm:text-lg font-medium"
+                     hover:bg-yellow-600 transition flex justify-center items-center gap-2 
+                     text-base sm:text-lg font-medium shadow-md active:scale-[0.98]"
         >
           <Folder className="w-5 h-5" /> Create Folder
         </button>

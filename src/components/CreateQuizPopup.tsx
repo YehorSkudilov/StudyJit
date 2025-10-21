@@ -53,7 +53,7 @@ export default function CreateQuizPopup({
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 px-4 sm:px-0">
       <div
-        className="bg-white dark:bg-gray-800 rounded-t-2xl sm:rounded-xl shadow-xl 
+        className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl 
                    w-[90vw] sm:w-full sm:max-w-sm 
                    max-h-[85vh] overflow-y-auto 
                    p-5 sm:p-6 flex flex-col gap-4"
@@ -68,7 +68,7 @@ export default function CreateQuizPopup({
             <button
               onClick={handleCancel}
               disabled={isSubmitting}
-              className={`text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 ${
+              className={`text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 transition ${
                 isSubmitting ? "opacity-50 cursor-not-allowed" : ""
               }`}
             >
@@ -84,9 +84,10 @@ export default function CreateQuizPopup({
           value={quizName}
           onChange={(e) => setQuizName(e.target.value)}
           disabled={isSubmitting}
-          className="w-full px-4 py-2 rounded border border-gray-300 dark:border-gray-600 
+          className="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 
                      focus:outline-none focus:ring-2 focus:ring-blue-500 
-                     dark:bg-gray-700 dark:text-gray-100 disabled:opacity-50 text-base sm:text-lg"
+                     dark:bg-gray-700 dark:text-gray-100 disabled:opacity-50 
+                     text-base sm:text-lg"
         />
 
         <textarea
@@ -94,12 +95,13 @@ export default function CreateQuizPopup({
           value={description}
           onChange={(e) => setDescription(e.target.value)}
           disabled={isSubmitting}
-          className="w-full px-4 py-2 rounded border border-gray-300 dark:border-gray-600 
+          className="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 
                      focus:outline-none focus:ring-2 focus:ring-blue-500 
                      dark:bg-gray-700 dark:text-gray-100 resize-none 
                      h-24 disabled:opacity-50 text-base sm:text-lg"
         />
 
+        {/* Error Message */}
         {error && (
           <div className="flex items-center gap-2 text-red-600 dark:text-red-400 text-sm">
             <AlertCircle className="w-4 h-4" />
@@ -107,14 +109,16 @@ export default function CreateQuizPopup({
           </div>
         )}
 
+        {/* Create Button */}
         <button
           onClick={handleSubmit}
           disabled={isSubmitting}
           className={`w-full py-2 sm:py-2.5 rounded-lg flex justify-center items-center gap-2 
-                     text-white font-medium text-base sm:text-lg transition ${
+                     text-white font-medium text-base sm:text-lg transition-all 
+                     active:scale-[0.98] ${
             isSubmitting
               ? "bg-gray-400 cursor-not-allowed"
-              : "bg-blue-600 hover:bg-blue-700"
+              : "bg-blue-600 hover:bg-blue-700 shadow-md"
           }`}
         >
           <BookPlus className="w-5 h-5" />

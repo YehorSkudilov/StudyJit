@@ -19,7 +19,7 @@ interface GenericActionPopupProps {
   actions: ActionItem[];
 }
 
-// ✅ Static Tailwind color mappings
+// ✅ Tailwind color mappings
 const colorClasses = {
   blue: {
     bg: "bg-blue-50 dark:bg-blue-900/20",
@@ -64,13 +64,13 @@ export default function GenericActionPopup({
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 px-4 sm:px-0">
       <div
-        className="bg-white dark:bg-gray-800 rounded-t-2xl sm:rounded-2xl shadow-xl
+        className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl
                    w-[90vw] sm:w-full sm:max-w-md
                    max-h-[85vh] overflow-y-auto
                    p-5 sm:p-6 flex flex-col gap-5"
       >
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-gray-200 dark:border-gray-700 pb-3">
+        <div className="flex items-center justify-between">
           <div className="w-12 sm:w-16"></div>
           <h2 className="text-lg sm:text-xl font-semibold text-gray-900 dark:text-gray-100 flex-1 text-center">
             {title}
@@ -78,7 +78,7 @@ export default function GenericActionPopup({
           <div className="w-12 sm:w-16 flex justify-end">
             <button
               onClick={onClose}
-              className="text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
+              className="text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 transition"
             >
               <X className="w-5 h-5" />
             </button>
@@ -96,8 +96,7 @@ export default function GenericActionPopup({
                   action.onClick();
                   onClose();
                 }}
-                className={`flex items-center gap-3 p-4 border-2 rounded-xl transition group
-                  ${color.bg} ${color.border} ${color.hover}`}
+                className={`flex items-center gap-3 p-4 border-2 rounded-xl transition-all active:scale-[0.98] ${color.bg} ${color.border} ${color.hover}`}
               >
                 <div
                   className={`w-12 h-12 ${color.solid} rounded-lg flex items-center justify-center flex-shrink-0`}
