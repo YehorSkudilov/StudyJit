@@ -7,24 +7,19 @@ export async function POST(req: NextRequest) {
   console.log("🟡 [CreateQuiz] Request received");
 
   try {
-    // 1️⃣ Try to get session
+    // 1️⃣ Verify user session
     const session = await getServerSession(authOptions);
-    console.log("🟢 [CreateQuiz] Session:", session);
-
     if (!session?.user?.id) {
-      console.error("🔴 [CreateQuiz] No valid user session");
-      return NextResponse.json({ error: "Unauthorized (no session)" }, { status: 401 });
+      console.error("🔴 [CreateQuiz] Unauthorized - no session");
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
     const userId = session.user.id;
     console.log(`🟢 [CreateQuiz] User ID: ${userId}`);
 
-    // 2️⃣ Parse JSON body
-    let body: any;
-    try {
-      body = await req.json();
-    } catch {
-      console.error("🔴 [CreateQuiz] Failed to parse request JSON");
+    // 2️⃣ Parse JSON
+    const body = await req.json().catch(() => null);
+    if (!body) {
       return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
     }
 
@@ -33,46 +28,45 @@ export async function POST(req: NextRequest) {
       description = "",
       prompt = "",
       numQuestions = 10,
-      folder_id = null,
+      folder_id = null, // 👈 will come from frontend
     } = body;
 
     console.log("🟢 [CreateQuiz] Body:", body);
 
-    // 3️⃣ Validation
+    // 3️⃣ Validate name
     if (!name?.trim()) {
-      console.error("🔴 [CreateQuiz] Missing quiz name");
       return NextResponse.json({ error: "Quiz name is required" }, { status: 400 });
     }
 
     const validNumQuestions = Math.min(Math.max(Number(numQuestions), 1), 50);
 
-    // 4️⃣ Check duplicates
+    // 4️⃣ Prevent duplicate names in same folder (optional)
     const [existing]: any = await db.query(
-      `SELECT id FROM quizzes WHERE user_id = ? AND name = ?`,
-      [userId, name.trim()]
+      `SELECT id FROM quizzes WHERE user_id = ? AND name = ? AND IFNULL(folder_id, 'root') = IFNULL(?, 'root')`,
+      [userId, name.trim(), folder_id]
     );
-    console.log("🟢 [CreateQuiz] Existing quizzes with same name:", existing.length);
 
     if (existing.length > 0) {
-      console.warn("🟠 [CreateQuiz] Duplicate quiz name detected");
+      console.warn("🟠 [CreateQuiz] Duplicate quiz name in folder detected");
       return NextResponse.json(
-        { error: "You already have a quiz with this name" },
+        { error: "A quiz with this name already exists in this folder" },
         { status: 409 }
       );
     }
 
-    // 5️⃣ Insert quiz
+    // 5️⃣ Insert quiz (folder_id can be NULL or a valid ID)
     const [result]: any = await db.query(
       `INSERT INTO quizzes (user_id, folder_id, name, description, prompt, num_questions, generation_status)
        VALUES (?, ?, ?, ?, ?, ?, 'never_generated')`,
-      [userId, folder_id, name.trim(), description, prompt, validNumQuestions]
+      [userId, folder_id || null, name.trim(), description, prompt, validNumQuestions]
     );
 
-    console.log("✅ [CreateQuiz] Quiz inserted:", result);
+    console.log(`✅ [CreateQuiz] Created quiz '${name}' in folder ${folder_id ?? "root"}`);
 
     return NextResponse.json({
       success: true,
       quizId: result.insertId,
+      folderId: folder_id ?? "root",
       message: "Quiz created successfully",
     });
   } catch (err: any) {

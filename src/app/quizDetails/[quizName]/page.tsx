@@ -58,7 +58,7 @@ export default function QuizDetailsPage() {
 
     const fetchQuiz = async () => {
       try {
-        const res = await fetch(`/api/db/getQuiz/${id}`);
+        const res = await fetch(`/api/items/quizzes/get/${id}`);
         const data = await res.json();
         setQuizTitle(data.name);
         setDescription(data.description);
@@ -79,7 +79,7 @@ export default function QuizDetailsPage() {
     if (!quizId) return;
     const fetchDocuments = async () => {
       try {
-        const res = await fetch(`/api/db/quizFiles/get/${quizId}`);
+        const res = await fetch(`/api/items/quizzes/files/get/${quizId}`);
         const data = await res.json();
         setOriginalDocuments(data);
         setStagedDocuments(data);
@@ -104,7 +104,7 @@ const handleSaveAndGenerate = async () => {
 
   try {
     console.log("💾 Saving quiz info and preparing generation...");
-    const updateRes = await fetch("/api/db/updateQuiz", {
+    const updateRes = await fetch("/api/items/quizzes/update", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -132,14 +132,14 @@ const handleSaveAndGenerate = async () => {
     );
 
     for (const file of added) {
-      await fetch("/api/db/quizFiles/add", {
+      await fetch("/api/items/quizzes/files/add", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ quizId, fileId: file.id }),
       });
     }
     for (const file of removed) {
-      await fetch("/api/db/quizFiles/remove", {
+      await fetch("/api/items/quizzes/files/remove", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ quiz_id: quizId, file_id: file.id }),
@@ -149,7 +149,7 @@ const handleSaveAndGenerate = async () => {
     setOriginalDocuments(stagedDocuments);
     setGenerationStatus("pending");
 
-    await fetch("/api/db/quizStatus/update", {
+    await fetch("/api/items/quizzes/status/update", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id: quizId, status: "pending" }),
@@ -179,7 +179,7 @@ const handleSaveAndGenerate = async () => {
     if (res.ok && data?.success) {
       console.log("✅ Quiz generation successful:", data);
       setGenerationStatus("success");
-      await fetch("/api/db/quizStatus/update", {
+      await fetch("/api/items/quizzes/status/update", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ id: quizId, status: "success" }),
@@ -187,7 +187,7 @@ const handleSaveAndGenerate = async () => {
     } else {
       console.error("❌ Quiz generation failed:", data || rawText);
       setGenerationStatus("failed");
-      await fetch("/api/db/quizStatus/update", {
+      await fetch("/api/items/quizzes/status/update", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ id: quizId, status: "failed" }),
@@ -237,36 +237,40 @@ const handleSaveAndGenerate = async () => {
 
 
           {/* Title + Status */}
-          <header className="text-center mt-2 sm:mt-0">
-            <div className="flex flex-col sm:flex-row justify-center sm:items-center gap-2 mb-2">
-              <div className="flex items-center justify-center gap-2">
-                <BookOpen className="w-5 h-5 sm:w-6 sm:h-6 text-blue-500" />
-                {editingName ? (
-                  <input
-                    type="text"
-                    value={quizTitle}
-                    onChange={(e) => setQuizTitle(e.target.value)}
-                    className="text-2xl sm:text-3xl font-bold bg-gray-50 dark:bg-gray-700 rounded px-2 py-1 border border-gray-300 dark:border-gray-600 text-blue-600 dark:text-blue-400 focus:ring-2 focus:ring-blue-500"
-                  />
-                ) : (
-                  <h1 className="text-2xl sm:text-3xl font-bold text-blue-600 dark:text-blue-400 truncate max-w-[85vw]">
-                    {quizTitle}
-                  </h1>
-                )}
-                <button
-                  onClick={() => setEditingName((prev) => !prev)}
-                  className={`p-1 rounded-full transition-colors ${
-                    editingName
-                      ? "text-green-600 hover:bg-green-500 hover:text-white"
-                      : "text-gray-600 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600"
-                  }`}
-                >
-                  {editingName ? <Check className="w-4 h-4" /> : <Edit2 className="w-4 h-4" />}
-                </button>
-              </div>
-              <div className="mt-1 sm:mt-0">{getStatusIndicator()}</div>
-            </div>
-          </header>
+<header className="text-center mt-2 sm:mt-0">
+  <div className="flex flex-col items-center gap-2 mb-2">
+    {/* Title + Edit Button */}
+    <div className="flex items-center justify-center gap-2">
+      <BookOpen className="w-5 h-5 sm:w-6 sm:h-6 text-blue-500" />
+      {editingName ? (
+        <input
+          type="text"
+          value={quizTitle}
+          onChange={(e) => setQuizTitle(e.target.value)}
+          className="text-2xl sm:text-3xl font-bold bg-gray-50 dark:bg-gray-700 rounded px-2 py-1 border border-gray-300 dark:border-gray-600 text-blue-600 dark:text-blue-400 focus:ring-2 focus:ring-blue-500"
+        />
+      ) : (
+        <h1 className="text-2xl sm:text-3xl font-bold text-blue-600 dark:text-blue-400 truncate max-w-[85vw]">
+          {quizTitle}
+        </h1>
+      )}
+      <button
+        onClick={() => setEditingName((prev) => !prev)}
+        className={`p-1 rounded-full transition-colors ${
+          editingName
+            ? "text-green-600 hover:bg-green-500 hover:text-white"
+            : "text-gray-600 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600"
+        }`}
+      >
+        {editingName ? <Check className="w-4 h-4" /> : <Edit2 className="w-4 h-4" />}
+      </button>
+    </div>
+
+    {/* ✅ Status directly under the title */}
+    <div className="mt-1">{getStatusIndicator()}</div>
+  </div>
+</header>
+
 
           {/* Description */}
           <section className="flex flex-col gap-2">

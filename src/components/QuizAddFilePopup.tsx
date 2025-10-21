@@ -1,18 +1,36 @@
 "use client";
 import React, { useEffect, useState } from "react";
-import { File, Search, Check } from "lucide-react";
+import { Folder, FolderOpen, File, Search, ChevronRight, ChevronDown, Check } from "lucide-react";
 
 interface FileItem {
   id: number;
   name: string;
-  size: number;
+  size?: number;
+  folder_id?: number | null;
+  type: "file";
+}
+
+interface FolderItem {
+  id: number;
+  name: string;
+  parent_id?: number | null;
+  type: "folder";
 }
 
 interface QuizAddFilePopupProps {
   isOpen: boolean;
   onClose: () => void;
-  onAddFiles: (files: FileItem[]) => void; // ✅ Now accepts multiple files
+  onAddFiles: (files: FileItem[]) => void;
   existingFileIds: number[];
+}
+
+/* ---------------- Tree Node ---------------- */
+interface TreeNode {
+  id: number;
+  name: string;
+  type: "folder" | "file";
+  size?: number;
+  children?: TreeNode[];
 }
 
 export default function QuizAddFilePopup({
@@ -21,79 +39,174 @@ export default function QuizAddFilePopup({
   onAddFiles,
   existingFileIds,
 }: QuizAddFilePopupProps) {
-  const [files, setFiles] = useState<FileItem[]>([]);
-  const [search, setSearch] = useState("");
+  const [tree, setTree] = useState<TreeNode[]>([]);
+  const [expanded, setExpanded] = useState<Set<number>>(new Set());
   const [selectedFiles, setSelectedFiles] = useState<Set<number>>(new Set());
+  const [search, setSearch] = useState("");
 
+  /* ---------------- Fetch folders & files ---------------- */
   useEffect(() => {
-    if (!isOpen) {
-      setSelectedFiles(new Set()); // Reset selection when closed
-      return;
-    }
+    if (!isOpen) return;
 
-    const fetchFiles = async () => {
+    const fetchAll = async () => {
       try {
-        const res = await fetch("/api/db/files");
-        const data = await res.json();
-        const filtered = data.filter(
-          (f: FileItem) => !existingFileIds.includes(f.id)
-        );
-        setFiles(filtered);
+        const [foldersRes, filesRes] = await Promise.all([
+          fetch("/api/items/folders?context=files"),
+          fetch("/api/items/files"),
+        ]);
+        const folders: FolderItem[] = await foldersRes.json();
+        const files: FileItem[] = await filesRes.json();
+
+        const filteredFiles = files.filter((f) => !existingFileIds.includes(f.id));
+
+        const folderMap = new Map<number | null, TreeNode[]>();
+
+        folders.forEach((f) => {
+          const node: TreeNode = { id: f.id, name: f.name, type: "folder", children: [] };
+          const parent = f.parent_id ?? null;
+          if (!folderMap.has(parent)) folderMap.set(parent, []);
+          folderMap.get(parent)!.push(node);
+        });
+
+        filteredFiles.forEach((f) => {
+          const node: TreeNode = { id: f.id, name: f.name, size: f.size, type: "file" };
+          const parent = f.folder_id ?? null;
+          if (!folderMap.has(parent)) folderMap.set(parent, []);
+          folderMap.get(parent)!.push(node);
+        });
+
+        const buildTree = (parent: number | null): TreeNode[] =>
+          (folderMap.get(parent) || []).map((n) =>
+            n.type === "folder" ? { ...n, children: buildTree(n.id) } : n
+          );
+
+        setTree(buildTree(null));
       } catch (err) {
-        console.error("❌ Failed to load files:", err);
+        console.error("❌ Failed to load folder/file tree:", err);
       }
     };
 
-    fetchFiles();
+    fetchAll();
   }, [isOpen, existingFileIds]);
 
-  if (!isOpen) return null;
-
-  const filteredFiles = files.filter((file) =>
-    file.name.toLowerCase().includes(search.toLowerCase())
-  );
-
-  const toggleFile = (fileId: number) => {
-    setSelectedFiles((prev) => {
+  /* ---------------- Folder Expand ---------------- */
+  const toggleExpand = (id: number) => {
+    setExpanded((prev) => {
       const newSet = new Set(prev);
-      if (newSet.has(fileId)) {
-        newSet.delete(fileId);
-      } else {
-        newSet.add(fileId);
-      }
+      newSet.has(id) ? newSet.delete(id) : newSet.add(id);
       return newSet;
     });
   };
 
+  /* ---------------- File Select ---------------- */
+  const toggleFile = (id: number) => {
+    setSelectedFiles((prev) => {
+      const newSet = new Set(prev);
+      newSet.has(id) ? newSet.delete(id) : newSet.add(id);
+      return newSet;
+    });
+  };
+
+  /* ---------------- Add Selected Files ---------------- */
   const handleAddFiles = () => {
-    const filesToAdd = files.filter((file) => selectedFiles.has(file.id));
-    if (filesToAdd.length > 0) {
-      onAddFiles(filesToAdd);
-      onClose();
-    }
+    const selected: FileItem[] = [];
+    const traverse = (nodes: TreeNode[]) => {
+      for (const n of nodes) {
+        if (n.type === "file" && selectedFiles.has(n.id))
+          selected.push({ id: n.id, name: n.name, size: n.size ?? 0, type: "file" });
+        if (n.children) traverse(n.children);
+      }
+    };
+    traverse(tree);
+    onAddFiles(selected);
+    onClose();
   };
 
-  const selectAll = () => {
-    setSelectedFiles(new Set(filteredFiles.map((f) => f.id)));
-  };
+  /* ---------------- Render Tree Recursively ---------------- */
+  const renderTree = (nodes: TreeNode[], depth = 0) => (
+    <ul className="ml-2">
+      {nodes
+        .filter((n) => n.name.toLowerCase().includes(search.toLowerCase()))
+        .map((node) => (
+          <li key={node.id} className="my-1">
+            <div
+              className={`flex items-center py-1 px-2 rounded cursor-pointer transition ${
+                node.type === "file"
+                  ? selectedFiles.has(node.id)
+                    ? "bg-blue-100 dark:bg-blue-900 border border-blue-500"
+                    : "hover:bg-gray-100 dark:hover:bg-gray-700"
+                  : "hover:bg-gray-100 dark:hover:bg-gray-700"
+              }`}
+              style={{ paddingLeft: `${depth * 14 + 6}px` }}
+              onClick={() =>
+                node.type === "folder"
+                  ? toggleExpand(node.id)
+                  : toggleFile(node.id)
+              }
+            >
+              {node.type === "folder" ? (
+                <>
+                  {expanded.has(node.id) ? (
+                    <ChevronDown className="w-4 h-4 mr-1 text-gray-500" />
+                  ) : (
+                    <ChevronRight className="w-4 h-4 mr-1 text-gray-500" />
+                  )}
+                  {expanded.has(node.id) ? (
+                    <FolderOpen className="w-4 h-4 text-yellow-500 mr-2" />
+                  ) : (
+                    <Folder className="w-4 h-4 text-yellow-500 mr-2" />
+                  )}
+                  <span className="font-medium text-gray-800 dark:text-gray-200">{node.name}</span>
+                </>
+              ) : (
+                <>
+                  <div
+                    className={`w-4 h-4 mr-2 rounded border flex items-center justify-center ${
+                      selectedFiles.has(node.id)
+                        ? "bg-blue-500 border-blue-500"
+                        : "border-gray-300 dark:border-gray-600"
+                    }`}
+                  >
+                    {selectedFiles.has(node.id) && (
+                      <Check className="w-3 h-3 text-white" />
+                    )}
+                  </div>
+                  <File className="w-4 h-4 text-blue-500 mr-2" />
+                  <span className="text-gray-800 dark:text-gray-100 flex-1 truncate">
+                    {node.name}
+                  </span>
+                  {node.size && (
+                    <span className="text-xs text-gray-400">
+                      {(node.size / 1024).toFixed(1)} KB
+                    </span>
+                  )}
+                </>
+              )}
+            </div>
+            {node.children &&
+              node.children.length > 0 &&
+              expanded.has(node.id) &&
+              renderTree(node.children, depth + 1)}
+          </li>
+        ))}
+    </ul>
+  );
 
-  const deselectAll = () => {
-    setSelectedFiles(new Set());
-  };
+  if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-      <div className="bg-white dark:bg-gray-800 rounded-lg p-6 shadow-xl w-[480px]">
+      <div className="bg-white dark:bg-gray-800 rounded-lg p-6 shadow-xl w-[500px] max-h-[85vh] flex flex-col">
         <h2 className="text-xl font-semibold mb-4 text-center text-gray-900 dark:text-gray-100">
           Add Files to Quiz
         </h2>
 
-        {/* 🔍 Search Bar */}
+        {/* Search */}
         <div className="relative mb-3">
           <Search className="absolute left-3 top-2.5 text-gray-400 w-4 h-4" />
           <input
             type="text"
-            placeholder="Search files..."
+            placeholder="Search folders or files..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="w-full pl-9 pr-3 py-2 rounded border border-gray-300 dark:border-gray-600 
@@ -101,80 +214,18 @@ export default function QuizAddFilePopup({
           />
         </div>
 
-        {/* Selection Controls */}
-        {filteredFiles.length > 0 && (
-          <div className="flex items-center justify-between mb-2 text-sm">
-            <span className="text-gray-600 dark:text-gray-400">
-              {selectedFiles.size} selected
-            </span>
-            <div className="flex gap-2">
-              <button
-                onClick={selectAll}
-                className="text-blue-600 dark:text-blue-400 hover:underline"
-              >
-                Select All
-              </button>
-              {selectedFiles.size > 0 && (
-                <button
-                  onClick={deselectAll}
-                  className="text-blue-600 dark:text-blue-400 hover:underline"
-                >
-                  Deselect All
-                </button>
-              )}
-            </div>
-          </div>
-        )}
+        {/* Tree list */}
+        <div className="flex-1 overflow-y-auto border border-gray-200 dark:border-gray-700 rounded-lg p-2">
+          {tree.length === 0 ? (
+            <p className="text-gray-500 dark:text-gray-400 text-center py-8">
+              No folders or files found.
+            </p>
+          ) : (
+            renderTree(tree)
+          )}
+        </div>
 
-        {filteredFiles.length === 0 ? (
-          <p className="text-gray-500 dark:text-gray-400 text-center py-8">
-            {files.length === 0
-              ? "No available files to add."
-              : "No files match your search."}
-          </p>
-        ) : (
-          <ul className="space-y-2 max-h-80 overflow-y-auto pr-2 mb-4">
-            {filteredFiles.map((file) => {
-              const isSelected = selectedFiles.has(file.id);
-              return (
-                <li
-                  key={file.id}
-                  onClick={() => toggleFile(file.id)}
-                  className={`cursor-pointer p-3 rounded transition flex justify-between items-center
-                    ${
-                      isSelected
-                        ? "bg-blue-100 dark:bg-blue-900 border-2 border-blue-500"
-                        : "hover:bg-gray-100 dark:hover:bg-gray-700 border-2 border-transparent"
-                    }`}
-                >
-                  <div className="flex items-center gap-3 flex-1">
-                    {/* Checkbox indicator */}
-                    <div
-                      className={`w-5 h-5 rounded border-2 flex items-center justify-center transition
-                        ${
-                          isSelected
-                            ? "bg-blue-500 border-blue-500"
-                            : "border-gray-300 dark:border-gray-600"
-                        }`}
-                    >
-                      {isSelected && <Check className="w-4 h-4 text-white" />}
-                    </div>
-                    
-                    <File className="w-5 h-5 text-blue-500 flex-shrink-0" />
-                    <span className="truncate max-w-[240px] text-gray-900 dark:text-gray-100">
-                      {file.name}
-                    </span>
-                  </div>
-                  <span className="text-sm text-gray-400 dark:text-gray-300 ml-2">
-                    {(file.size / 1024).toFixed(1)} KB
-                  </span>
-                </li>
-              );
-            })}
-          </ul>
-        )}
-
-        {/* Action Buttons */}
+        {/* Footer Buttons */}
         <div className="mt-4 flex justify-end gap-2">
           <button
             onClick={onClose}

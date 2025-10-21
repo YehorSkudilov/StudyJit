@@ -278,11 +278,15 @@ export default function FilesPage() {
 <MoveItemPopup
   isOpen={isMovePopupOpen}
   onClose={() => setIsMovePopupOpen(false)}
-  folders={folders.map((f: Item) => ({
-    id: f.id.toString(),
-    name: f.name,
-    parent_id: (f as any).parent_id ?? null,
-  }))}
+  folders={folders
+    // 🧠 Filter out selected folder(s) so you can't move inside itself
+    .filter((f) => !selectedItems.includes(f.id))
+    .map((f: Item) => ({
+      id: f.id.toString(),
+      name: f.name,
+      parent_id: (f as any).parent_id ?? null,
+    }))
+  }
   onMove={handleMoveItems}
   showRoot={
     // ✅ show Root only if at least one selected item is NOT in root
@@ -295,6 +299,7 @@ export default function FilesPage() {
     })
   }
 />
+
 
 
 

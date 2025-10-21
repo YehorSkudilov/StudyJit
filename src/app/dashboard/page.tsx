@@ -97,10 +97,17 @@ export default function DashboardPage() {
   }, [activeFolderId]);
 
   /* ---------------- Folder Navigation ---------------- */
-  const handleDoubleClick = (item: Item) => {
-    if (item.type === "folder") setActiveFolderId(item.id);
-    else router.push(`/quizDetails/${encodeURIComponent(item.name)}`);
-  };
+const handleDoubleClick = (item: Item) => {
+  if (item.type === "folder") {
+    setActiveFolderId(item.id);
+  } else if (item.type === "quiz") {
+    sessionStorage.setItem("selectedQuizId", String(item.id));
+
+    // ✅ Navigate to details page
+    router.push(`/quizDetails/${encodeURIComponent(item.name)}`);
+  }
+};
+
 
   const handleGoBack = () => {
     const currentFolder = folders.find((f) => f.id === activeFolderId);
