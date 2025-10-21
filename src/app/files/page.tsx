@@ -113,6 +113,31 @@ export default function FilesPage() {
     }
   };
 
+    /* ---------------- Folder Rename ---------------- */
+  const handleRenameFolder = async (newName: string) => {
+    if (!activeFolderId) return;
+    try {
+      const res = await fetch(`/api/items/folders/rename/${activeFolderId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: newName, context: "files" }),
+      });
+
+      if (!res.ok) {
+        const err = await res.json();
+        setAlertMessage(err.error || "Rename failed.");
+        return;
+      }
+
+      const data = await res.json();
+      setActiveFolderName(data.name);
+      await refreshData(activeFolderId);
+    } catch {
+      setAlertMessage("Rename failed. Please try again.");
+    }
+  };
+
+
   /* ---------------- Folder Create ---------------- */
   const handleCreateFolder = async (name: string) => {
     await fetch("/api/items/folders", {
@@ -123,6 +148,7 @@ export default function FilesPage() {
     await refreshData(activeFolderId);
     setIsCreateFolderOpen(false);
   };
+  
 
   /* ---------------- File Upload ---------------- */
   const handleFileUpload = async (file: globalThis.File, onProgress?: (p: number) => void) => {
@@ -238,18 +264,28 @@ export default function FilesPage() {
   /* ---------------- Render ---------------- */
   return (
     <div className="min-h-screen flex flex-col bg-gray-50 dark:bg-gray-900">
-      <PageHeader
-        title={activeFolderName}
-        icon={FileIcon}
-        goBack={handleGoBack}
-        showBack={folderStack.length > 0 || !!activeFolderId}
-        selectedItems={selectedItems}
-        onSelectAll={() => setSelectedItems(displayItems.map((i) => i.id))}
-        onDeselectAll={() => setSelectedItems([])}
-        extraActions={[
-          { icon: Trash2, label: "Delete", color: "red", onClick: () => setConfirmDelete(true), disabled: !selectedItems.length },
-        ]}
-      />
+<PageHeader
+  title={activeFolderName}
+  icon={activeFolderId ? FolderPlus : FileIcon} // shows folder icon when inside
+  goBack={handleGoBack}
+  showBack={folderStack.length > 0 || !!activeFolderId}
+  activeFolder={activeFolderName}
+  canRename={!!activeFolderId} // enable rename when inside folder
+  onRename={handleRenameFolder} // attach rename handler
+  selectedItems={selectedItems}
+  onSelectAll={() => setSelectedItems(displayItems.map((i) => i.id))}
+  onDeselectAll={() => setSelectedItems([])}
+  extraActions={[
+    {
+      icon: Trash2,
+      label: "Delete",
+      color: "red",
+      onClick: () => setConfirmDelete(true),
+      disabled: !selectedItems.length,
+    },
+  ]}
+/>
+
 
       <main className="px-6 sm:px-20 pb-20">
         <GenericGrid
