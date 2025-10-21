@@ -93,7 +93,7 @@ export default function PageHeader({
   };
 
   return (
-    <section className="relative px-4 sm:px-8 py-4 sm:py-6 border-b border-gray-200 dark:border-gray-700">
+    <section className="relative px-4 sm:px-8 pt-4 sm:pt-6 pb-3 sm:pb-4 bg-transparent">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
         {/* ← Left: Back + Title */}
         <div className="flex items-center gap-2 sm:gap-3 flex-wrap justify-center sm:justify-start">
@@ -111,7 +111,7 @@ export default function PageHeader({
 
           {!editing ? (
             <>
-              <h1 className="text-xl sm:text-3xl font-bold truncate max-w-[70vw] text-center sm:text-left">
+              <h1 className="text-2xl sm:text-3xl font-bold truncate text-center sm:text-left text-gray-900 dark:text-gray-100">
                 {activeFolder || title}
               </h1>
               {canRename && (
@@ -127,7 +127,7 @@ export default function PageHeader({
           ) : (
             <div className="flex items-center gap-2">
               <input
-                className="border border-gray-400 dark:border-gray-600 rounded-lg px-2 py-1 text-base bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none w-40 sm:w-60"
+                className="border border-gray-400 dark:border-gray-600 rounded-lg px-2 py-1 text-base bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none w-44 sm:w-64"
                 value={newName}
                 onChange={(e) => setNewName(e.target.value)}
                 onKeyDown={handleKeyDown}
@@ -155,7 +155,7 @@ export default function PageHeader({
         </div>
 
         {/* ↓ Second line: Actions */}
-        <div className="flex flex-wrap items-center justify-center sm:justify-end gap-2 sm:gap-3 mt-2 sm:mt-0">
+        <div className="flex flex-wrap items-center justify-center sm:justify-end gap-2 sm:gap-3 mt-1 sm:mt-0">
           {hasSelection && onDeleteSelected && (
             <button
               onClick={onDeleteSelected}
