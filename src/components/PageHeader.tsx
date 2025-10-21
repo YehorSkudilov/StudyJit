@@ -10,11 +10,13 @@ import {
   LucideIcon,
 } from "lucide-react";
 
+/* -------------------- Types -------------------- */
 interface ExtraAction {
   icon: LucideIcon;
   label: string;
   onClick: () => void;
   disabled?: boolean;
+  color?: "blue" | "red" | "green" | "yellow"; // ✅ added color support
 }
 
 interface PageHeaderProps {
@@ -31,6 +33,7 @@ interface PageHeaderProps {
   color?: "blue" | "yellow" | "green" | "red";
 }
 
+/* -------------------- Component -------------------- */
 export default function PageHeader({
   title,
   icon: Icon,
@@ -93,6 +96,7 @@ export default function PageHeader({
         >
           {hasSelection && (
             <>
+              {/* Optional delete button */}
               {onDeleteSelected && (
                 <button
                   onClick={onDeleteSelected}
@@ -103,25 +107,34 @@ export default function PageHeader({
                 </button>
               )}
 
-              {/* Dynamic extra actions (like Move, Download, etc.) */}
-              {extraActions.map((action, i) => (
-                <button
-                  key={i}
-                  onClick={action.onClick}
-                  disabled={action.disabled}
-                  className={`p-2 sm:p-3 rounded-full shadow transition text-white ${
-                    action.disabled
-                      ? "bg-gray-400 cursor-not-allowed"
-                      : "bg-blue-500 hover:bg-blue-600"
-                  }`}
-                  title={action.label}
-                >
-                  <action.icon className="w-4 h-4 sm:w-5 sm:h-5" />
-                </button>
-              ))}
+              {/* Extra actions (e.g., Move, Share, etc.) */}
+              {extraActions.map((action, i) => {
+                const colorClass = action.disabled
+                  ? "bg-gray-400 cursor-not-allowed"
+                  : action.color === "red"
+                  ? "bg-red-500 hover:bg-red-600"
+                  : action.color === "green"
+                  ? "bg-green-500 hover:bg-green-600"
+                  : action.color === "yellow"
+                  ? "bg-yellow-500 hover:bg-yellow-600"
+                  : "bg-blue-500 hover:bg-blue-600";
+
+                return (
+                  <button
+                    key={i}
+                    onClick={action.onClick}
+                    disabled={action.disabled}
+                    className={`p-2 sm:p-3 rounded-full shadow transition text-white ${colorClass}`}
+                    title={action.label}
+                  >
+                    <action.icon className="w-4 h-4 sm:w-5 sm:h-5" />
+                  </button>
+                );
+              })}
             </>
           )}
 
+          {/* Always visible controls */}
           {onSelectAll && (
             <button
               onClick={onSelectAll}

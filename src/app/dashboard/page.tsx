@@ -9,118 +9,191 @@ import CreateQuizPopup from "@/components/CreateQuizPopup";
 import CreateFolderPopup from "@/components/CreateFolderPopup";
 import MoveItemPopup from "@/components/MoveItemPopup";
 import QuizCard from "@/components/QuizCard";
+import FolderCard from "@/components/FolderCard";
+import AlertPopup from "@/components/AlertPopup";
 import { Item } from "@/types/Item";
-import { BookOpen, BookPlus, FolderPlus, MoveRight } from "lucide-react";
+import { BookOpen, BookPlus, FolderPlus, MoveRight, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 
 export default function DashboardPage() {
-  const [allQuizzes, setAllQuizzes] = useState<Item[]>([]);
   const [folders, setFolders] = useState<Item[]>([]);
+  const [quizzes, setQuizzes] = useState<Item[]>([]);
   const [displayItems, setDisplayItems] = useState<Item[]>([]);
-  const [activePath, setActivePath] = useState<string>("root");
   const [selectedItems, setSelectedItems] = useState<string[]>([]);
+  const [activeFolderId, setActiveFolderId] = useState<string | null>(null);
+
   const [isActionChooserOpen, setIsActionChooserOpen] = useState(false);
   const [isCreateQuizOpen, setIsCreateQuizOpen] = useState(false);
   const [isCreateFolderOpen, setIsCreateFolderOpen] = useState(false);
   const [isMovePopupOpen, setIsMovePopupOpen] = useState(false);
+  const [alertMessage, setAlertMessage] = useState<string | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   const router = useRouter();
 
   /* ---------------- Fetch Folders ---------------- */
-  const fetchFolders = async (path: string) => {
-    const res = await fetch(`/api/db/folders?path=${path}`, { cache: "no-store" });
-    const data = await res.json();
-    const mapped = data.map((f: any) => ({
-      id: `folder-${f.full_path}`,
-      name: f.name,
-      type: "folder" as const,
-      itemCount: 0,
-      full_path: f.full_path,
-    }));
-    setFolders(mapped);
-    return mapped;
+  const fetchFolders = async (parentId: string | null) => {
+    try {
+      const res = await fetch(
+        `/api/items/folders?parent=${parentId ?? "root"}&context=quizzes`,
+        { cache: "no-store" }
+      );
+      const data = await res.json();
+
+      const mapped = data.map((f: any) => ({
+        id: f.id.toString(),
+        name: f.name,
+        type: "folder" as const,
+        itemCount: f.itemCount ?? 0,
+        parent_id: f.parent_id ? f.parent_id.toString() : null,
+      }));
+      setFolders(mapped);
+      return mapped;
+    } catch (err) {
+      console.error("❌ Folder fetch error:", err);
+      setAlertMessage("Failed to fetch quiz folders.");
+      return [];
+    }
   };
 
   /* ---------------- Fetch Quizzes ---------------- */
-  const fetchQuizzes = async (path: string) => {
-    const res = await fetch("/api/db/getQuizzes", { cache: "no-store" });
-    const data = await res.json();
-    setAllQuizzes(data);
-    return data;
+  const fetchQuizzes = async (folderId: string | null) => {
+    try {
+      const res = await fetch(
+        `/api/items/quizzes/getAll?folder=${folderId ?? "root"}`,
+        { cache: "no-store" }
+      );
+      const data = await res.json();
+      const mapped = data.map((q: any) => ({
+        id: q.id.toString(),
+        name: q.name,
+        type: "quiz" as const,
+        folder_id: q.folder_id ? q.folder_id.toString() : null,
+      }));
+      setQuizzes(mapped);
+      return mapped;
+    } catch (err) {
+      console.error("❌ Quiz fetch error:", err);
+      setAlertMessage("Failed to fetch quizzes.");
+      return [];
+    }
   };
 
-  const refreshData = async (path: string = activePath) => {
-    const [foldersData, quizzesData] = await Promise.all([
-      fetchFolders(path),
-      fetchQuizzes(path),
-    ]);
-    const quizzesInFolder = quizzesData.filter((q: any) => q.folder_path === path);
-    setDisplayItems([...foldersData, ...quizzesInFolder.map((q: any) => ({ ...q, type: "quiz" }))]);
+  /* ---------------- Refresh ---------------- */
+  const refreshData = async (folderId: string | null = activeFolderId) => {
+    try {
+      const [folderData, quizData] = await Promise.all([
+        fetchFolders(folderId),
+        fetchQuizzes(folderId),
+      ]);
+      setDisplayItems([...folderData, ...quizData]);
+    } catch {
+      setAlertMessage("Error refreshing quizzes.");
+    }
   };
 
   useEffect(() => {
-    refreshData(activePath);
-  }, [activePath]);
+    refreshData(activeFolderId);
+  }, [activeFolderId]);
 
   /* ---------------- Folder Navigation ---------------- */
   const handleDoubleClick = (item: Item) => {
-    if (item.type === "folder") {
-      setActivePath(item.full_path || item.id.replace("folder-", ""));
-    } else {
-      router.push(`/quizDetails/${encodeURIComponent(item.name)}`);
-    }
+    if (item.type === "folder") setActiveFolderId(item.id);
+    else router.push(`/quizDetails/${encodeURIComponent(item.name)}`);
   };
 
   const handleGoBack = () => {
-    if (activePath === "root") return;
-    const parent = activePath.split("/").slice(0, -1).join("/") || "root";
-    setActivePath(parent);
+    const currentFolder = folders.find((f) => f.id === activeFolderId);
+    setActiveFolderId(currentFolder?.parent_id ?? null);
   };
 
-  /* ---------------- Create Folder ---------------- */
+  /* ---------------- Folder Create ---------------- */
   const handleCreateFolder = async (name: string) => {
-    await fetch("/api/db/folders", {
+    await fetch("/api/items/folders", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name, parent_path: activePath }),
+      body: JSON.stringify({ name, parent_id: activeFolderId, context: "quizzes" }),
     });
-    await refreshData(activePath);
+    await refreshData(activeFolderId);
     setIsCreateFolderOpen(false);
   };
 
-  /* ---------------- Move Quizzes ---------------- */
-  const handleMoveItems = async (newFolderPath: string) => {
+  /* ---------------- Quiz Create ---------------- */
+  const handleCreateQuiz = async (quizName: string, description?: string) => {
+    await fetch("/api/items/quizzes/create", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: quizName, description, folder_id: activeFolderId }),
+    });
+    await refreshData(activeFolderId);
+    setIsCreateQuizOpen(false);
+  };
+
+  /* ---------------- Move ---------------- */
+  const handleMoveItems = async (newFolderId: string | null) => {
     for (const id of selectedItems) {
-      const [type, realId] = id.split("-");
-      if (type !== "quiz") continue;
-      await fetch(`/api/db/quizzes/move/${realId}`, {
-        method: "PATCH",
+      const item = displayItems.find((i) => i.id === id);
+      if (!item) continue;
+
+      if (item.type === "quiz") {
+        await fetch(`/api/items/quizzes/move/${item.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ folder_id: newFolderId }),
+        });
+      } else if (item.type === "folder") {
+        await fetch(`/api/items/folders/move/${item.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ parent_id: newFolderId, context: "quizzes" }),
+        });
+      }
+    }
+    setSelectedItems([]);
+    await refreshData(activeFolderId);
+  };
+
+  /* ---------------- Delete ---------------- */
+  const confirmDeleteAction = async () => {
+    setConfirmDelete(false);
+    const folderIds = displayItems
+      .filter((i) => i.type === "folder" && selectedItems.includes(i.id))
+      .map((f) => f.id);
+    const quizIds = displayItems
+      .filter((i) => i.type === "quiz" && selectedItems.includes(i.id))
+      .map((q) => q.id);
+
+    if (quizIds.length > 0) {
+      await fetch("/api/items/quizzes/delete", {
+        method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ folder_path: newFolderPath }),
+        body: JSON.stringify({ ids: quizIds }),
+      });
+    }
+    if (folderIds.length > 0) {
+      await fetch("/api/items/folders/delete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids: folderIds, context: "quizzes" }),
       });
     }
     setSelectedItems([]);
-    await refreshData(activePath);
+    await refreshData(activeFolderId);
   };
 
-  /* ---------------- Render ---------------- */
   return (
     <div className="min-h-screen flex flex-col bg-gray-50 dark:bg-gray-900">
       <PageHeader
         title="Learning Space"
         icon={BookOpen}
-        activeFolder={activePath === "root" ? null : activePath}
+        activeFolder={activeFolderId}
         goBack={handleGoBack}
         selectedItems={selectedItems}
         onSelectAll={() => setSelectedItems(displayItems.map((i) => i.id))}
         onDeselectAll={() => setSelectedItems([])}
         extraActions={[
-          {
-            icon: MoveRight,
-            label: "Move",
-            onClick: () => setIsMovePopupOpen(true),
-            disabled: selectedItems.length === 0,
-          },
+          { icon: MoveRight, label: "Move", onClick: () => setIsMovePopupOpen(true), disabled: !selectedItems.length },
+          { icon: Trash2, label: "Delete", color: "red", onClick: () => setConfirmDelete(true), disabled: !selectedItems.length },
         ]}
       />
 
@@ -131,71 +204,47 @@ export default function DashboardPage() {
           setSelectedItems={setSelectedItems}
           renderItem={(item, isSelected, onClick) =>
             item.type === "folder" ? (
-              <div
-                onClick={onClick}
-                onDoubleClick={() => handleDoubleClick(item)}
-                className={`p-6 bg-yellow-100 dark:bg-yellow-800 rounded-xl shadow text-center cursor-pointer hover:shadow-md ${
-                  isSelected ? "ring-2 ring-yellow-500" : ""
-                }`}
-              >
-                <h3 className="font-semibold">{item.name}</h3>
-              </div>
+              <FolderCard folderName={item.name} itemCount={item.itemCount || 0} selected={isSelected} onClick={onClick} onDoubleClick={() => handleDoubleClick(item)} />
             ) : (
-              <QuizCard
-                quizName={item.name}
-                selected={isSelected}
-                onClick={onClick}
-                onDoubleClick={() => handleDoubleClick(item)}
-              />
+              <QuizCard quizName={item.name} selected={isSelected} onClick={onClick} onDoubleClick={() => handleDoubleClick(item)} />
             )
           }
         />
       </main>
 
       <FloatingAddButton onClick={() => setIsActionChooserOpen(true)} />
-
       <GenericActionPopup
         isOpen={isActionChooserOpen}
         onClose={() => setIsActionChooserOpen(false)}
         title="Create New"
         actions={[
-          {
-            key: "quiz",
-            title: "Create Quiz",
-            subtitle: "Add new quiz",
-            color: "blue",
-            icon: BookPlus,
-            onClick: () => setIsCreateQuizOpen(true),
-          },
-          {
-            key: "folder",
-            title: "Create Folder",
-            subtitle: "Organize quizzes",
-            color: "yellow",
-            icon: FolderPlus,
-            onClick: () => setIsCreateFolderOpen(true),
-          },
+          { key: "quiz", title: "Create Quiz", subtitle: "Add new quiz", color: "blue", icon: BookPlus, onClick: () => setIsCreateQuizOpen(true) },
+          { key: "folder", title: "Create Folder", subtitle: "Organize quizzes", color: "yellow", icon: FolderPlus, onClick: () => setIsCreateFolderOpen(true) },
         ]}
       />
+      <CreateQuizPopup isOpen={isCreateQuizOpen} onClose={() => setIsCreateQuizOpen(false)} onCreateQuiz={handleCreateQuiz} />
+      <CreateFolderPopup isOpen={isCreateFolderOpen} onClose={() => setIsCreateFolderOpen(false)} onCreateFolder={handleCreateFolder} />
 
-      <CreateQuizPopup
-        isOpen={isCreateQuizOpen}
-        onClose={() => setIsCreateQuizOpen(false)}
-        onCreateQuiz={() => {}}
-      />
-
-      <CreateFolderPopup
-        isOpen={isCreateFolderOpen}
-        onClose={() => setIsCreateFolderOpen(false)}
-        onCreateFolder={handleCreateFolder}
-      />
-
-      <MoveItemPopup
-        isOpen={isMovePopupOpen}
-        onClose={() => setIsMovePopupOpen(false)}
-        folders={folders.map((f) => f.full_path)}
-        onMove={handleMoveItems}
-      />
+<MoveItemPopup
+  isOpen={isMovePopupOpen}
+  onClose={() => setIsMovePopupOpen(false)}
+  folders={folders.map((f) => ({
+    id: f.id.toString(),
+    name: f.name,
+    parent_id: f.parent_id ?? null, // ✅ ensures correct type for FolderNode
+  }))}
+  onMove={handleMoveItems}
+  showRoot={
+    !displayItems.some(
+      (i) =>
+        selectedItems.includes(i.id) &&
+        ((i.type === "folder" && (i as any).parent_id === null) ||
+         (i.type === "quiz" && (i as any).folder_id === null))
+    )
+  }
+/>
+      {alertMessage && <AlertPopup message={alertMessage} onClose={() => setAlertMessage(null)} />}
+      {confirmDelete && <AlertPopup message={`Delete ${selectedItems.length} item(s)? This cannot be undone.`} onClose={confirmDeleteAction} />}
     </div>
   );
 }

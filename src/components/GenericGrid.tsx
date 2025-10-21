@@ -1,5 +1,5 @@
 "use client";
-import React, { useRef } from "react";
+import React, { useRef, useEffect } from "react";
 import { Item } from "@/types/Item";
 
 import {
@@ -36,7 +36,7 @@ interface GenericGridProps {
   onReorder?: (newOrder: Item[]) => void;
 }
 
-// SortableItem implementation
+/* -------------------- SortableItem -------------------- */
 function SortableItem({ id, children }: SortableItemProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id });
@@ -44,37 +44,25 @@ function SortableItem({ id, children }: SortableItemProps) {
   const style: React.CSSProperties = {
     transform: CSS.Transform.toString(transform),
     transition,
-    cursor: isDragging ? "grabbing" : "grab",
-    outline: "none",
+    cursor: isDragging ? "grabbing" : "pointer",
     height: "100%",
-  };
-
-  const handlePointerDown = (e: React.PointerEvent) => {
-    e.preventDefault();
-    if (e.button === 0) document.body.style.userSelect = "none";
-  };
-
-  const handlePointerUp = () => {
-    document.body.style.userSelect = "";
   };
 
   return (
     <div
       ref={setNodeRef}
       style={style}
-      className="h-full"
-      onPointerDown={handlePointerDown}
-      onPointerUp={handlePointerUp}
       {...attributes}
       {...listeners}
-      draggable={false}
+      // Prevent text selection highlight on shift/drag
+      onMouseDown={(e) => e.preventDefault()}
     >
       {children}
     </div>
   );
 }
 
-// ✅ GenericGrid with Shift-Select
+/* -------------------- GenericGrid (with multi-select) -------------------- */
 export default function GenericGrid({
   items,
   selectedItems,
@@ -87,8 +75,14 @@ export default function GenericGrid({
     useSensor(KeyboardSensor)
   );
 
-  // remember last clicked index for shift-range
   const lastClickedIndex = useRef<number | null>(null);
+
+  useEffect(() => {
+    // Disable global text selection inside the grid while clicking
+    const preventSelect = (e: Event) => e.preventDefault();
+    document.addEventListener("selectstart", preventSelect);
+    return () => document.removeEventListener("selectstart", preventSelect);
+  }, []);
 
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
@@ -101,29 +95,31 @@ export default function GenericGrid({
   };
 
   const handleItemClick = (e: React.MouseEvent, itemId: string) => {
+    e.preventDefault(); // stop native highlight
     const index = items.findIndex((i) => i.id === itemId);
     const isSelected = selectedItems.includes(itemId);
 
+    // ✅ SHIFT — Select range
     if (e.shiftKey && lastClickedIndex.current !== null) {
-      // ✅ SHIFT select range
       const start = Math.min(lastClickedIndex.current, index);
       const end = Math.max(lastClickedIndex.current, index);
-      const rangeIds = items.slice(start, end + 1).map((i) => i.id);
-      const merged = Array.from(new Set([...selectedItems, ...rangeIds]));
-      setSelectedItems(merged);
-    } else if (e.metaKey || e.ctrlKey) {
-      // ✅ CMD/Ctrl toggle single
+      const range = items.slice(start, end + 1).map((i) => i.id);
+      const newSelected = Array.from(new Set([...selectedItems, ...range]));
+      setSelectedItems(newSelected);
+    }
+
+    // ✅ CTRL/CMD — Toggle single
+    else if (e.ctrlKey || e.metaKey) {
       if (isSelected)
         setSelectedItems((prev) => prev.filter((id) => id !== itemId));
       else setSelectedItems((prev) => [...prev, itemId]);
       lastClickedIndex.current = index;
-    } else {
-      // ✅ Normal click
-      if (isSelected && selectedItems.length === 1) {
-        setSelectedItems([]);
-      } else {
-        setSelectedItems([itemId]);
-      }
+    }
+
+    // ✅ Normal click — Select single
+    else {
+      if (isSelected && selectedItems.length === 1) setSelectedItems([]);
+      else setSelectedItems([itemId]);
       lastClickedIndex.current = index;
     }
   };
@@ -131,7 +127,11 @@ export default function GenericGrid({
   return (
     <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
       <SortableContext items={items.map((item) => item.id)} strategy={rectSortingStrategy}>
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 items-stretch [grid-auto-rows:1fr]">
+        <div
+          className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 items-stretch [grid-auto-rows:1fr] select-none"
+          // Disable drag-select region highlight
+          onMouseDown={(e) => e.preventDefault()}
+        >
           {items.map((item) => (
             <SortableItem key={item.id} id={item.id}>
               {renderItem(

@@ -1,3 +1,4 @@
+import React from "react";
 import { Folder } from "lucide-react";
 
 interface FolderCardProps {
@@ -8,26 +9,32 @@ interface FolderCardProps {
   onDoubleClick: () => void;
 }
 
-export default function FolderCard({ 
-  folderName, 
-  itemCount, 
-  selected, 
-  onClick, 
-  onDoubleClick 
+export default function FolderCard({
+  folderName,
+  itemCount,
+  selected,
+  onClick,
+  onDoubleClick,
 }: FolderCardProps) {
   return (
     <div
-      className={`p-6 bg-white dark:bg-gray-800 rounded-xl shadow flex gap-4 items-center hover:bg-blue-50 dark:hover:bg-gray-700 transition cursor-pointer h-full
-        ${selected ? "ring-2 ring-blue-500" : ""}`}
       onClick={onClick}
       onDoubleClick={onDoubleClick}
+      className={`p-6 bg-white dark:bg-gray-800 rounded-xl shadow flex flex-col transition-colors hover:bg-blue-50 dark:hover:bg-gray-700 hover:shadow-md cursor-pointer ${
+        selected ? "ring-2 ring-blue-500" : ""
+      }`}
     >
-      <Folder className="w-8 h-8 text-yellow-500 flex-shrink-0" />
-      <div className="flex flex-col justify-center min-w-0 flex-1">
-        <h3 className="font-semibold text-lg truncate">{folderName}</h3>
-        <p className="text-gray-500 dark:text-gray-400 text-sm">
-          {itemCount} item{itemCount !== 1 && "s"}
-        </p>
+      <div className="flex items-center gap-2">
+        <Folder className="w-6 h-6 text-yellow-500 flex-shrink-0 mt-1" />
+
+        <div className="flex flex-col flex-1 overflow-hidden">
+          <h3 className="font-semibold text-gray-900 dark:text-gray-100 break-words whitespace-normal">
+            {folderName}
+          </h3>
+          <span className="text-xs text-gray-500 dark:text-gray-300">
+            {itemCount} item{itemCount !== 1 && "s"}
+          </span>
+        </div>
       </div>
     </div>
   );
