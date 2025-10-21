@@ -230,17 +230,19 @@ const handleDropToParent = async (source: Item | Item[]) => {
       }
     }
 
-    // 🟡 Instead of just refreshing current folder, go up one level automatically
-    if (parentId !== undefined) {
-      handleGoBack();
-    } else {
-      await refreshData(parentId);
-    }
+    // 🧩 Instead of refreshing the entire view (which causes "disappear" effect),
+    // manually remove the moved items from the current folder’s display.
+    const movedIds = sources.map((s) => s.id);
+    setDisplayItems((prev) => prev.filter((item) => !movedIds.includes(item.id)));
+
+    // Optionally refresh folder stats/counts silently
+    await fetchFolders(activeFolderId);
 
   } catch {
     setAlertMessage("Failed to move item(s) to parent folder.");
   }
 };
+
 
 
   /* ---------------- Delete ---------------- */
