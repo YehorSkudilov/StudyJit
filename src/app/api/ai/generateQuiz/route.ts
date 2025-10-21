@@ -116,10 +116,10 @@ async function processQuiz(req: NextRequest): Promise<NextResponse> {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    await db.execute(
-      `UPDATE quizzes SET generation_status = 'pending' WHERE id = ? AND user_id = ?`,
-      [quizId, userId]
-    );
+await db.execute(
+  `UPDATE quizzes SET generation_status = 'pending' WHERE id = ? AND user_id = ?`,
+  [quizId, userId]
+);
 
     // Fetch linked files
     const [fileRows]: any = await db.query(
@@ -307,51 +307,67 @@ async function processQuiz(req: NextRequest): Promise<NextResponse> {
 }
 
 /* -------------------------------------------------------------------------- */
-/*                           CONCURRENT QUEUE SYSTEM                          */
+/*                           CONCURRENT QUEUE SYSTEM (FIXED)                  */
 /* -------------------------------------------------------------------------- */
 
-const activeQuizzes = new Map<number, boolean>();
-const globalQueue: (() => Promise<void>)[] = [];
-let isProcessing = false;
+type QuizJob = {
+  quizId: number;
+  payload: FormData;
+};
 
-async function processQueue() {
-  if (isProcessing) return;
-  isProcessing = true;
+const queue: QuizJob[] = [];
+let isRunning = false;
 
-  while (globalQueue.length > 0) {
-    const job = globalQueue.shift();
-    if (!job) continue;
+async function runNextJob() {
+  if (isRunning || queue.length === 0) return;
+  isRunning = true;
 
-    try {
-      await job();
-    } catch (err) {
-      console.error("❌ Queue job failed:", err);
-    }
-  }
-
-  isProcessing = false;
-}
-
-function enqueueQuizJob(quizId: number, job: () => Promise<void>) {
-  if (activeQuizzes.get(quizId)) {
-    console.warn(`⚠️ Quiz ${quizId} is already running. Skipping.`);
+  const job = queue.shift();
+  if (!job) {
+    isRunning = false;
     return;
   }
 
-  activeQuizzes.set(quizId, true);
+  const { quizId, payload } = job;
+  console.log(`🚀 Starting quiz generation: ${quizId}`);
 
-  globalQueue.push(async () => {
+  try {
+    // Construct a new request each time to avoid FormData reuse issues
+    const reqClone = new NextRequest("http://localhost/api/internal", {
+      method: "POST",
+      body: payload,
+    });
+
+    await processQuiz(reqClone);
+    console.log(`✅ Finished quiz generation: ${quizId}`);
+  } catch (err) {
+    console.error(`❌ Quiz ${quizId} failed:`, err);
     try {
-      console.log(`🚀 Starting generation for quiz ${quizId}`);
-      await job();
-    } finally {
-      activeQuizzes.delete(quizId);
-      console.log(`✅ Finished quiz ${quizId}`);
+      await db.execute(
+        `UPDATE quizzes SET generation_status = 'failed' WHERE id = ?`,
+        [quizId]
+      );
+    } catch (e) {
+      console.error("⚠️ Could not mark quiz as failed:", e);
     }
-  });
-
-  processQueue();
+  } finally {
+    isRunning = false;
+    setTimeout(runNextJob, 250); // small delay to avoid race
+  }
 }
+
+async function enqueueQuizJob(quizId: number, form: FormData) {
+  const alreadyInQueue = queue.some((q) => q.quizId === quizId);
+  if (alreadyInQueue) {
+    console.warn(`⚠️ Quiz ${quizId} already queued. Skipping.`);
+    return;
+  }
+
+  queue.push({ quizId, payload: form });
+  console.log(`🕒 Queued quiz ${quizId}. Queue length: ${queue.length}`);
+  runNextJob();
+}
+
 
 /* -------------------------------------------------------------------------- */
 /*                                 POST ROUTE                                 */
@@ -359,18 +375,21 @@ function enqueueQuizJob(quizId: number, job: () => Promise<void>) {
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
   try {
-    const form = await req.clone().formData();
+    const form = await req.formData();
     const quizId = Number(form.get("quizId"));
+
     if (!quizId) {
       return NextResponse.json({ error: "Missing quizId" }, { status: 400 });
     }
 
-    enqueueQuizJob(quizId, async () => {
-      const res = await processQuiz(req);
-      console.log(`🎯 Quiz ${quizId} generation result:`, res.status);
-    });
+    // Mark as queued in DB (not pending yet)
+    await db.execute(
+      `UPDATE quizzes SET generation_status = 'queued' WHERE id = ?`,
+      [quizId]
+    );
 
-return NextResponse.json({ success: true, status: "queued", quizId });
+    enqueueQuizJob(quizId, form);
+    return NextResponse.json({ success: true, status: "queued", quizId });
   } catch (err: any) {
     console.error("❌ Failed to enqueue quiz job:", err);
     return NextResponse.json({ error: err.message }, { status: 500 });
