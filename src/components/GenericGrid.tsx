@@ -2,8 +2,12 @@
 import React, { useRef, useEffect, useState, useMemo } from "react";
 import { Item } from "@/types/Item";
 import {
+  rectIntersection,
+  type CollisionDescriptor,
+  type CollisionDetection,
+} from "@dnd-kit/core";
+import {
   DndContext,
-  closestCenter,
   DragEndEvent,
   DragStartEvent,
   DragOverEvent,
@@ -49,7 +53,8 @@ function SortableItem({
     cursor: disableSort ? "pointer" : isDragging ? "grabbing" : "grab",
     height: "100%",
     opacity: isDragging ? 0.3 : 1,
-    touchAction: "none", // important for mobile drag!
+    touchAction: "none",
+    userSelect: "none",
   };
 
   return (
@@ -109,6 +114,15 @@ function FolderDropWrapper({
   );
 }
 
+/* -------------------- Custom Collision Detection -------------------- */
+const strictIntersection: CollisionDetection = (args) => {
+  const intersections = rectIntersection(args) as CollisionDescriptor[];
+  return intersections.filter(
+    (entry) =>
+      typeof entry.data?.value === "number" && entry.data.value > 0.1
+  );
+};
+
 /* -------------------- GenericGrid -------------------- */
 export default function GenericGrid({
   items,
@@ -136,27 +150,35 @@ export default function GenericGrid({
   onDropToParent?: (source: Item | Item[]) => void | Promise<void>;
   context?: "files" | "quizzes";
 }) {
-  /* -------------------- Prevent browser Shift-selection -------------------- */
+  /* -------------------- Prevent browser text selection -------------------- */
   useEffect(() => {
-    const handleSelectStart = (e: Event) => e.preventDefault();
-    const handleKeyDown = (e: KeyboardEvent) => {
+    const preventSelection = (e: Event) => e.preventDefault();
+
+    const enableBlock = (e: KeyboardEvent) => {
       if (e.key === "Shift") {
-        document.addEventListener("selectstart", handleSelectStart);
-      }
-    };
-    const handleKeyUp = (e: KeyboardEvent) => {
-      if (e.key === "Shift") {
-        document.removeEventListener("selectstart", handleSelectStart);
+        document.addEventListener("selectstart", preventSelection);
+        document.addEventListener("mousedown", preventSelection);
+        document.body.style.userSelect = "none";
       }
     };
 
-    document.addEventListener("keydown", handleKeyDown);
-    document.addEventListener("keyup", handleKeyUp);
+    const disableBlock = (e: KeyboardEvent) => {
+      if (e.key === "Shift") {
+        document.removeEventListener("selectstart", preventSelection);
+        document.removeEventListener("mousedown", preventSelection);
+        document.body.style.userSelect = "";
+      }
+    };
+
+    document.addEventListener("keydown", enableBlock);
+    document.addEventListener("keyup", disableBlock);
 
     return () => {
-      document.removeEventListener("keydown", handleKeyDown);
-      document.removeEventListener("keyup", handleKeyUp);
-      document.removeEventListener("selectstart", handleSelectStart);
+      document.removeEventListener("keydown", enableBlock);
+      document.removeEventListener("keyup", disableBlock);
+      document.removeEventListener("selectstart", preventSelection);
+      document.removeEventListener("mousedown", preventSelection);
+      document.body.style.userSelect = "";
     };
   }, []);
 
@@ -176,7 +198,6 @@ export default function GenericGrid({
   const handleDragStart = (evt: DragStartEvent) => {
     const draggedItem = evt.active.data?.current?.item as Item | undefined;
     if (!draggedItem) return;
-
     if (selectedItems.includes(draggedItem.id) && selectedItems.length > 1) {
       const selected = items.filter((i) => selectedItems.includes(i.id));
       setDraggingItems(selected);
@@ -197,19 +218,14 @@ export default function GenericGrid({
     setDraggingItems([]);
     setShowDropZone(false);
 
-    // If no valid drop target, do nothing
     if (!active || !over || active.id === over.id) return;
-
     const overItem = over?.data?.current?.item as Item | undefined;
-    const isMulti = draggingItems.length > 1;
 
-    // Drop onto parent zone
     if (over.id === "drop-to-parent") {
       for (const item of draggingItems) await onDropToParent?.(item);
       return;
     }
 
-    // Drop onto folder
     if (overItem?.type === "folder") {
       for (const item of draggingItems) {
         if (item.id !== overItem.id) await onDropOnFolder?.(item, overItem.id);
@@ -217,15 +233,11 @@ export default function GenericGrid({
       return;
     }
 
-    // Reorder only if dropped on another item
     const activeItem = active.data?.current?.item as Item | undefined;
     if (!activeItem || !overItem) return;
-
     const oldIndex = items.findIndex((i) => i.id === activeItem.id);
     const newIndex = items.findIndex((i) => i.id === overItem.id);
-
     if (oldIndex === -1 || newIndex === -1 || oldIndex === newIndex) return;
-
     const newOrder = arrayMove(items, oldIndex, newIndex);
     onReorder?.(newOrder);
   };
@@ -233,11 +245,8 @@ export default function GenericGrid({
   /* -------------------- Delay drop zone -------------------- */
   useEffect(() => {
     let timer: NodeJS.Timeout | undefined;
-    if (draggingItems.length > 0) {
-      timer = setTimeout(() => setShowDropZone(true), 400);
-    } else {
-      setShowDropZone(false);
-    }
+    if (draggingItems.length > 0) timer = setTimeout(() => setShowDropZone(true), 400);
+    else setShowDropZone(false);
     return () => clearTimeout(timer);
   }, [draggingItems.length]);
 
@@ -283,7 +292,7 @@ export default function GenericGrid({
   return (
     <DndContext
       sensors={sensors}
-      collisionDetection={closestCenter}
+      collisionDetection={strictIntersection}
       onDragStart={handleDragStart}
       onDragOver={handleDragOver}
       onDragEnd={handleDragEnd}
@@ -323,7 +332,7 @@ export default function GenericGrid({
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.15 }}
-            className="relative shadow-2xl rounded-xl pointer-events-none"
+            className="relative shadow-2xl rounded-xl pointer-events-none select-none"
           >
             {renderItem(mainDragged, true, () => {})}
             {draggingItems.length > 1 && (

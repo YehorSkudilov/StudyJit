@@ -93,7 +93,7 @@ export default function PageHeader({
   };
 
   return (
-    <section className="relative px-4 sm:px-8 pt-4 sm:pt-6 pb-3 sm:pb-4 bg-transparent mb-6 sm:mb-8">
+    <section className="relative px-4 sm:px-8 pt-4 sm:pt-6 pb-3 sm:pb-4 bg-transparent mb-3 sm:mb-4">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
         {/* ← Left: Back + Title */}
         <div className="flex items-center gap-2 sm:gap-3 flex-wrap justify-center sm:justify-start">
