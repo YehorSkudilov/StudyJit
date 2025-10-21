@@ -42,7 +42,6 @@ function extractAndParseJSON(text: string): any {
 /*                           MAIN PROCESS FUNCTION                            */
 /* -------------------------------------------------------------------------- */
 async function processQuiz(req: NextRequest): Promise<NextResponse> {
-  const session = await getServerSession(authOptions).catch(() => null);
   const form = await req.formData();
   const quizId = Number(form.get("quizId")) || 0;
 
@@ -59,7 +58,7 @@ async function processQuiz(req: NextRequest): Promise<NextResponse> {
 
     console.log(`📝 Generating quiz: ${quizName} (${numQuestions} questions)`);
 
-    // Mark as pending but keep queue_number visible
+    // Immediately mark as pending (processing)
     await db.execute(
       `UPDATE quizzes SET generation_status = 'pending' WHERE id = ? AND user_id = ?`,
       [quizId, userId]
@@ -85,9 +84,7 @@ async function processQuiz(req: NextRequest): Promise<NextResponse> {
       else if (AUDIO_EXTENSIONS.includes(ext)) audioFiles.push(file);
     }
 
-    console.log(
-      `📊 Files → ${documentFiles.length} docs, ${imageFiles.length} imgs, ${audioFiles.length} audio`
-    );
+    console.log(`📊 Files → ${documentFiles.length} docs, ${imageFiles.length} imgs, ${audioFiles.length} audio`);
 
     const documentFileIds: string[] = [];
     for (const file of documentFiles) {
@@ -102,36 +99,10 @@ async function processQuiz(req: NextRequest): Promise<NextResponse> {
       }
     }
 
-    const imageFileIds: string[] = [];
-    for (const file of imageFiles) {
-      try {
-        const upload = await openai.files.create({
-          file: fs.createReadStream(file.path),
-          purpose: "vision",
-        });
-        imageFileIds.push(upload.id);
-      } catch (err: any) {
-        console.warn(`⚠️ Image upload failed for ${file.name}: ${err.message}`);
-      }
-    }
-
-    let audioTranscriptions = "";
-    for (const file of audioFiles) {
-      try {
-        const transcription = await openai.audio.transcriptions.create({
-          file: fs.createReadStream(file.path),
-          model: "whisper-1",
-        });
-        audioTranscriptions += `\n\n[Audio: ${file.name}]\n${transcription.text}`;
-      } catch (err: any) {
-        console.warn(`⚠️ Transcription failed for ${file.name}: ${err.message}`);
-      }
-    }
-
     const assistant = await openai.beta.assistants.create({
       model: "gpt-4o",
       name: "Quiz Generator",
-      instructions: `Generate ${numQuestions} quiz questions. Respond ONLY with valid JSON.`,
+      instructions: `Generate ${numQuestions} quiz questions in valid JSON format.`,
       response_format: { type: "json_object" },
     });
 
@@ -140,7 +111,6 @@ async function processQuiz(req: NextRequest): Promise<NextResponse> {
       Topic: ${message}
       Respond ONLY in JSON format like:
       {"questions":[{"id":1,"question":"...","options":["A","B","C","D"],"correct":"A"}]}
-      ${audioTranscriptions}
     `;
 
     const thread = await openai.beta.threads.create({
@@ -219,10 +189,13 @@ async function runNextJob() {
   console.log(`🚀 Processing quiz ${quizId}`);
 
   try {
-    await db.execute(`UPDATE quizzes SET generation_status = 'pending' WHERE id = ?`, [quizId]);
-    await new Promise((r) => setTimeout(r, 800));
+    await db.execute(`UPDATE quizzes SET generation_status = 'pending', queue_number = NULL WHERE id = ?`, [quizId]);
+    await updateQueueNumbers();
+    await new Promise((r) => setTimeout(r, 500));
+
     const reqClone = new NextRequest("http://localhost/api/internal", { method: "POST", body: payload });
     await processQuiz(reqClone);
+
     console.log(`✅ Finished processing quiz ${quizId}`);
   } catch (err) {
     console.error(`❌ Error processing quiz ${quizId}:`, err);
