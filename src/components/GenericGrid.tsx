@@ -5,6 +5,8 @@ import {
   rectIntersection,
   type CollisionDescriptor,
   type CollisionDetection,
+} from "@dnd-kit/core";
+import {
   DndContext,
   DragEndEvent,
   DragStartEvent,
@@ -53,7 +55,7 @@ function SortableItem({
     opacity: isDragging ? 0.3 : 1,
     touchAction: "none",
     userSelect: "none",
-    outline: "none",
+    outline: "none", // ✅ remove blue border
   };
 
   return (
@@ -62,9 +64,8 @@ function SortableItem({
       style={style}
       {...attributes}
       {...listeners}
-      tabIndex={-1}
+      tabIndex={-1} // ✅ prevent focus outline from appearing on Shift-click
       className="[&:focus]:outline-none [&:focus-visible]:outline-none"
-      data-item-id={id} // important for mobile drag-select
     >
       {children}
     </div>
@@ -121,7 +122,7 @@ function FolderDropWrapper({
   );
 }
 
-/* -------------------- Collision Detection -------------------- */
+/* -------------------- Custom Collision Detection -------------------- */
 const strictIntersection: CollisionDetection = (args) => {
   const intersections = rectIntersection(args) as CollisionDescriptor[];
   return intersections.filter(
@@ -157,27 +158,34 @@ export default function GenericGrid({
   onDropToParent?: (source: Item | Item[]) => void | Promise<void>;
   context?: "files" | "quizzes";
 }) {
-  /* -------------------- Prevent text selection -------------------- */
+  /* -------------------- Prevent browser text selection -------------------- */
   useEffect(() => {
     const preventSelection = (e: Event) => e.preventDefault();
+
     const enableBlock = (e: KeyboardEvent) => {
       if (e.key === "Shift") {
         document.addEventListener("selectstart", preventSelection);
+        document.addEventListener("mousedown", preventSelection);
         document.body.style.userSelect = "none";
       }
     };
+
     const disableBlock = (e: KeyboardEvent) => {
       if (e.key === "Shift") {
         document.removeEventListener("selectstart", preventSelection);
+        document.removeEventListener("mousedown", preventSelection);
         document.body.style.userSelect = "";
       }
     };
+
     document.addEventListener("keydown", enableBlock);
     document.addEventListener("keyup", disableBlock);
+
     return () => {
       document.removeEventListener("keydown", enableBlock);
       document.removeEventListener("keyup", disableBlock);
       document.removeEventListener("selectstart", preventSelection);
+      document.removeEventListener("mousedown", preventSelection);
       document.body.style.userSelect = "";
     };
   }, []);
@@ -193,10 +201,6 @@ export default function GenericGrid({
   const [draggingItems, setDraggingItems] = useState<Item[]>([]);
   const [isOverFolder, setIsOverFolder] = useState(false);
   const [showDropZone, setShowDropZone] = useState(false);
-
-  // Mobile select state
-  const [touchSelecting, setTouchSelecting] = useState(false);
-  const [selectionMode, setSelectionMode] = useState<"add" | "remove" | null>(null);
 
   /* -------------------- Drag Events -------------------- */
   const handleDragStart = (evt: DragStartEvent) => {
@@ -221,6 +225,7 @@ export default function GenericGrid({
     setIsOverFolder(false);
     setDraggingItems([]);
     setShowDropZone(false);
+
     if (!active || !over || active.id === over.id) return;
     const overItem = over?.data?.current?.item as Item | undefined;
 
@@ -245,29 +250,19 @@ export default function GenericGrid({
     onReorder?.(newOrder);
   };
 
-  /* -------------------- Touch Select (Mobile) -------------------- */
+  /* -------------------- Delay drop zone -------------------- */
   useEffect(() => {
-    if (!touchSelecting) return;
-    const handleTouchMove = (e: TouchEvent) => {
-      const touch = e.touches[0];
-      const el = document.elementFromPoint(touch.clientX, touch.clientY);
-      const id = el?.closest("[data-item-id]")?.getAttribute("data-item-id");
-      if (!id) return;
-
-      setSelectedItems((prev) => {
-        if (selectionMode === "add" && !prev.includes(id)) return [...prev, id];
-        if (selectionMode === "remove" && prev.includes(id))
-          return prev.filter((x) => x !== id);
-        return prev;
-      });
-    };
-    window.addEventListener("touchmove", handleTouchMove);
-    return () => window.removeEventListener("touchmove", handleTouchMove);
-  }, [touchSelecting, selectionMode]);
+    let timer: NodeJS.Timeout | undefined;
+    if (draggingItems.length > 0) timer = setTimeout(() => setShowDropZone(true), 400);
+    else setShowDropZone(false);
+    return () => clearTimeout(timer);
+  }, [draggingItems.length]);
 
   /* -------------------- Selection -------------------- */
   const handleItemClick = (e: React.MouseEvent, itemId: string) => {
     e.stopPropagation();
+
+    // ✅ Use the visible (sorted) order for selection logic
     const index = visibleItems.findIndex((i) => i.id === itemId);
     const isSelected = selectedItems.includes(itemId);
 
@@ -286,6 +281,7 @@ export default function GenericGrid({
       lastClickedIndex.current = index;
     }
   };
+
 
   /* -------------------- Sort visible items -------------------- */
   const visibleItems = useMemo(() => {
@@ -318,10 +314,7 @@ export default function GenericGrid({
         items={!isOverFolder ? visibleItems.map((i) => i.id) : []}
         strategy={rectSortingStrategy}
       >
-        <div
-          className="grid gap-4 grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 items-stretch [grid-auto-rows:1fr] select-none"
-          onTouchEnd={() => setTouchSelecting(false)}
-        >
+        <div className="grid gap-4 grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 items-stretch [grid-auto-rows:1fr] select-none">
           {visibleItems.map((item) => {
             const isSelected = selectedItems.includes(item.id);
             const content = renderItem(item, isSelected, (e) =>
@@ -330,32 +323,12 @@ export default function GenericGrid({
 
             return (
               <SortableItem key={item.id} id={item.id} item={item}>
-                <div
-                  data-item-id={item.id}
-                  onTouchStart={(e) => {
-                    const timer = setTimeout(() => {
-                      const already = selectedItems.includes(item.id);
-                      setTouchSelecting(true);
-                      setSelectionMode(already ? "remove" : "add");
-                      setSelectedItems((prev) =>
-                        already
-                          ? prev.filter((x) => x !== item.id)
-                          : [...prev, item.id]
-                      );
-                    }, 350);
-                    (e.target as any)._longPressTimer = timer;
-                  }}
-                  onTouchEnd={(e) => {
-                    clearTimeout((e.target as any)._longPressTimer);
-                  }}
+                <FolderDropWrapper
+                  id={item.id}
+                  onHoverChange={(hover) => setIsOverFolder(hover)}
                 >
-                  <FolderDropWrapper
-                    id={item.id}
-                    onHoverChange={(hover) => setIsOverFolder(hover)}
-                  >
-                    {content}
-                  </FolderDropWrapper>
-                </div>
+                  {content}
+                </FolderDropWrapper>
               </SortableItem>
             );
           })}
