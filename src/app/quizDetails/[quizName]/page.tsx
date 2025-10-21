@@ -13,7 +13,7 @@ import {
 import AlertPopup from "@/components/AlertPopup";
 import QuizAddFilePopup from "@/components/QuizAddFilePopup";
 
-type GenerationStatus = "pending" | "success" | "failed" | null;
+type GenerationStatus = "queued" | "pending" | "success" | "failed" | null;
 
 interface DocumentItem {
   id: number;
@@ -31,8 +31,7 @@ export default function QuizDetailsPage() {
   const [description, setDescription] = useState("");
   const [prompt, setPrompt] = useState("");
   const [numQuestions, setNumQuestions] = useState<number>(10);
-  const [generationStatus, setGenerationStatus] =
-    useState<GenerationStatus>(null);
+  const [generationStatus, setGenerationStatus] = useState<GenerationStatus>(null);
   const [lastScore, setLastScore] = useState<number | null>(null);
 
   const [originalDocuments, setOriginalDocuments] = useState<DocumentItem[]>([]);
@@ -131,6 +130,7 @@ export default function QuizDetailsPage() {
 
       router.refresh();
 
+      // sync files
       const added = stagedDocuments.filter(
         (f) => !originalDocuments.some((o) => o.id === f.id)
       );
@@ -154,13 +154,6 @@ export default function QuizDetailsPage() {
       }
 
       setOriginalDocuments(stagedDocuments);
-      setGenerationStatus("pending");
-
-      await fetch("/api/items/quizzes/status/update", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: quizId, status: "pending" }),
-      });
 
       const form = new FormData();
       form.append("message", prompt);
@@ -169,7 +162,7 @@ export default function QuizDetailsPage() {
       form.append("quizId", String(quizId));
       form.append("numQuestions", String(numQuestions));
 
-      console.log("🚀 Starting quiz generation...");
+      console.log("🚀 Requesting quiz generation...");
       const res = await fetch("/api/ai/generateQuiz", {
         method: "POST",
         body: form,
@@ -185,9 +178,18 @@ export default function QuizDetailsPage() {
         console.warn("⚠️ Response was not valid JSON.");
       }
 
-      // 🟢 FIX: Recognize both queued and success
-      if (res.ok && (data?.success || data?.status === "queued")) {
-        console.log("✅ Quiz generation queued:", data);
+      // 🧠 Properly handle status transitions
+      if (res.ok && data?.status === "queued") {
+        console.log("🕒 Quiz queued for generation:", data);
+        setGenerationStatus("queued");
+
+        await fetch("/api/items/quizzes/status/update", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id: quizId, status: "queued" }),
+        });
+      } else if (res.ok && data?.success === true) {
+        console.log("✅ Quiz generation started immediately:", data);
         setGenerationStatus("pending");
 
         await fetch("/api/items/quizzes/status/update", {
@@ -195,34 +197,39 @@ export default function QuizDetailsPage() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ id: quizId, status: "pending" }),
         });
-      } else if (res.ok && data?.success === true) {
-        console.log("✅ Quiz generation successful:", data);
-        setGenerationStatus("success");
       } else {
-        console.error("❌ Quiz generation failed:", data || rawText);
+        console.error("❌ Quiz generation failed to start:", data || rawText);
         setGenerationStatus("failed");
+
         await fetch("/api/items/quizzes/status/update", {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ id: quizId, status: "failed" }),
         });
+
         setAlertMessage("❌ Quiz generation failed to start. Please try again.");
         setShowAlert(true);
       }
 
-      setTimeout(() => router.refresh(), 1000);
+      setTimeout(() => router.refresh(), 1500);
     } catch (err: any) {
       console.error("💥 Uncaught error during quiz generation:", err);
       setGenerationStatus("failed");
       setAlertMessage("❌ Failed to save or generate quiz. See console for details.");
       setShowAlert(true);
-      setTimeout(() => router.refresh(), 1000);
+      setTimeout(() => router.refresh(), 1500);
     }
   };
 
   /* ---------------------- Status Indicator ---------------------- */
   const getStatusIndicator = () => {
     switch (generationStatus) {
+      case "queued":
+        return (
+          <span className="px-2 py-1 text-xs rounded-full bg-blue-500 text-white">
+            Queued
+          </span>
+        );
       case "pending":
         return (
           <span className="px-2 py-1 text-xs rounded-full bg-yellow-500 text-white">
@@ -253,9 +260,7 @@ export default function QuizDetailsPage() {
   /* ---------------------- Render ---------------------- */
   return (
     <>
-      {showAlert && (
-        <AlertPopup message={alertMessage} onClose={() => setShowAlert(false)} />
-      )}
+      {showAlert && <AlertPopup message={alertMessage} onClose={() => setShowAlert(false)} />}
 
       <div className="min-h-screen bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 flex flex-col px-3 sm:px-8 md:px-20 py-6 sm:py-10 gap-6">
         <div className="relative p-4 sm:p-8 bg-white dark:bg-gray-800 rounded-xl shadow flex flex-col gap-6 max-w-4xl w-full mx-auto">
@@ -314,9 +319,7 @@ export default function QuizDetailsPage() {
                     </span>
                   </p>
                 ) : (
-                  <p className="text-sm text-gray-500 dark:text-gray-500 italic">
-                    No previous attempts
-                  </p>
+                  <p className="text-sm text-gray-500 dark:text-gray-500 italic">No previous attempts</p>
                 )}
               </div>
             </div>
@@ -351,55 +354,44 @@ export default function QuizDetailsPage() {
             )}
           </section>
 
-{/* Documents */}
-<section className="flex flex-col gap-2">
-  <h2 className="text-sm font-medium text-gray-500 dark:text-gray-400 uppercase">
-    Documents
-  </h2>
-  <div className="flex gap-2 overflow-x-auto py-1">
-    {/* ➕ Add button */}
-    <div
-      className="flex-shrink-0 flex flex-col items-center justify-center rounded-lg bg-gray-200 dark:bg-gray-600 
-      text-gray-700 dark:text-gray-200 cursor-pointer hover:bg-gray-300 dark:hover:bg-gray-500 transition w-16 h-16 sm:w-20 sm:h-20"
-      onClick={() => setShowFilePopup(true)}
-    >
-      <Plus className="w-5 h-5 mb-1" />
-      <span className="text-xs text-center">Add</span>
-    </div>
+          {/* Documents */}
+          <section className="flex flex-col gap-2">
+            <h2 className="text-sm font-medium text-gray-500 dark:text-gray-400 uppercase">Documents</h2>
+            <div className="flex gap-2 overflow-x-auto py-1">
+              <div
+                className="flex-shrink-0 flex flex-col items-center justify-center rounded-lg bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-200 cursor-pointer hover:bg-gray-300 dark:hover:bg-gray-500 transition w-16 h-16 sm:w-20 sm:h-20"
+                onClick={() => setShowFilePopup(true)}
+              >
+                <Plus className="w-5 h-5 mb-1" />
+                <span className="text-xs text-center">Add</span>
+              </div>
 
-    {/* 📄 Existing documents */}
-    {stagedDocuments.map((doc) => (
-      <div
-        key={doc.id}
-        className="relative flex-shrink-0 flex flex-col items-center justify-center rounded-lg shadow transition-colors 
-          w-16 h-16 sm:w-20 sm:h-20 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600"
-      >
-        <FileText className="w-5 h-5 mb-1" />
-        <span
-          className="text-[10px] sm:text-xs text-center truncate w-full px-1"
-          title={doc.name} // 🟢 full name on hover
-        >
-          {doc.name}
-        </span>
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            handleRemoveFile(doc.id);
-          }}
-          className="absolute top-0.5 right-0.5 sm:top-1 sm:right-1 p-1 text-red-500 hover:bg-red-500 hover:text-white rounded-full transition"
-        >
-          <Trash2 className="w-3 h-3 sm:w-4 h-4" />
-        </button>
-      </div>
-    ))}
-  </div>
-</section>
+              {stagedDocuments.map((doc) => (
+                <div
+                  key={doc.id}
+                  className="relative flex-shrink-0 flex flex-col items-center justify-center rounded-lg shadow transition-colors w-16 h-16 sm:w-20 sm:h-20 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600"
+                >
+                  <FileText className="w-5 h-5 mb-1" />
+                  <span className="text-[10px] sm:text-xs text-center truncate w-full px-1" title={doc.name}>
+                    {doc.name}
+                  </span>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleRemoveFile(doc.id);
+                    }}
+                    className="absolute top-0.5 right-0.5 sm:top-1 sm:right-1 p-1 text-red-500 hover:bg-red-500 hover:text-white rounded-full transition"
+                  >
+                    <Trash2 className="w-3 h-3 sm:w-4 h-4" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          </section>
 
           {/* Number of Questions */}
           <section className="flex flex-col gap-2">
-            <h2 className="text-sm font-medium text-gray-500 dark:text-gray-400 uppercase">
-              Number of Questions
-            </h2>
+            <h2 className="text-sm font-medium text-gray-500 dark:text-gray-400 uppercase">Number of Questions</h2>
             <div className="flex items-center gap-3 sm:gap-4">
               <input
                 type="range"
@@ -413,17 +405,13 @@ export default function QuizDetailsPage() {
                 {numQuestions}
               </span>
             </div>
-            <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400">
-              Drag the slider to select between 1 and 50 questions
-            </p>
           </section>
 
           {/* Prompt + Buttons */}
           <section className="flex flex-col gap-3">
             <h2 className="text-sm font-medium text-gray-500 dark:text-gray-400 uppercase">Prompt</h2>
             <textarea
-              className="w-full p-3 sm:p-4 rounded border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 
-                text-gray-900 dark:text-gray-100 text-sm sm:text-base focus:ring-2 focus:ring-blue-500"
+              className="w-full p-3 sm:p-4 rounded border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm sm:text-base focus:ring-2 focus:ring-blue-500"
               rows={5}
               value={prompt}
               onChange={(e) => setPrompt(e.target.value)}
