@@ -53,6 +53,9 @@ export default function QuizAddFilePopup({
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
   const [selectedFiles, setSelectedFiles] = useState<Set<number>>(new Set());
   const [search, setSearch] = useState("");
+  const [limitWarning, setLimitWarning] = useState(false);
+
+  const MAX_SELECTION = 10;
 
   /* ---------------- Fetch root folders & ONLY root files ---------------- */
   useEffect(() => {
@@ -67,7 +70,6 @@ export default function QuizAddFilePopup({
         const folders: FolderItem[] = await foldersRes.json();
         const allFiles: FileItem[] = await filesRes.json();
 
-        // ✅ Keep only files that are not inside any folder
         const rootFiles = allFiles.filter(
           (f) => f.folder_id === null && !existingFileIds.includes(f.id)
         );
@@ -110,7 +112,6 @@ export default function QuizAddFilePopup({
       const folders: FolderItem[] = await foldersRes.json();
       const allFiles: FileItem[] = await filesRes.json();
 
-      // ✅ Only include files that belong to this folder
       const files = allFiles.filter(
         (f) => f.folder_id === folderId && !existingFileIds.includes(f.id)
       );
@@ -174,11 +175,22 @@ export default function QuizAddFilePopup({
     });
   };
 
-  /* ---------------- File Select ---------------- */
+  /* ---------------- File Select (limited to 10) ---------------- */
   const toggleFile = (id: number) => {
     setSelectedFiles((prev) => {
       const newSet = new Set(prev);
-      newSet.has(id) ? newSet.delete(id) : newSet.add(id);
+
+      if (newSet.has(id)) {
+        newSet.delete(id);
+      } else {
+        if (newSet.size >= MAX_SELECTION) {
+          setLimitWarning(true);
+          setTimeout(() => setLimitWarning(false), 2000);
+          return prev; // don’t add more than 10
+        }
+        newSet.add(id);
+      }
+
       return newSet;
     });
   };
@@ -324,6 +336,13 @@ export default function QuizAddFilePopup({
             renderTree(tree)
           )}
         </div>
+
+        {/* ⚠️ Limit warning */}
+        {limitWarning && (
+          <p className="text-red-500 text-sm text-center mt-2">
+            You can select up to {MAX_SELECTION} files only.
+          </p>
+        )}
 
         {/* 🧭 Footer Buttons */}
         <div className="mt-4 flex justify-end gap-2">

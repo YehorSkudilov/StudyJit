@@ -346,40 +346,49 @@ export default function QuizDetailsPage() {
             )}
           </section>
 
-          {/* Documents */}
-          <section className="flex flex-col gap-2">
-            <h2 className="text-sm font-medium text-gray-500 dark:text-gray-400 uppercase">Documents</h2>
-            <div className="flex gap-2 overflow-x-auto py-1">
-              <div
-                className="flex-shrink-0 flex flex-col items-center justify-center rounded-lg bg-gray-200 dark:bg-gray-600 
-                text-gray-700 dark:text-gray-200 cursor-pointer hover:bg-gray-300 dark:hover:bg-gray-500 transition w-16 h-16 sm:w-20 sm:h-20"
-                onClick={() => setShowFilePopup(true)}
-              >
-                <Plus className="w-5 h-5 mb-1" />
-                <span className="text-xs text-center">Add</span>
-              </div>
+{/* Documents */}
+<section className="flex flex-col gap-2">
+  <h2 className="text-sm font-medium text-gray-500 dark:text-gray-400 uppercase">
+    Documents
+  </h2>
+  <div className="flex gap-2 overflow-x-auto py-1">
+    {/* ➕ Add button */}
+    <div
+      className="flex-shrink-0 flex flex-col items-center justify-center rounded-lg bg-gray-200 dark:bg-gray-600 
+      text-gray-700 dark:text-gray-200 cursor-pointer hover:bg-gray-300 dark:hover:bg-gray-500 transition w-16 h-16 sm:w-20 sm:h-20"
+      onClick={() => setShowFilePopup(true)}
+    >
+      <Plus className="w-5 h-5 mb-1" />
+      <span className="text-xs text-center">Add</span>
+    </div>
 
-              {stagedDocuments.map((doc) => (
-                <div
-                  key={doc.id}
-                  className="relative flex-shrink-0 flex flex-col items-center justify-center rounded-lg shadow transition-colors 
-                    w-16 h-16 sm:w-20 sm:h-20 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600"
-                >
-                  <FileText className="w-5 h-5 mb-1" />
-                  <span className="text-[10px] sm:text-xs text-center truncate w-full px-1">{doc.name}</span>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleRemoveFile(doc.id);
-                    }}
-                    className="absolute top-0.5 right-0.5 sm:top-1 sm:right-1 p-1 text-red-500 hover:bg-red-500 hover:text-white rounded-full transition"
-                  >
-                    <Trash2 className="w-3 h-3 sm:w-4 h-4" />
-                  </button>
-                </div>
-              ))}
-            </div>
-          </section>
+    {/* 📄 Existing documents */}
+    {stagedDocuments.map((doc) => (
+      <div
+        key={doc.id}
+        className="relative flex-shrink-0 flex flex-col items-center justify-center rounded-lg shadow transition-colors 
+          w-16 h-16 sm:w-20 sm:h-20 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600"
+      >
+        <FileText className="w-5 h-5 mb-1" />
+        <span
+          className="text-[10px] sm:text-xs text-center truncate w-full px-1"
+          title={doc.name} // 🟢 full name on hover
+        >
+          {doc.name}
+        </span>
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            handleRemoveFile(doc.id);
+          }}
+          className="absolute top-0.5 right-0.5 sm:top-1 sm:right-1 p-1 text-red-500 hover:bg-red-500 hover:text-white rounded-full transition"
+        >
+          <Trash2 className="w-3 h-3 sm:w-4 h-4" />
+        </button>
+      </div>
+    ))}
+  </div>
+</section>
 
           {/* Number of Questions */}
           <section className="flex flex-col gap-2">

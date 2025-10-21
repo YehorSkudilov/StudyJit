@@ -12,19 +12,40 @@ import AlertPopup from "@/components/AlertPopup";
 import { Item } from "@/types/Item";
 import { File as FileIcon, FilePlus, FolderPlus, MoveRight, Trash2 } from "lucide-react";
 
+type FolderCrumb = { id: string | null; name: string };
+
 export default function FilesPage() {
   const [folders, setFolders] = useState<Item[]>([]);
   const [files, setFiles] = useState<Item[]>([]);
   const [displayItems, setDisplayItems] = useState<Item[]>([]);
   const [selectedItems, setSelectedItems] = useState<string[]>([]);
   const [activeFolderId, setActiveFolderId] = useState<string | null>(null);
-  const [folderStack, setFolderStack] = useState<string[]>([]); // 🟢 Navigation stack
+  const [activeFolderName, setActiveFolderName] = useState<string>("Files");
+  const [folderStack, setFolderStack] = useState<FolderCrumb[]>([]);
 
   const [isActionChooserOpen, setIsActionChooserOpen] = useState(false);
   const [isFileUploadOpen, setIsFileUploadOpen] = useState(false);
   const [isCreateFolderOpen, setIsCreateFolderOpen] = useState(false);
   const [alertMessage, setAlertMessage] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
+
+  /* ---------------- Load persisted folder state ---------------- */
+  useEffect(() => {
+    const savedId = sessionStorage.getItem("filesActiveFolderId");
+    const savedName = sessionStorage.getItem("filesActiveFolderName");
+    const savedStack = sessionStorage.getItem("filesFolderStack");
+
+    if (savedId !== null) setActiveFolderId(savedId === "null" ? null : savedId);
+    if (savedName) setActiveFolderName(savedName);
+    if (savedStack) setFolderStack(JSON.parse(savedStack));
+  }, []);
+
+  /* ---------------- Persist folder state ---------------- */
+  useEffect(() => {
+    sessionStorage.setItem("filesActiveFolderId", String(activeFolderId));
+    sessionStorage.setItem("filesActiveFolderName", activeFolderName);
+    sessionStorage.setItem("filesFolderStack", JSON.stringify(folderStack));
+  }, [activeFolderId, activeFolderName, folderStack]);
 
   /* ---------------- Fetch Folders ---------------- */
   const fetchFolders = async (parentId: string | null) => {
@@ -72,22 +93,24 @@ export default function FilesPage() {
   /* ---------------- Folder Navigation ---------------- */
   const handleDoubleClick = (item: Item) => {
     if (item.type === "folder") {
-      setFolderStack((prev) => [...prev, activeFolderId ?? "root"]); // 🟢 remember current folder
+      const currentCrumb: FolderCrumb = { id: activeFolderId, name: activeFolderName };
+      setFolderStack((prev) => [...prev, currentCrumb]);
       setActiveFolderId(item.id);
+      setActiveFolderName(item.name);
     }
   };
 
   const handleGoBack = () => {
-    setFolderStack((prev) => {
-      if (prev.length === 0) {
-        setActiveFolderId(null); // 🟢 root
-        return [];
-      }
-      const newStack = [...prev];
-      const last = newStack.pop();
-      setActiveFolderId(last === "root" ? null : last ?? null);
-      return newStack;
-    });
+    if (folderStack.length > 0) {
+      const prevStack = [...folderStack];
+      const last = prevStack.pop()!;
+      setFolderStack(prevStack);
+      setActiveFolderId(last.id);
+      setActiveFolderName(last.name || "Files");
+    } else {
+      setActiveFolderId(null);
+      setActiveFolderName("Files");
+    }
   };
 
   /* ---------------- Folder Create ---------------- */
@@ -101,9 +124,9 @@ export default function FilesPage() {
     setIsCreateFolderOpen(false);
   };
 
-  /* ---------------- ✅ File Upload (chunked) ---------------- */
+  /* ---------------- File Upload ---------------- */
   const handleFileUpload = async (file: globalThis.File, onProgress?: (p: number) => void) => {
-    const CHUNK_SIZE = 5 * 1024 * 1024; // 5MB
+    const CHUNK_SIZE = 5 * 1024 * 1024;
     let start = 0;
 
     while (start < file.size) {
@@ -128,7 +151,7 @@ export default function FilesPage() {
     await refreshData(activeFolderId);
   };
 
-  /* ---------------- Drag → Drop onto folder ---------------- */
+  /* ---------------- Drag & Drop ---------------- */
   const handleDropOnFolder = async (source: Item | Item[], destinationFolderId: string) => {
     try {
       const sources = Array.isArray(source) ? source : [source];
@@ -148,13 +171,11 @@ export default function FilesPage() {
         }
       }
       await refreshData(activeFolderId);
-    } catch (err) {
-      console.error("❌ Drop-on-folder failed:", err);
+    } catch {
       setAlertMessage("Move failed. Please try again.");
     }
   };
 
-  /* ---------------- ✅ Drop onto “move to parent” bar ---------------- */
   const handleDropToParent = async (source: Item | Item[]) => {
     try {
       const sources = Array.isArray(source) ? source : [source];
@@ -183,8 +204,7 @@ export default function FilesPage() {
         }
       }
       await refreshData(activeFolderId);
-    } catch (e) {
-      console.error("❌ Move-to-parent failed:", e);
+    } catch {
       setAlertMessage("Failed to move item(s) to parent folder.");
     }
   };
@@ -192,8 +212,13 @@ export default function FilesPage() {
   /* ---------------- Delete ---------------- */
   const confirmDeleteAction = async () => {
     setConfirmDelete(false);
-    const folderIds = displayItems.filter((i) => i.type === "folder" && selectedItems.includes(i.id)).map((f) => f.id);
-    const fileIds = displayItems.filter((i) => i.type === "file" && selectedItems.includes(i.id)).map((f) => f.id);
+    const folderIds = displayItems
+      .filter((i) => i.type === "folder" && selectedItems.includes(i.id))
+      .map((f) => f.id);
+    const fileIds = displayItems
+      .filter((i) => i.type === "file" && selectedItems.includes(i.id))
+      .map((f) => f.id);
+
     if (fileIds.length)
       await fetch("/api/items/files/delete", {
         method: "POST",
@@ -206,6 +231,7 @@ export default function FilesPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ids: folderIds, context: "files" }),
       });
+
     await refreshData(activeFolderId);
   };
 
@@ -213,11 +239,10 @@ export default function FilesPage() {
   return (
     <div className="min-h-screen flex flex-col bg-gray-50 dark:bg-gray-900">
       <PageHeader
-        title="Files"
+        title={activeFolderName}
         icon={FileIcon}
-        activeFolder={activeFolderId}
         goBack={handleGoBack}
-        showBack={folderStack.length > 0 || !!activeFolderId} // 🟢 optional: hide back in root
+        showBack={folderStack.length > 0 || !!activeFolderId}
         selectedItems={selectedItems}
         onSelectAll={() => setSelectedItems(displayItems.map((i) => i.id))}
         onDeselectAll={() => setSelectedItems([])}

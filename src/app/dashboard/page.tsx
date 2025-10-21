@@ -24,7 +24,7 @@ export default function DashboardPage() {
 
   const [activeFolderId, setActiveFolderId] = useState<string | null>(null);
   const [activeFolderName, setActiveFolderName] = useState<string>("Learning Space");
-  const [folderStack, setFolderStack] = useState<FolderCrumb[]>([]); // ← stores id+name
+  const [folderStack, setFolderStack] = useState<FolderCrumb[]>([]);
 
   const [isActionChooserOpen, setIsActionChooserOpen] = useState(false);
   const [isCreateQuizOpen, setIsCreateQuizOpen] = useState(false);
@@ -33,6 +33,24 @@ export default function DashboardPage() {
   const [confirmDelete, setConfirmDelete] = useState(false);
 
   const router = useRouter();
+
+  /* ---------------- Load persisted folder state ---------------- */
+  useEffect(() => {
+    const savedId = sessionStorage.getItem("quizActiveFolderId");
+    const savedName = sessionStorage.getItem("quizActiveFolderName");
+    const savedStack = sessionStorage.getItem("quizFolderStack");
+
+    if (savedId !== null) setActiveFolderId(savedId === "null" ? null : savedId);
+    if (savedName) setActiveFolderName(savedName);
+    if (savedStack) setFolderStack(JSON.parse(savedStack));
+  }, []);
+
+  /* ---------------- Persist folder state ---------------- */
+  useEffect(() => {
+    sessionStorage.setItem("quizActiveFolderId", String(activeFolderId));
+    sessionStorage.setItem("quizActiveFolderName", activeFolderName);
+    sessionStorage.setItem("quizFolderStack", JSON.stringify(folderStack));
+  }, [activeFolderId, activeFolderName, folderStack]);
 
   /* ---------------- Fetch Folders ---------------- */
   const fetchFolders = async (parentId: string | null) => {
@@ -85,13 +103,8 @@ export default function DashboardPage() {
   /* ---------------- Folder Navigation ---------------- */
   const handleDoubleClick = (item: Item) => {
     if (item.type === "folder") {
-      // push current folder crumb (or root) before entering new folder
-      const currentCrumb: FolderCrumb = {
-        id: activeFolderId,
-        name: activeFolderName,
-      };
+      const currentCrumb: FolderCrumb = { id: activeFolderId, name: activeFolderName };
       setFolderStack((prev) => [...prev, currentCrumb]);
-
       setActiveFolderId(item.id);
       setActiveFolderName(item.name);
     } else if (item.type === "quiz") {
@@ -108,7 +121,6 @@ export default function DashboardPage() {
       setActiveFolderId(last.id);
       setActiveFolderName(last.name || "Learning Space");
     } else {
-      // back to root
       setActiveFolderId(null);
       setActiveFolderName("Learning Space");
     }
@@ -156,8 +168,7 @@ export default function DashboardPage() {
         }
       }
       await refreshData(activeFolderId);
-    } catch (err) {
-      console.error("❌ Drop-on-folder failed:", err);
+    } catch {
       setAlertMessage("Move failed. Please try again.");
     }
   };
@@ -192,8 +203,7 @@ export default function DashboardPage() {
       }
 
       await refreshData(activeFolderId);
-    } catch (e) {
-      console.error("❌ Move-to-parent failed:", e);
+    } catch {
       setAlertMessage("Failed to move item(s) to parent folder.");
     }
   };
@@ -229,9 +239,8 @@ export default function DashboardPage() {
   return (
     <div className="min-h-screen flex flex-col bg-gray-50 dark:bg-gray-900">
       <PageHeader
-        title={activeFolderName}    
+        title={activeFolderName}
         icon={BookOpen}
-        activeFolder={activeFolderId}
         goBack={handleGoBack}
         showBack={folderStack.length > 0 || !!activeFolderId}
         selectedItems={selectedItems}
