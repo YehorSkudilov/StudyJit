@@ -66,7 +66,7 @@ function DropToParentZone() {
       initial={{ opacity: 0, y: -10 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -10 }}
-      transition={{ duration: 0.2 }}
+      transition={{ duration: 0.25 }}
       className={`w-full h-14 mb-4 flex items-center justify-center rounded-lg border-2 border-dashed transition
         ${
           isOver
@@ -137,13 +137,13 @@ export default function GenericGrid({
   const lastClickedIndex = useRef<number | null>(null);
   const [draggingItems, setDraggingItems] = useState<Item[]>([]);
   const [isOverFolder, setIsOverFolder] = useState(false);
+  const [showDropZone, setShowDropZone] = useState(false);
 
   /* -------------------- Drag Events -------------------- */
   const handleDragStart = (evt: DragStartEvent) => {
     const draggedItem = evt.active.data?.current?.item as Item | undefined;
     if (!draggedItem) return;
 
-    // If multiple items selected and this item is part of that selection, drag all
     if (selectedItems.includes(draggedItem.id) && selectedItems.length > 1) {
       const selected = items.filter((i) => selectedItems.includes(i.id));
       setDraggingItems(selected);
@@ -161,19 +161,16 @@ export default function GenericGrid({
   const handleDragEnd = async (event: DragEndEvent) => {
     const { active, over } = event;
     setIsOverFolder(false);
+    setDraggingItems([]);
+    setShowDropZone(false);
 
-    if (!active || !over || draggingItems.length === 0) {
-      setDraggingItems([]);
-      return;
-    }
-
+    if (!active || !over) return;
     const overItem = over?.data?.current?.item as Item;
     const isMulti = draggingItems.length > 1;
 
     // ✅ Drop onto parent zone
     if (over.id === "drop-to-parent") {
       for (const item of draggingItems) await onDropToParent?.(item);
-      setDraggingItems([]);
       return;
     }
 
@@ -182,14 +179,13 @@ export default function GenericGrid({
       for (const item of draggingItems) {
         if (item.id !== overItem.id) await onDropOnFolder?.(item, overItem.id);
       }
-      setDraggingItems([]);
       return;
     }
 
-    // ✅ Single-item reordering
+    // ✅ Reordering
     if (!isMulti && !isOverFolder) {
       const activeItem = active.data?.current?.item as Item;
-    if (!activeItem) return;
+      if (!activeItem) return;
       const oldIndex = items.findIndex((i) => i.id === activeItem.id);
       const newIndex = items.findIndex((i) => i.id === over.id);
       if (oldIndex !== -1 && newIndex !== -1) {
@@ -197,9 +193,18 @@ export default function GenericGrid({
         onReorder?.(newOrder);
       }
     }
-
-    setDraggingItems([]);
   };
+
+  /* -------------------- Delay the drop zone -------------------- */
+  useEffect(() => {
+    let timer: NodeJS.Timeout | undefined;
+    if (draggingItems.length > 0) {
+      timer = setTimeout(() => setShowDropZone(true), 400); // 🕒 delay 400 ms
+    } else {
+      setShowDropZone(false);
+    }
+    return () => clearTimeout(timer);
+  }, [draggingItems.length]);
 
   /* -------------------- Selection -------------------- */
   const handleItemClick = (e: React.MouseEvent, itemId: string) => {
@@ -240,8 +245,8 @@ export default function GenericGrid({
       onDragOver={handleDragOver}
       onDragEnd={handleDragEnd}
     >
-      {/* ✅ Only show the "Drop here" zone while dragging */}
-      <AnimatePresence>{draggingItems.length > 0 && <DropToParentZone />}</AnimatePresence>
+      {/* ✅ Show the “drop” zone only after a short delay */}
+      <AnimatePresence>{showDropZone && <DropToParentZone />}</AnimatePresence>
 
       <SortableContext
         items={!isOverFolder ? visibleItems.map((i) => i.id) : []}
@@ -273,8 +278,8 @@ export default function GenericGrid({
         </div>
       </SortableContext>
 
-      {/* 🌟 Drag Overlay for one or multiple items */}
-      <DragOverlay adjustScale={false}>
+      {/* 🌟 Drag Overlay */}
+      <DragOverlay adjustScale={false} style={{ transformOrigin: "top left" }}>
         {draggingItems.length > 0 && mainDragged && (
           <motion.div
             initial={{ opacity: 0.6 }}
