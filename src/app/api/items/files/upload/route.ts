@@ -28,40 +28,24 @@ class SuperYouTubeDownloader {
   }
 
   async getVideoInfo() {
-    // Enhanced request options like super_ytdl to avoid bot detection
-    const requestOptions = {
-      headers: {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
-        "Accept-Language": "en-US,en;q=0.9",
-        "Accept-Encoding": "gzip, deflate, br",
-        "Cache-Control": "no-cache",
-        "Pragma": "no-cache",
-        "Sec-Ch-Ua": '"Not_A Brand";v="8", "Chromium";v="120"',
-        "Sec-Ch-Ua-Mobile": "?0",
-        "Sec-Ch-Ua-Platform": '"Windows"',
-        "Sec-Fetch-Dest": "document",
-        "Sec-Fetch-Mode": "navigate",
-        "Sec-Fetch-Site": "none",
-        "Upgrade-Insecure-Requests": "1",
+    // Multiple request strategies like super_ytdl
+    const strategies = [
+      {
+        name: "Standard Chrome",
+        requestOptions: {
+          headers: {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
+            "Accept-Language": "en-US,en;q=0.9",
+            "Accept-Encoding": "gzip, deflate, br",
+            "Cache-Control": "no-cache",
+            "Pragma": "no-cache",
+          },
+        }
       },
-    };
-
-    try {
-      console.log("🔍 Fetching video info...");
-      this.info = await ytdl.getInfo(this.url, { 
-        requestOptions,
-        lang: 'en'
-      });
-      console.log("✅ Successfully fetched video info");
-      return this.info;
-    } catch (error: unknown) {
-      console.error("❌ First attempt failed:", error instanceof Error ? error.message : String(error));
-      
-      // Try alternative approach with different user agent and options
-      try {
-        console.log("🔄 Attempting alternative approach...");
-        const alternativeOptions = {
+      {
+        name: "Linux Chrome",
+        requestOptions: {
           headers: {
             "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36",
             "Accept": "*/*",
@@ -69,38 +53,97 @@ class SuperYouTubeDownloader {
             "Accept-Encoding": "gzip, deflate, br",
             "Origin": "https://www.youtube.com",
             "Referer": "https://www.youtube.com/",
-            "DNT": "1",
           },
-        };
+        }
+      },
+      {
+        name: "Mobile Safari",
+        requestOptions: {
+          headers: {
+            "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1",
+            "Accept": "*/*",
+            "Accept-Language": "en-US,en;q=0.9",
+          },
+        }
+      },
+      {
+        name: "Googlebot",
+        requestOptions: {
+          headers: {
+            "User-Agent": "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)",
+            "Accept": "*/*",
+          },
+        }
+      }
+    ];
 
+    // Try IP rotation simulation by using different approaches
+    for (const strategy of strategies) {
+      try {
+        console.log(`🔍 Trying ${strategy.name} strategy...`);
+        
         this.info = await ytdl.getInfo(this.url, { 
-          requestOptions: alternativeOptions,
+          requestOptions: strategy.requestOptions,
           lang: 'en'
         });
-        console.log("✅ Alternative approach succeeded");
-        return this.info;
-      } catch (secondError: unknown) {
-        console.error("❌ All attempts failed:", secondError instanceof Error ? secondError.message : String(secondError));
-        
-        // Final attempt with minimal headers
-        try {
-          console.log("🔄 Attempting minimal headers approach...");
-          const minimalOptions = {
-            headers: {
-              "User-Agent": "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)",
-            },
-          };
 
-          this.info = await ytdl.getInfo(this.url, { 
-            requestOptions: minimalOptions,
-            lang: 'en'
-          });
-          console.log("✅ Minimal headers approach succeeded");
-          return this.info;
-        } catch (finalError: unknown) {
-          console.error("💥 All download methods failed");
-          throw new Error(`YouTube blocked the request. This is usually temporary. Please try again later. Details: ${finalError instanceof Error ? finalError.message : String(finalError)}`);
+        // Check if video is available
+        if (!this.info.videoDetails) {
+          throw new Error('Video details not found - video may be unavailable');
         }
+
+        console.log(`✅ Success with ${strategy.name} strategy`);
+        return this.info;
+
+      } catch (error: unknown) {
+        console.log(`❌ ${strategy.name} failed:`, error instanceof Error ? error.message : String(error));
+        
+        // Wait a bit before next attempt
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      }
+    }
+
+    // If all strategies fail, try with embedded player parameters
+    try {
+      console.log("🔄 Trying with embedded player parameters...");
+      
+      const embeddedOptions = {
+        headers: {
+          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+          "Accept": "*/*",
+          "Referer": "https://www.youtube.com/",
+        },
+      };
+
+      // Add embedded parameter to URL
+      const embeddedUrl = this.url.includes('?') 
+        ? `${this.url}&embeds_control=true`
+        : `${this.url}?embeds_control=true`;
+
+      this.info = await ytdl.getInfo(embeddedUrl, { 
+        requestOptions: embeddedOptions,
+        lang: 'en'
+      });
+
+      console.log("✅ Success with embedded parameters");
+      return this.info;
+
+    } catch (finalError: unknown) {
+      console.error("💥 All strategies failed");
+      
+      // Provide specific error messages based on common issues
+      const errorMessage = finalError instanceof Error ? finalError.message : String(finalError);
+      
+      if (errorMessage.includes('Video unavailable')) {
+        throw new Error(`This video is unavailable. It may be:\n- Private or deleted\n- Age-restricted (requires login)\n- Region-restricted\n- Copyright claimed`);
+      } else if (errorMessage.includes('Private video')) {
+        throw new Error('This video is private and cannot be downloaded.');
+      } else if (errorMessage.includes('Sign in')) {
+        throw new Error('This video requires age verification. Please sign in to YouTube to watch it.');
+      } else if (errorMessage.includes('not found')) {
+        throw new Error('Video not found. It may have been removed or the URL is incorrect.');
+      } else {
+        throw new Error(`Unable to access video: ${errorMessage}\n\nPossible solutions:\n- Check if the video is publicly available\n- Try a different video\n- The video might be region-locked\n- Wait and try again later`);
       }
     }
   }
@@ -116,7 +159,9 @@ class SuperYouTubeDownloader {
       duration: this.info.videoDetails.lengthSeconds,
       thumbnail: this.info.videoDetails.thumbnails[0]?.url,
       author: this.info.videoDetails.author.name,
-      formats: this.info.formats.length
+      formats: this.info.formats.length,
+      isLive: this.info.videoDetails.isLive,
+      viewCount: this.info.videoDetails.viewCount
     };
   }
 
@@ -126,17 +171,22 @@ class SuperYouTubeDownloader {
     
     console.log(`📊 Available formats: ${formats.length}`);
     
+    // For live streams, handle differently
+    if (this.info.videoDetails.isLive) {
+      console.log('⚠️ Live stream detected - format selection may be limited');
+    }
+    
     // Filter available formats - be more flexible with containers
     const videoFormats = formats.filter((f: any) => 
-      f.hasVideo && !f.hasAudio && (f.container === 'mp4' || f.container === 'webm')
+      f.hasVideo && !f.hasAudio && (f.container === 'mp4' || f.container === 'webm' || f.codecs?.includes('avc1'))
     );
     
     const audioFormats = formats.filter((f: any) => 
-      f.hasAudio && !f.hasVideo && (f.container === 'mp4' || f.container === 'webm' || f.container === 'm4a')
+      f.hasAudio && !f.hasVideo && (f.container === 'mp4' || f.container === 'webm' || f.container === 'm4a' || f.codecs?.includes('mp4a'))
     );
     
     const combinedFormats = formats.filter((f: any) => 
-      f.hasVideo && f.hasAudio && (f.container === 'mp4' || f.container === 'webm')
+      f.hasVideo && f.hasAudio && (f.container === 'mp4' || f.container === 'webm' || f.codecs?.includes('avc1'))
     );
 
     console.log(`🎯 Found ${combinedFormats.length} combined, ${videoFormats.length} video, ${audioFormats.length} audio formats`);
@@ -436,15 +486,32 @@ export async function POST(req: Request) {
       } catch (error: unknown) {
         console.error("💥 Enhanced download failed:", error instanceof Error ? error.message : String(error));
         
-        // More specific error messages
-        let userMessage = error instanceof Error ? error.message : String(error);
-        if (userMessage.includes('bot') || userMessage.includes('confirm') || userMessage.includes('sign in')) {
-          userMessage = "YouTube is requesting verification. This is usually temporary. Please:\n- Try again in a few minutes\n- Try a different video\n- The video might be age-restricted or unavailable in your region";
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        
+        // Provide user-friendly error messages
+        let userMessage = errorMessage;
+        let details = "Please try again or contact support if the problem persists";
+
+        if (errorMessage.includes('Video unavailable') || errorMessage.includes('unavailable')) {
+          userMessage = "This video is unavailable";
+          details = "The video may be private, deleted, age-restricted, or region-locked. Try a different video.";
+        } else if (errorMessage.includes('Private video')) {
+          userMessage = "This video is private";
+          details = "Private videos cannot be downloaded. The uploader has restricted access.";
+        } else if (errorMessage.includes('Sign in') || errorMessage.includes('age verification')) {
+          userMessage = "Age verification required";
+          details = "This video requires age verification. Please sign in to YouTube to watch it.";
+        } else if (errorMessage.includes('not found') || errorMessage.includes('removed')) {
+          userMessage = "Video not found";
+          details = "The video may have been removed or the URL is incorrect.";
+        } else if (errorMessage.includes('region') || errorMessage.includes('country')) {
+          userMessage = "Region restricted";
+          details = "This video is not available in your country. Try using a VPN.";
         }
 
         return NextResponse.json({ 
           error: userMessage,
-          details: "If this persists, try using a VPN or check if the video is publicly available"
+          details: details
         }, { status: 500 });
       }
     }
@@ -526,8 +593,16 @@ export async function GET(req: Request) {
 
   } catch (error: unknown) {
     console.error("💥 Video info fetch error:", error instanceof Error ? error.message : String(error));
+    
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    let userMessage = `Failed to fetch video info: ${errorMessage}`;
+    
+    if (errorMessage.includes('Video unavailable') || errorMessage.includes('unavailable')) {
+      userMessage = "This video is unavailable and cannot be downloaded";
+    }
+
     return NextResponse.json(
-      { error: `Failed to fetch video info: ${error instanceof Error ? error.message : String(error)}` },
+      { error: userMessage },
       { status: 500 }
     );
   }
