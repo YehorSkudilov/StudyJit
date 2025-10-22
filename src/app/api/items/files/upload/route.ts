@@ -28,27 +28,80 @@ class SuperYouTubeDownloader {
   }
 
   async getVideoInfo() {
+    // Enhanced request options like super_ytdl to avoid bot detection
     const requestOptions = {
       headers: {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
         "Accept-Language": "en-US,en;q=0.9",
-        "Accept": "*/*",
-        "Cookie": process.env.YOUTUBE_COOKIES || "",
+        "Accept-Encoding": "gzip, deflate, br",
+        "Cache-Control": "no-cache",
+        "Pragma": "no-cache",
+        "Sec-Ch-Ua": '"Not_A Brand";v="8", "Chromium";v="120"',
+        "Sec-Ch-Ua-Mobile": "?0",
+        "Sec-Ch-Ua-Platform": '"Windows"',
+        "Sec-Fetch-Dest": "document",
+        "Sec-Fetch-Mode": "navigate",
+        "Sec-Fetch-Site": "none",
+        "Upgrade-Insecure-Requests": "1",
       },
     };
 
     try {
-      this.info = await ytdl.getInfo(this.url, { requestOptions });
+      console.log("🔍 Fetching video info...");
+      this.info = await ytdl.getInfo(this.url, { 
+        requestOptions,
+        lang: 'en'
+      });
+      console.log("✅ Successfully fetched video info");
       return this.info;
-    } catch (error: any) {
-      // Retry without cookies if first attempt fails - create new object without Cookie
-      console.log("🔄 Retrying without cookies...");
-      const { Cookie, ...headersWithoutCookie } = requestOptions.headers;
-      const retryOptions = {
-        headers: headersWithoutCookie
-      };
-      this.info = await ytdl.getInfo(this.url, { requestOptions: retryOptions });
-      return this.info;
+    } catch (error: unknown) {
+      console.error("❌ First attempt failed:", error instanceof Error ? error.message : String(error));
+      
+      // Try alternative approach with different user agent and options
+      try {
+        console.log("🔄 Attempting alternative approach...");
+        const alternativeOptions = {
+          headers: {
+            "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36",
+            "Accept": "*/*",
+            "Accept-Language": "en-US,en;q=0.5",
+            "Accept-Encoding": "gzip, deflate, br",
+            "Origin": "https://www.youtube.com",
+            "Referer": "https://www.youtube.com/",
+            "DNT": "1",
+          },
+        };
+
+        this.info = await ytdl.getInfo(this.url, { 
+          requestOptions: alternativeOptions,
+          lang: 'en'
+        });
+        console.log("✅ Alternative approach succeeded");
+        return this.info;
+      } catch (secondError: unknown) {
+        console.error("❌ All attempts failed:", secondError instanceof Error ? secondError.message : String(secondError));
+        
+        // Final attempt with minimal headers
+        try {
+          console.log("🔄 Attempting minimal headers approach...");
+          const minimalOptions = {
+            headers: {
+              "User-Agent": "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)",
+            },
+          };
+
+          this.info = await ytdl.getInfo(this.url, { 
+            requestOptions: minimalOptions,
+            lang: 'en'
+          });
+          console.log("✅ Minimal headers approach succeeded");
+          return this.info;
+        } catch (finalError: unknown) {
+          console.error("💥 All download methods failed");
+          throw new Error(`YouTube blocked the request. This is usually temporary. Please try again later. Details: ${finalError instanceof Error ? finalError.message : String(finalError)}`);
+        }
+      }
     }
   }
 
@@ -71,18 +124,22 @@ class SuperYouTubeDownloader {
   private selectBestFormats() {
     const formats = this.info.formats;
     
-    // Filter available formats
+    console.log(`📊 Available formats: ${formats.length}`);
+    
+    // Filter available formats - be more flexible with containers
     const videoFormats = formats.filter((f: any) => 
-      f.hasVideo && !f.hasAudio && f.container === 'mp4'
+      f.hasVideo && !f.hasAudio && (f.container === 'mp4' || f.container === 'webm')
     );
     
     const audioFormats = formats.filter((f: any) => 
-      f.hasAudio && !f.hasVideo && (f.container === 'mp4' || f.container === 'webm')
+      f.hasAudio && !f.hasVideo && (f.container === 'mp4' || f.container === 'webm' || f.container === 'm4a')
     );
     
     const combinedFormats = formats.filter((f: any) => 
-      f.hasVideo && f.hasAudio && f.container === 'mp4'
+      f.hasVideo && f.hasAudio && (f.container === 'mp4' || f.container === 'webm')
     );
+
+    console.log(`🎯 Found ${combinedFormats.length} combined, ${videoFormats.length} video, ${audioFormats.length} audio formats`);
 
     // Sort by quality (bitrate + resolution)
     const sortByQuality = (a: any, b: any) => {
@@ -91,11 +148,24 @@ class SuperYouTubeDownloader {
       return bScore - aScore;
     };
 
-    return {
+    const selected = {
       video: videoFormats.sort(sortByQuality)[0],
       audio: audioFormats.sort(sortByQuality)[0],
       combined: combinedFormats.sort(sortByQuality)[0],
     };
+
+    // Log selected formats
+    if (selected.combined) {
+      console.log(`🎯 Selected combined: ${selected.combined.qualityLabel} (${selected.combined.container})`);
+    }
+    if (selected.video) {
+      console.log(`🎯 Selected video: ${selected.video.qualityLabel} (${selected.video.container})`);
+    }
+    if (selected.audio) {
+      console.log(`🎯 Selected audio: ${selected.audio.audioQuality} (${selected.audio.container})`);
+    }
+
+    return selected;
   }
 
   private getResolutionScore(format: any) {
@@ -110,30 +180,35 @@ class SuperYouTubeDownloader {
       '1080p': 600,
       '1440p': 700,
       '2160p': 800,
+      '4320p': 900,
     };
 
     return resolutionScores[format.qualityLabel] || 0;
   }
 
-  // Enhanced download with progress tracking
+  // Enhanced download with progress tracking and better error handling
   async downloadWithProgress(stream: any, filePath: string, type: string): Promise<void> {
     return new Promise((resolve, reject) => {
       let downloadedBytes = 0;
       let totalBytes = 0;
       let lastProgress = 0;
+      let startTime = Date.now();
 
       stream.on('info', (info: any) => {
         totalBytes = info.size;
         console.log(`📥 Downloading ${type} (${this.formatBytes(totalBytes)})`);
+        startTime = Date.now();
       });
 
       stream.on('progress', (chunkLength: number) => {
         downloadedBytes += chunkLength;
         const progress = totalBytes ? (downloadedBytes / totalBytes) * 100 : 0;
+        const elapsed = (Date.now() - startTime) / 1000;
+        const speed = elapsed > 0 ? downloadedBytes / elapsed : 0;
         
-        // Only log progress every 10% to avoid spam
-        if (progress - lastProgress >= 10) {
-          console.log(`📊 ${type} progress: ${progress.toFixed(1)}%`);
+        // Log progress every 5% to avoid spam
+        if (progress - lastProgress >= 5) {
+          console.log(`📊 ${type}: ${progress.toFixed(1)}% - ${this.formatBytes(speed)}/s`);
           lastProgress = progress;
         }
       });
@@ -141,9 +216,30 @@ class SuperYouTubeDownloader {
       const fileStream = fs.createWriteStream(filePath);
       stream.pipe(fileStream);
 
-      fileStream.on('finish', resolve);
-      fileStream.on('error', reject);
-      stream.on('error', reject);
+      fileStream.on('finish', () => {
+        const elapsed = (Date.now() - startTime) / 1000;
+        console.log(`✅ ${type} download completed in ${elapsed.toFixed(1)}s`);
+        resolve();
+      });
+      
+      fileStream.on('error', (error: Error) => {
+        console.error(`❌ ${type} file stream error:`, error);
+        reject(error);
+      });
+      
+      stream.on('error', (error: Error) => {
+        console.error(`❌ ${type} download stream error:`, error);
+        reject(error);
+      });
+
+      // Set timeout for download (10 minutes)
+      const timeout = setTimeout(() => {
+        stream.destroy();
+        reject(new Error(`${type} download timeout after 10 minutes`));
+      }, 10 * 60 * 1000);
+
+      stream.on('end', () => clearTimeout(timeout));
+      stream.on('error', () => clearTimeout(timeout));
     });
   }
 
@@ -155,7 +251,7 @@ class SuperYouTubeDownloader {
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
   }
 
-  // Main download method
+  // Main download method with enhanced error handling
   async download(): Promise<{ path: string; size: number; title: string }> {
     if (!this.info) {
       throw new Error('Video info not loaded. Call getVideoInfo() first.');
@@ -164,18 +260,12 @@ class SuperYouTubeDownloader {
     const formats = this.selectBestFormats();
     const outputPath = path.join(this.uploadDir, `${this.safeTitle}.mp4`);
 
-    console.log('🎯 Selected formats:', {
-      video: formats.video?.qualityLabel,
-      audio: formats.audio?.audioQuality,
-      combined: formats.combined?.qualityLabel
-    });
-
     // Prefer combined format for simplicity
     if (formats.combined) {
       console.log('🚀 Downloading combined format...');
       const stream = ytdl.downloadFromInfo(this.info, {
         format: formats.combined,
-        highWaterMark: 1 << 25,
+        highWaterMark: 1 << 25, // 32MB buffer
       });
 
       await this.downloadWithProgress(stream, outputPath, 'combined');
@@ -187,31 +277,34 @@ class SuperYouTubeDownloader {
       const videoPath = path.join(this.uploadDir, `${this.safeTitle}_video.tmp`);
       const audioPath = path.join(this.uploadDir, `${this.safeTitle}_audio.tmp`);
 
-      const videoStream = ytdl.downloadFromInfo(this.info, {
-        format: formats.video,
-        highWaterMark: 1 << 25,
-      });
+      try {
+        const videoStream = ytdl.downloadFromInfo(this.info, {
+          format: formats.video,
+          highWaterMark: 1 << 25,
+        });
 
-      const audioStream = ytdl.downloadFromInfo(this.info, {
-        format: formats.audio,
-        highWaterMark: 1 << 25,
-      });
+        const audioStream = ytdl.downloadFromInfo(this.info, {
+          format: formats.audio,
+          highWaterMark: 1 << 25,
+        });
 
-      await Promise.all([
-        this.downloadWithProgress(videoStream, videoPath, 'video'),
-        this.downloadWithProgress(audioStream, audioPath, 'audio'),
-      ]);
+        await Promise.all([
+          this.downloadWithProgress(videoStream, videoPath, 'video'),
+          this.downloadWithProgress(audioStream, audioPath, 'audio'),
+        ]);
 
-      console.log('🎞️ Merging streams with FFmpeg...');
-      await this.mergeWithFFmpeg(videoPath, audioPath, outputPath);
+        console.log('🎞️ Merging streams with FFmpeg...');
+        await this.mergeWithFFmpeg(videoPath, audioPath, outputPath);
 
-      // Cleanup temp files
-      await Promise.all([
-        fs.promises.unlink(videoPath).catch(() => {}),
-        fs.promises.unlink(audioPath).catch(() => {}),
-      ]);
+      } finally {
+        // Cleanup temp files regardless of success/failure
+        await Promise.all([
+          fs.promises.unlink(videoPath).catch(() => console.log('⚠️ Could not delete video temp file')),
+          fs.promises.unlink(audioPath).catch(() => console.log('⚠️ Could not delete audio temp file')),
+        ]);
+      }
     } else {
-      throw new Error('No suitable formats found for download');
+      throw new Error('No suitable formats found for download. Available formats may be restricted.');
     }
 
     const stats = await fs.promises.stat(outputPath);
@@ -227,49 +320,54 @@ class SuperYouTubeDownloader {
       console.log('🚀 Starting FFmpeg merge...');
       
       const ffmpegArgs = [
-        '-y',
-        '-i', videoPath,
-        '-i', audioPath,
-        '-c:v', 'copy',
-        '-c:a', 'aac',
-        '-b:a', '192k',
-        '-movflags', '+faststart',
-        '-shortest',
+        '-y', // Overwrite output
+        '-i', videoPath, // Video input
+        '-i', audioPath, // Audio input
+        '-c:v', 'copy', // Copy video stream (no re-encoding)
+        '-c:a', 'aac', // Encode audio to AAC
+        '-b:a', '192k', // Audio bitrate
+        '-movflags', '+faststart', // Optimize for streaming
+        '-shortest', // Match shortest stream
+        '-loglevel', 'info', // Less verbose logging
         outputPath
       ];
 
       const ffmpeg = spawn('ffmpeg', ffmpegArgs);
       let stderr = '';
 
-      ffmpeg.stderr.on('data', (data) => {
+      ffmpeg.stderr.on('data', (data: Buffer) => {
         const output = data.toString();
         stderr += output;
         
         // Extract and log progress
         const timeMatch = output.match(/time=(\d+:\d+:\d+\.\d+)/);
         if (timeMatch) {
-          process.stdout.write(`⏱️  FFmpeg progress: ${timeMatch[1]}\r`);
+          process.stdout.write(`⏱️  FFmpeg: ${timeMatch[1]}\r`);
         }
       });
 
-      ffmpeg.on('close', (code) => {
+      ffmpeg.on('close', (code: number) => {
         if (code === 0) {
-          console.log('\n✅ FFmpeg merge completed!');
+          console.log('\n✅ FFmpeg merge completed successfully!');
           resolve();
         } else {
-          reject(new Error(`FFmpeg failed with code ${code}: ${stderr}`));
+          console.error('\n❌ FFmpeg failed with code:', code);
+          reject(new Error(`FFmpeg process failed with code ${code}`));
         }
       });
 
-      ffmpeg.on('error', (error) => {
-        reject(new Error(`FFmpeg not available: ${error.message}`));
+      ffmpeg.on('error', (error: Error) => {
+        console.error('❌ Failed to spawn FFmpeg:', error);
+        reject(new Error(`FFmpeg not available or not installed: ${error.message}`));
       });
 
-      // 10-minute timeout
-      setTimeout(() => {
+      // 15-minute timeout for long videos
+      const timeout = setTimeout(() => {
         ffmpeg.kill();
-        reject(new Error('FFmpeg merge timeout'));
-      }, 10 * 60 * 1000);
+        reject(new Error('FFmpeg merge timeout after 15 minutes'));
+      }, 15 * 60 * 1000);
+
+      ffmpeg.on('close', () => clearTimeout(timeout));
     });
   }
 }
@@ -335,21 +433,19 @@ export async function POST(req: Request) {
           thumbnail: videoDetails.thumbnail,
         });
 
-      } catch (error: any) {
-        console.error("💥 Enhanced download failed:", error);
+      } catch (error: unknown) {
+        console.error("💥 Enhanced download failed:", error instanceof Error ? error.message : String(error));
         
-        const errorSummary = [
-          "❌ YouTube Download Failed",
-          `URL: ${url}`,
-          `Error: ${error.message}`,
-          "👉 Possible solutions:",
-          "- Try a different video",
-          "- Check internet connection",
-          "- Video might be restricted or private",
-          "- Ensure FFmpeg is installed for high-quality downloads",
-        ].join("\n");
+        // More specific error messages
+        let userMessage = error instanceof Error ? error.message : String(error);
+        if (userMessage.includes('bot') || userMessage.includes('confirm') || userMessage.includes('sign in')) {
+          userMessage = "YouTube is requesting verification. This is usually temporary. Please:\n- Try again in a few minutes\n- Try a different video\n- The video might be age-restricted or unavailable in your region";
+        }
 
-        return NextResponse.json({ error: errorSummary }, { status: 500 });
+        return NextResponse.json({ 
+          error: userMessage,
+          details: "If this persists, try using a VPN or check if the video is publicly available"
+        }, { status: 500 });
       }
     }
 
@@ -392,11 +488,11 @@ export async function POST(req: Request) {
     }
 
     return NextResponse.json({ success: true, start, end, total });
-  } catch (err: any) {
-    console.error("💥 Upload error:", err);
+  } catch (err: unknown) {
+    console.error("💥 Upload error:", err instanceof Error ? err.message : String(err));
     return NextResponse.json(
       {
-        error: `Unexpected failure: ${err.message}`,
+        error: `Unexpected failure: ${err instanceof Error ? err.message : String(err)}`,
         details: "Please try again or contact support if the problem persists"
       },
       { status: 500 }
@@ -428,10 +524,10 @@ export async function GET(req: Request) {
 
     return NextResponse.json(videoDetails);
 
-  } catch (error: any) {
-    console.error("💥 Video info fetch error:", error);
+  } catch (error: unknown) {
+    console.error("💥 Video info fetch error:", error instanceof Error ? error.message : String(error));
     return NextResponse.json(
-      { error: `Failed to fetch video info: ${error.message}` },
+      { error: `Failed to fetch video info: ${error instanceof Error ? error.message : String(error)}` },
       { status: 500 }
     );
   }
