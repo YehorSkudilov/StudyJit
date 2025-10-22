@@ -113,7 +113,7 @@ export default function FilesPage() {
     }
   };
 
-    /* ---------------- Folder Rename ---------------- */
+  /* ---------------- Folder Rename ---------------- */
   const handleRenameFolder = async (newName: string) => {
     if (!activeFolderId) return;
     try {
@@ -137,7 +137,6 @@ export default function FilesPage() {
     }
   };
 
-
   /* ---------------- Folder Create ---------------- */
   const handleCreateFolder = async (name: string) => {
     await fetch("/api/items/folders", {
@@ -148,7 +147,6 @@ export default function FilesPage() {
     await refreshData(activeFolderId);
     setIsCreateFolderOpen(false);
   };
-  
 
   /* ---------------- File Upload ---------------- */
   const handleFileUpload = async (file: globalThis.File, onProgress?: (p: number) => void) => {
@@ -177,6 +175,29 @@ export default function FilesPage() {
     await refreshData(activeFolderId);
   };
 
+  /* ---------------- YouTube Upload ---------------- */
+  const handleYouTubeUpload = async (url: string) => {
+    try {
+      const res = await fetch("/api/items/files/upload", {
+        method: "POST",
+        headers: {
+          "x-url": encodeURIComponent(url.trim()),
+          "x-folder": activeFolderId ?? "root",
+        },
+      });
+
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || "Upload failed");
+      }
+
+      await refreshData(activeFolderId);
+      setAlertMessage("🎬 YouTube video uploaded successfully!");
+    } catch (err: any) {
+      setAlertMessage(err.message || "Failed to upload YouTube video.");
+    }
+  };
+
   /* ---------------- Drag & Drop ---------------- */
   const handleDropOnFolder = async (source: Item | Item[], destinationFolderId: string) => {
     try {
@@ -202,48 +223,41 @@ export default function FilesPage() {
     }
   };
 
-const handleDropToParent = async (source: Item | Item[]) => {
-  try {
-    const sources = Array.isArray(source) ? source : [source];
-    if (!activeFolderId) {
-      setAlertMessage("Already at root — cannot move higher.");
-      return;
-    }
-
-    const currentFolder = folders.find((f) => f.id === activeFolderId);
-    const parentId = currentFolder?.parent_id ?? null;
-
-    for (const s of sources) {
-      if (s.type === "file") {
-        await fetch(`/api/items/files/move/${s.id}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ folder_id: parentId }),
-        });
-      } else if (s.type === "folder") {
-        if (s.id === parentId) continue;
-        await fetch(`/api/items/folders/move/${s.id}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ parent_id: parentId, context: "files" }),
-        });
+  const handleDropToParent = async (source: Item | Item[]) => {
+    try {
+      const sources = Array.isArray(source) ? source : [source];
+      if (!activeFolderId) {
+        setAlertMessage("Already at root — cannot move higher.");
+        return;
       }
+
+      const currentFolder = folders.find((f) => f.id === activeFolderId);
+      const parentId = currentFolder?.parent_id ?? null;
+
+      for (const s of sources) {
+        if (s.type === "file") {
+          await fetch(`/api/items/files/move/${s.id}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ folder_id: parentId }),
+          });
+        } else if (s.type === "folder") {
+          if (s.id === parentId) continue;
+          await fetch(`/api/items/folders/move/${s.id}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ parent_id: parentId, context: "files" }),
+          });
+        }
+      }
+
+      const movedIds = sources.map((s) => s.id);
+      setDisplayItems((prev) => prev.filter((item) => !movedIds.includes(item.id)));
+      await fetchFolders(activeFolderId);
+    } catch {
+      setAlertMessage("Failed to move item(s) to parent folder.");
     }
-
-    // 🧩 Instead of refreshing the entire view (which causes "disappear" effect),
-    // manually remove the moved items from the current folder’s display.
-    const movedIds = sources.map((s) => s.id);
-    setDisplayItems((prev) => prev.filter((item) => !movedIds.includes(item.id)));
-
-    // Optionally refresh folder stats/counts silently
-    await fetchFolders(activeFolderId);
-
-  } catch {
-    setAlertMessage("Failed to move item(s) to parent folder.");
-  }
-};
-
-
+  };
 
   /* ---------------- Delete ---------------- */
   const confirmDeleteAction = async () => {
@@ -274,29 +288,28 @@ const handleDropToParent = async (source: Item | Item[]) => {
   /* ---------------- Render ---------------- */
   return (
     <div className="min-h-screen flex flex-col bg-gray-50 dark:bg-gray-900">
-<PageHeader
-  title={activeFolderName}
-  icon={activeFolderId ? Folder  : FileIcon} // shows folder icon when inside
-  color={activeFolderId ? "yellow" : "blue"}
-  goBack={handleGoBack}
-  showBack={folderStack.length > 0 || !!activeFolderId}
-  activeFolder={activeFolderName}
-  canRename={!!activeFolderId} // enable rename when inside folder
-  onRename={handleRenameFolder} // attach rename handler
-  selectedItems={selectedItems}
-  onSelectAll={() => setSelectedItems(displayItems.map((i) => i.id))}
-  onDeselectAll={() => setSelectedItems([])}
-  extraActions={[
-    {
-      icon: Trash2,
-      label: "Delete",
-      color: "red",
-      onClick: () => setConfirmDelete(true),
-      disabled: !selectedItems.length,
-    },
-  ]}
-/>
-
+      <PageHeader
+        title={activeFolderName}
+        icon={activeFolderId ? Folder : FileIcon}
+        color={activeFolderId ? "yellow" : "blue"}
+        goBack={handleGoBack}
+        showBack={folderStack.length > 0 || !!activeFolderId}
+        activeFolder={activeFolderName}
+        canRename={!!activeFolderId}
+        onRename={handleRenameFolder}
+        selectedItems={selectedItems}
+        onSelectAll={() => setSelectedItems(displayItems.map((i) => i.id))}
+        onDeselectAll={() => setSelectedItems([])}
+        extraActions={[
+          {
+            icon: Trash2,
+            label: "Delete",
+            color: "red",
+            onClick: () => setConfirmDelete(true),
+            disabled: !selectedItems.length,
+          },
+        ]}
+      />
 
       <main className="px-6 sm:px-20 pb-20">
         <GenericGrid
@@ -333,15 +346,33 @@ const handleDropToParent = async (source: Item | Item[]) => {
         onClose={() => setIsActionChooserOpen(false)}
         title="Create New"
         actions={[
-          { key: "upload", title: "Upload File", subtitle: "Upload to current folder", color: "blue", icon: FilePlus, onClick: () => setIsFileUploadOpen(true) },
-          { key: "folder", title: "Create Folder", subtitle: "Organize files", color: "yellow", icon: FolderPlus, onClick: () => setIsCreateFolderOpen(true) },
+          {
+            key: "upload",
+            title: "Upload File or Link",
+            subtitle: "Upload to current folder",
+            color: "blue",
+            icon: FilePlus,
+            onClick: () => setIsFileUploadOpen(true),
+          },
+          {
+            key: "folder",
+            title: "Create Folder",
+            subtitle: "Organize files",
+            color: "yellow",
+            icon: FolderPlus,
+            onClick: () => setIsCreateFolderOpen(true),
+          },
         ]}
       />
+
+      {/* Pass folder ID + YouTube upload handler */}
       <FileUploadPopup
         isOpen={isFileUploadOpen}
         onClose={() => setIsFileUploadOpen(false)}
         onFileUpload={handleFileUpload}
+        onYouTubeUpload={handleYouTubeUpload}
       />
+
       <CreateFolderPopup
         isOpen={isCreateFolderOpen}
         onClose={() => setIsCreateFolderOpen(false)}
@@ -349,7 +380,9 @@ const handleDropToParent = async (source: Item | Item[]) => {
       />
 
       {alertMessage && <AlertPopup message={alertMessage} onClose={() => setAlertMessage(null)} />}
-      {confirmDelete && <AlertPopup message={`Delete ${selectedItems.length} item(s)?`} onClose={confirmDeleteAction} />}
+      {confirmDelete && (
+        <AlertPopup message={`Delete ${selectedItems.length} item(s)?`} onClose={confirmDeleteAction} />
+      )}
     </div>
   );
 }
