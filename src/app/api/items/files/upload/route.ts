@@ -28,10 +28,13 @@ class SuperYouTubeDownloader {
   }
 
   async getVideoInfo() {
-    // Multiple request strategies like super_ytdl
+    // Get YouTube cookies from environment variables
+    const youtubeCookies = process.env.YOUTUBE_COOKIES || '';
+    
+    // Multiple request strategies with cookie support
     const strategies = [
       {
-        name: "Standard Chrome",
+        name: "Authenticated Chrome",
         requestOptions: {
           headers: {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
@@ -40,6 +43,18 @@ class SuperYouTubeDownloader {
             "Accept-Encoding": "gzip, deflate, br",
             "Cache-Control": "no-cache",
             "Pragma": "no-cache",
+            "Cookie": youtubeCookies,
+          },
+        }
+      },
+      {
+        name: "Standard Chrome",
+        requestOptions: {
+          headers: {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
+            "Accept-Language": "en-US,en;q=0.9",
+            "Accept-Encoding": "gzip, deflate, br",
           },
         }
       },
@@ -55,29 +70,11 @@ class SuperYouTubeDownloader {
             "Referer": "https://www.youtube.com/",
           },
         }
-      },
-      {
-        name: "Mobile Safari",
-        requestOptions: {
-          headers: {
-            "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1",
-            "Accept": "*/*",
-            "Accept-Language": "en-US,en;q=0.9",
-          },
-        }
-      },
-      {
-        name: "Googlebot",
-        requestOptions: {
-          headers: {
-            "User-Agent": "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)",
-            "Accept": "*/*",
-          },
-        }
       }
     ];
 
-    // Try IP rotation simulation by using different approaches
+    let lastError: Error | null = null;
+
     for (const strategy of strategies) {
       try {
         console.log(`🔍 Trying ${strategy.name} strategy...`);
@@ -89,62 +86,28 @@ class SuperYouTubeDownloader {
 
         // Check if video is available
         if (!this.info.videoDetails) {
-          throw new Error('Video details not found - video may be unavailable');
+          throw new Error('Video details not found');
         }
 
         console.log(`✅ Success with ${strategy.name} strategy`);
         return this.info;
 
       } catch (error: unknown) {
-        console.log(`❌ ${strategy.name} failed:`, error instanceof Error ? error.message : String(error));
+        lastError = error instanceof Error ? error : new Error(String(error));
+        console.log(`❌ ${strategy.name} failed:`, lastError.message);
         
         // Wait a bit before next attempt
         await new Promise(resolve => setTimeout(resolve, 1000));
       }
     }
 
-    // If all strategies fail, try with embedded player parameters
-    try {
-      console.log("🔄 Trying with embedded player parameters...");
-      
-      const embeddedOptions = {
-        headers: {
-          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-          "Accept": "*/*",
-          "Referer": "https://www.youtube.com/",
-        },
-      };
-
-      // Add embedded parameter to URL
-      const embeddedUrl = this.url.includes('?') 
-        ? `${this.url}&embeds_control=true`
-        : `${this.url}?embeds_control=true`;
-
-      this.info = await ytdl.getInfo(embeddedUrl, { 
-        requestOptions: embeddedOptions,
-        lang: 'en'
-      });
-
-      console.log("✅ Success with embedded parameters");
-      return this.info;
-
-    } catch (finalError: unknown) {
-      console.error("💥 All strategies failed");
-      
-      // Provide specific error messages based on common issues
-      const errorMessage = finalError instanceof Error ? finalError.message : String(finalError);
-      
-      if (errorMessage.includes('Video unavailable')) {
-        throw new Error(`This video is unavailable. It may be:\n- Private or deleted\n- Age-restricted (requires login)\n- Region-restricted\n- Copyright claimed`);
-      } else if (errorMessage.includes('Private video')) {
-        throw new Error('This video is private and cannot be downloaded.');
-      } else if (errorMessage.includes('Sign in')) {
-        throw new Error('This video requires age verification. Please sign in to YouTube to watch it.');
-      } else if (errorMessage.includes('not found')) {
-        throw new Error('Video not found. It may have been removed or the URL is incorrect.');
-      } else {
-        throw new Error(`Unable to access video: ${errorMessage}\n\nPossible solutions:\n- Check if the video is publicly available\n- Try a different video\n- The video might be region-locked\n- Wait and try again later`);
-      }
+    // If all strategies fail, provide specific guidance
+    if (lastError?.message.includes('age') || lastError?.message.includes('sign in') || lastError?.message.includes('confirm')) {
+      throw new Error(`AGE_VERIFICATION_REQUIRED: This video is age-restricted and requires YouTube authentication. ${youtubeCookies ? 'The provided cookies may be invalid or expired.' : 'No authentication cookies provided.'}`);
+    } else if (lastError?.message.includes('Video unavailable')) {
+      throw new Error(`VIDEO_UNAVAILABLE: This video is not available. It may be private, deleted, or region-restricted.`);
+    } else {
+      throw new Error(`DOWNLOAD_FAILED: Unable to access video: ${lastError?.message}`);
     }
   }
 
@@ -171,12 +134,7 @@ class SuperYouTubeDownloader {
     
     console.log(`📊 Available formats: ${formats.length}`);
     
-    // For live streams, handle differently
-    if (this.info.videoDetails.isLive) {
-      console.log('⚠️ Live stream detected - format selection may be limited');
-    }
-    
-    // Filter available formats - be more flexible with containers
+    // Filter available formats
     const videoFormats = formats.filter((f: any) => 
       f.hasVideo && !f.hasAudio && (f.container === 'mp4' || f.container === 'webm' || f.codecs?.includes('avc1'))
     );
@@ -236,7 +194,7 @@ class SuperYouTubeDownloader {
     return resolutionScores[format.qualityLabel] || 0;
   }
 
-  // Enhanced download with progress tracking and better error handling
+  // Enhanced download with progress tracking
   async downloadWithProgress(stream: any, filePath: string, type: string): Promise<void> {
     return new Promise((resolve, reject) => {
       let downloadedBytes = 0;
@@ -256,7 +214,6 @@ class SuperYouTubeDownloader {
         const elapsed = (Date.now() - startTime) / 1000;
         const speed = elapsed > 0 ? downloadedBytes / elapsed : 0;
         
-        // Log progress every 5% to avoid spam
         if (progress - lastProgress >= 5) {
           console.log(`📊 ${type}: ${progress.toFixed(1)}% - ${this.formatBytes(speed)}/s`);
           lastProgress = progress;
@@ -282,7 +239,6 @@ class SuperYouTubeDownloader {
         reject(error);
       });
 
-      // Set timeout for download (10 minutes)
       const timeout = setTimeout(() => {
         stream.destroy();
         reject(new Error(`${type} download timeout after 10 minutes`));
@@ -301,7 +257,6 @@ class SuperYouTubeDownloader {
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
   }
 
-  // Main download method with enhanced error handling
   async download(): Promise<{ path: string; size: number; title: string }> {
     if (!this.info) {
       throw new Error('Video info not loaded. Call getVideoInfo() first.');
@@ -310,17 +265,15 @@ class SuperYouTubeDownloader {
     const formats = this.selectBestFormats();
     const outputPath = path.join(this.uploadDir, `${this.safeTitle}.mp4`);
 
-    // Prefer combined format for simplicity
     if (formats.combined) {
       console.log('🚀 Downloading combined format...');
       const stream = ytdl.downloadFromInfo(this.info, {
         format: formats.combined,
-        highWaterMark: 1 << 25, // 32MB buffer
+        highWaterMark: 1 << 25,
       });
 
       await this.downloadWithProgress(stream, outputPath, 'combined');
     } 
-    // Fallback to separate audio/video streams
     else if (formats.video && formats.audio) {
       console.log('🔄 Downloading separate streams...');
       
@@ -347,14 +300,13 @@ class SuperYouTubeDownloader {
         await this.mergeWithFFmpeg(videoPath, audioPath, outputPath);
 
       } finally {
-        // Cleanup temp files regardless of success/failure
         await Promise.all([
           fs.promises.unlink(videoPath).catch(() => console.log('⚠️ Could not delete video temp file')),
           fs.promises.unlink(audioPath).catch(() => console.log('⚠️ Could not delete audio temp file')),
         ]);
       }
     } else {
-      throw new Error('No suitable formats found for download. Available formats may be restricted.');
+      throw new Error('No suitable formats found for download.');
     }
 
     const stats = await fs.promises.stat(outputPath);
@@ -370,15 +322,15 @@ class SuperYouTubeDownloader {
       console.log('🚀 Starting FFmpeg merge...');
       
       const ffmpegArgs = [
-        '-y', // Overwrite output
-        '-i', videoPath, // Video input
-        '-i', audioPath, // Audio input
-        '-c:v', 'copy', // Copy video stream (no re-encoding)
-        '-c:a', 'aac', // Encode audio to AAC
-        '-b:a', '192k', // Audio bitrate
-        '-movflags', '+faststart', // Optimize for streaming
-        '-shortest', // Match shortest stream
-        '-loglevel', 'info', // Less verbose logging
+        '-y',
+        '-i', videoPath,
+        '-i', audioPath,
+        '-c:v', 'copy',
+        '-c:a', 'aac',
+        '-b:a', '192k',
+        '-movflags', '+faststart',
+        '-shortest',
+        '-loglevel', 'info',
         outputPath
       ];
 
@@ -389,7 +341,6 @@ class SuperYouTubeDownloader {
         const output = data.toString();
         stderr += output;
         
-        // Extract and log progress
         const timeMatch = output.match(/time=(\d+:\d+:\d+\.\d+)/);
         if (timeMatch) {
           process.stdout.write(`⏱️  FFmpeg: ${timeMatch[1]}\r`);
@@ -408,10 +359,9 @@ class SuperYouTubeDownloader {
 
       ffmpeg.on('error', (error: Error) => {
         console.error('❌ Failed to spawn FFmpeg:', error);
-        reject(new Error(`FFmpeg not available or not installed: ${error.message}`));
+        reject(new Error(`FFmpeg not available: ${error.message}`));
       });
 
-      // 15-minute timeout for long videos
       const timeout = setTimeout(() => {
         ffmpeg.kill();
         reject(new Error('FFmpeg merge timeout after 15 minutes'));
@@ -488,31 +438,25 @@ export async function POST(req: Request) {
         
         const errorMessage = error instanceof Error ? error.message : String(error);
         
-        // Provide user-friendly error messages
-        let userMessage = errorMessage;
-        let details = "Please try again or contact support if the problem persists";
-
-        if (errorMessage.includes('Video unavailable') || errorMessage.includes('unavailable')) {
-          userMessage = "This video is unavailable";
-          details = "The video may be private, deleted, age-restricted, or region-locked. Try a different video.";
-        } else if (errorMessage.includes('Private video')) {
-          userMessage = "This video is private";
-          details = "Private videos cannot be downloaded. The uploader has restricted access.";
-        } else if (errorMessage.includes('Sign in') || errorMessage.includes('age verification')) {
-          userMessage = "Age verification required";
-          details = "This video requires age verification. Please sign in to YouTube to watch it.";
-        } else if (errorMessage.includes('not found') || errorMessage.includes('removed')) {
-          userMessage = "Video not found";
-          details = "The video may have been removed or the URL is incorrect.";
-        } else if (errorMessage.includes('region') || errorMessage.includes('country')) {
-          userMessage = "Region restricted";
-          details = "This video is not available in your country. Try using a VPN.";
+        // Handle age verification specifically
+        if (errorMessage.includes('AGE_VERIFICATION_REQUIRED')) {
+          return NextResponse.json({ 
+            error: "Age verification required",
+            details: `This video is age-restricted and requires YouTube authentication.${process.env.YOUTUBE_COOKIES ? ' The provided cookies may be invalid or expired.' : ' No authentication cookies configured.'}`,
+            solution: "To download age-restricted videos:\n1. Sign in to YouTube in your browser\n2. Export your cookies and add them to YOUTUBE_COOKIES environment variable\n3. Or try a different, non-age-restricted video",
+            requiresAuth: true
+          }, { status: 403 });
+        } else if (errorMessage.includes('VIDEO_UNAVAILABLE')) {
+          return NextResponse.json({ 
+            error: "Video unavailable",
+            details: "This video is not available for download. It may be private, deleted, or region-restricted."
+          }, { status: 404 });
+        } else {
+          return NextResponse.json({ 
+            error: "Download failed",
+            details: errorMessage
+          }, { status: 500 });
         }
-
-        return NextResponse.json({ 
-          error: userMessage,
-          details: details
-        }, { status: 500 });
       }
     }
 
@@ -541,7 +485,6 @@ export async function POST(req: Request) {
 
     const fileStream = fs.createWriteStream(filePath, { flags });
     
-    // Type assertion for ReadableStream compatibility
     const body = req.body as unknown as NodeJS.ReadableStream;
     await pump(body, fileStream);
 
@@ -595,14 +538,17 @@ export async function GET(req: Request) {
     console.error("💥 Video info fetch error:", error instanceof Error ? error.message : String(error));
     
     const errorMessage = error instanceof Error ? error.message : String(error);
-    let userMessage = `Failed to fetch video info: ${errorMessage}`;
     
-    if (errorMessage.includes('Video unavailable') || errorMessage.includes('unavailable')) {
-      userMessage = "This video is unavailable and cannot be downloaded";
+    if (errorMessage.includes('AGE_VERIFICATION_REQUIRED')) {
+      return NextResponse.json({ 
+        error: "Age verification required",
+        details: "This video is age-restricted and cannot be accessed without authentication.",
+        requiresAuth: true
+      }, { status: 403 });
     }
 
     return NextResponse.json(
-      { error: userMessage },
+      { error: `Failed to fetch video info: ${errorMessage}` },
       { status: 500 }
     );
   }
