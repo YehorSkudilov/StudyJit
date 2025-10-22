@@ -29,8 +29,7 @@
     "react-dom": "19.1.0",
     "tesseract.js": "^6.0.1",
     "yt-dlp-exec": "^1.0.2",
-    "yt-dlp-wrap": "^2.3.12",
-    "ytdl-core": "^4.11.5"
+    "yt-dlp-wrap": "^2.3.12"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3",
