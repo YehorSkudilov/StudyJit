@@ -1,21 +1,16 @@
 # Use official Node.js LTS Alpine image
 FROM node:22-alpine
 
-# Add community repo and install build + OCR dependencies + yt-dlp
+# Add community repo and install build + OCR dependencies
 RUN apk add --no-cache \
     tesseract-ocr \
     tesseract-ocr-data-eng \
     bash \
     git \
     python3 \
-    py3-pip \
     make \
     g++ \
-    libc6-compat \
-    ffmpeg
-
-# Install yt-dlp via pip
-RUN pip3 install --break-system-packages yt-dlp
+    libc6-compat
 
 # Set working directory
 WORKDIR /app
