@@ -7,6 +7,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/authOptions";
 import db from "@/lib/db";
 import ytdl from "ytdl-core";
+import { spawn } from "child_process";
 
 const pump = promisify(pipeline);
 
@@ -15,6 +16,9 @@ export const dynamic = "force-dynamic";
 export const preferredRegion = "auto";
 export const fetchCache = "force-no-store";
 
+/* -------------------------------------------------------------------------- */
+/*                                  MAIN POST                                 */
+/* -------------------------------------------------------------------------- */
 export async function POST(req: Request) {
   try {
     const session = await getServerSession(authOptions);
@@ -29,7 +33,9 @@ export async function POST(req: Request) {
     const uploadDir = path.resolve("/shared-files");
     await fs.promises.mkdir(uploadDir, { recursive: true });
 
-    /* ------------------ CASE 1: YouTube URL Upload ------------------ */
+    /* ---------------------------------------------------------------------- */
+    /*                       CASE 1: YouTube URL DOWNLOAD                     */
+    /* ---------------------------------------------------------------------- */
     if (urlHeader) {
       const url = decodeURIComponent(urlHeader.trim());
       const folderId = folderHeader && folderHeader !== "root" ? folderHeader : null;
@@ -52,65 +58,132 @@ export async function POST(req: Request) {
       try {
         info = await ytdl.getInfo(url, { requestOptions });
       } catch (error: any) {
-        console.error("❌ Failed to get video info:");
+        console.error("❌ Failed to get video info for:", url);
         console.error({
           name: error.name,
           message: error.message,
-          stack: error.stack,
           code: error.code,
+          statusCode: error.statusCode,
+          stack: error.stack,
           cause: error.cause,
         });
 
-        const errorSummary = [
+        const statusCode = error.statusCode || error.code || "unknown";
+        const videoId = ytdl.getURLVideoID(url);
+        const summary = [
           "❌ YouTube Metadata Fetch Failed",
+          `Video ID: ${videoId}`,
           `Error: ${error.message || "Unknown error"}`,
-          error.code ? `Code: ${error.code}` : "",
-          error.cause ? `Cause: ${error.cause}` : "",
+          `Status: ${statusCode}`,
           "👉 Possible causes:",
-          "- YouTube throttled or blocked the server IP",
+          "- YouTube throttled or blocked your IP",
           "- The video is age/region restricted",
           "- Cookies are missing or expired",
           "- ytdl-core is outdated — run: npm install ytdl-core@latest",
-        ]
-          .filter(Boolean)
-          .join("\n");
+        ].join("\n");
 
-        return NextResponse.json(
-          { error: errorSummary },
-          { status: 500 }
-        );
+        return NextResponse.json({ error: summary }, { status: 502 });
       }
 
-      const title = info.videoDetails.title.replace(/[\\/:*?"<>|]/g, "_");
-      const filename = `${title}.mp4`;
-      const filePath = path.join(uploadDir, filename);
+      const safeTitle = info.videoDetails.title.replace(/[\\/:*?"<>|]/g, "_");
+      const videoPath = path.join(uploadDir, `${safeTitle}_video.mp4`);
+      const audioPath = path.join(uploadDir, `${safeTitle}_audio.mp4`);
+      const outputPath = path.join(uploadDir, `${safeTitle}.mp4`);
 
-      const videoStream = ytdl(url, {
-        quality: "highest",
-        filter: (format) => format.hasVideo && format.hasAudio,
-        requestOptions,
+      // 🎥 Choose best formats
+      const videoFormat = ytdl.chooseFormat(info.formats, {
+        quality: "highestvideo",
+        filter: (f) => f.hasVideo && !f.hasAudio,
+      });
+      const audioFormat = ytdl.chooseFormat(info.formats, {
+        quality: "highestaudio",
+        filter: (f) => f.hasAudio && !f.hasVideo,
       });
 
-      const fileStream = fs.createWriteStream(filePath);
-      await pump(videoStream, fileStream);
+      // ⚙️ Download combined (if available)
+      if (!videoFormat || !audioFormat) {
+        console.log("➡ Using combined audio+video format...");
+        const combinedFormat = ytdl.chooseFormat(info.formats, {
+          quality: "highest",
+          filter: (f) => f.hasVideo && f.hasAudio,
+        });
 
-      const stats = await fs.promises.stat(filePath);
+        if (!combinedFormat) {
+          return NextResponse.json(
+            { error: "No suitable format found for download." },
+            { status: 500 }
+          );
+        }
+
+        const stream = ytdl.downloadFromInfo(info, {
+          format: combinedFormat,
+          requestOptions,
+          highWaterMark: 1 << 25,
+        });
+        const fileStream = fs.createWriteStream(outputPath);
+        await pump(stream, fileStream);
+
+        const stats = await fs.promises.stat(outputPath);
+        await db.query(
+          "INSERT INTO files (name, path, size, folder_id, user_id, type) VALUES (?, ?, ?, ?, ?, ?)",
+          [`${safeTitle}.mp4`, outputPath, stats.size, folderId, session.user.id, "youtube"]
+        );
+
+        console.log(`✅ Saved combined YouTube video: ${safeTitle}.mp4 (${stats.size} bytes)`);
+        return NextResponse.json({
+          success: true,
+          type: "youtube",
+          filename: `${safeTitle}.mp4`,
+          size: stats.size,
+        });
+      }
+
+      // 🎧 Download separate audio/video
+      console.log("➡ Downloading separate high-quality video/audio streams...");
+      const videoStream = ytdl.downloadFromInfo(info, {
+        format: videoFormat,
+        requestOptions,
+        highWaterMark: 1 << 25,
+      });
+      const audioStream = ytdl.downloadFromInfo(info, {
+        format: audioFormat,
+        requestOptions,
+        highWaterMark: 1 << 25,
+      });
+
+      await Promise.all([
+        pump(videoStream, fs.createWriteStream(videoPath)),
+        pump(audioStream, fs.createWriteStream(audioPath)),
+      ]);
+      console.log("✅ Downloaded both audio and video streams.");
+
+      // 🧩 Merge using FFmpeg (requires ffmpeg installed)
+      console.log("🎞️ Merging audio and video...");
+      await mergeWithFFmpeg(videoPath, audioPath, outputPath);
+
+      // Clean up temp files
+      fs.unlink(videoPath, () => {});
+      fs.unlink(audioPath, () => {});
+
+      const stats = await fs.promises.stat(outputPath);
       await db.query(
         "INSERT INTO files (name, path, size, folder_id, user_id, type) VALUES (?, ?, ?, ?, ?, ?)",
-        [filename, filePath, stats.size, folderId, session.user.id, "youtube"]
+        [`${safeTitle}.mp4`, outputPath, stats.size, folderId, session.user.id, "youtube"]
       );
 
-      console.log(`✅ Saved YouTube video: ${filename} (${stats.size} bytes)`);
+      console.log(`✅ Saved YouTube video: ${safeTitle}.mp4 (${stats.size} bytes)`);
 
       return NextResponse.json({
         success: true,
         type: "youtube",
-        filename,
+        filename: `${safeTitle}.mp4`,
         size: stats.size,
       });
     }
 
-    /* ------------------ CASE 2: Chunked File Upload ------------------ */
+    /* ---------------------------------------------------------------------- */
+    /*                        CASE 2: NORMAL FILE UPLOAD                      */
+    /* ---------------------------------------------------------------------- */
     if (!range || !filenameHeader)
       return NextResponse.json({ error: "Missing upload headers" }, { status: 400 });
 
@@ -155,4 +228,31 @@ export async function POST(req: Request) {
       { status: 500 }
     );
   }
+}
+
+/* -------------------------------------------------------------------------- */
+/*                               FFmpeg Helper                                */
+/* -------------------------------------------------------------------------- */
+async function mergeWithFFmpeg(videoPath: string, audioPath: string, outputPath: string) {
+  return new Promise<void>((resolve, reject) => {
+    const ffmpeg = spawn("ffmpeg", [
+      "-y", // overwrite
+      "-i", videoPath,
+      "-i", audioPath,
+      "-c:v", "copy",
+      "-c:a", "aac",
+      "-strict", "experimental",
+      outputPath,
+    ]);
+
+    ffmpeg.stderr.on("data", (d) => process.stdout.write(d));
+    ffmpeg.on("close", (code) => {
+      if (code === 0) {
+        console.log("🎬 FFmpeg merge successful!");
+        resolve();
+      } else {
+        reject(new Error(`FFmpeg failed with code ${code}`));
+      }
+    });
+  });
 }
