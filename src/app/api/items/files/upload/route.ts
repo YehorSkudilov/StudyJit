@@ -6,7 +6,7 @@ import { promisify } from "util";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/authOptions";
 import db from "@/lib/db";
-import ytdl from "ytdl-core"; // ✅ correct package name
+import ytdl from "ytdl-core";
 
 const pump = promisify(pipeline);
 
@@ -39,7 +39,6 @@ export async function POST(req: Request) {
 
       console.log(`🎬 Downloading YouTube video: ${url}`);
 
-      // Custom headers (optional cookies for private or restricted videos)
       const requestOptions = {
         headers: {
           "User-Agent":
@@ -49,14 +48,35 @@ export async function POST(req: Request) {
         },
       };
 
-      // Get video info safely
       let info;
       try {
         info = await ytdl.getInfo(url, { requestOptions });
       } catch (error: any) {
-        console.error("❌ Failed to get video info:", error.message);
+        console.error("❌ Failed to get video info:");
+        console.error({
+          name: error.name,
+          message: error.message,
+          stack: error.stack,
+          code: error.code,
+          cause: error.cause,
+        });
+
+        const errorSummary = [
+          "❌ YouTube Metadata Fetch Failed",
+          `Error: ${error.message || "Unknown error"}`,
+          error.code ? `Code: ${error.code}` : "",
+          error.cause ? `Cause: ${error.cause}` : "",
+          "👉 Possible causes:",
+          "- YouTube throttled or blocked the server IP",
+          "- The video is age/region restricted",
+          "- Cookies are missing or expired",
+          "- ytdl-core is outdated — run: npm install ytdl-core@latest",
+        ]
+          .filter(Boolean)
+          .join("\n");
+
         return NextResponse.json(
-          { error: "Failed to fetch YouTube metadata. Try using cookies." },
+          { error: errorSummary },
           { status: 500 }
         );
       }
@@ -126,6 +146,13 @@ export async function POST(req: Request) {
     return NextResponse.json({ success: true, start, end, total });
   } catch (err: any) {
     console.error("💥 Upload error:", err);
-    return NextResponse.json({ error: err.message || "Upload failed" }, { status: 500 });
+    return NextResponse.json(
+      {
+        error: `Unexpected failure: ${err.message}`,
+        stack: err.stack,
+        cause: err.cause,
+      },
+      { status: 500 }
+    );
   }
 }
