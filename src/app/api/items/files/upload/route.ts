@@ -6,8 +6,8 @@ import { promisify } from "util";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/authOptions";
 import db from "@/lib/db";
-import ytdl from "@distube/ytdl-core";
 import { spawn } from "child_process";
+import youtubedl from "youtube-dl-exec"; // ⬅️ use yt-dlp via wrapper
 
 const pump = promisify(pipeline);
 
@@ -40,111 +40,77 @@ export async function POST(req: Request) {
       const url = decodeURIComponent(urlHeader.trim());
       const folderId = folderHeader && folderHeader !== "root" ? folderHeader : null;
 
-      if (!ytdl.validateURL(url))
-        return NextResponse.json({ error: "Invalid YouTube URL" }, { status: 400 });
+      // Sanitize title via yt-dlp output template; also restrict filenames
+      // Use mp4 container; prefer best video+audio (DASH) with fallback to best single stream
+      // Disable playlists for single-link behavior
+      const outTemplate = path.join(uploadDir, "%(title).200s.%(ext)s");
 
-      console.log(`🎬 Downloading YouTube video: ${url}`);
-
-      // 🧠 Public-safe request headers (no personal cookies)
-      const requestOptions = {
-        headers: {
-          "User-Agent":
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-          "Accept-Language": "en-US,en;q=0.9",
-        },
+      // Public-safe defaults (no personal cookies)
+      const baseOpts: Record<string, any> = {
+        output: outTemplate,
+        // prefer split best video + best audio, fallback to best single stream
+        format: "bv*+ba/b",
+        "merge-output-format": "mp4",
+        "no-playlist": true,
+        "restrict-filenames": true,
+        // Make requests look like a normal browser
+        "user-agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+        "add-header": ["Accept-Language: en-US,en;q=0.9"],
+        // safer network defaults
+        // "limit-rate": "2M",           // (optional) avoid aggressive throttling
+        // "concurrent-fragments": 5,    // (optional) HLS/DASH
+        // "retries": 5, "fragment-retries": 10
       };
 
-      let info;
+      // Optional: if you ever want to enable browser cookies (still public-safe if you use
+      // a throwaway profile on the server). Keep OFF by default.
+      if (process.env.YTDLP_COOKIES_FROM_BROWSER) {
+        baseOpts["cookies-from-browser"] = process.env.YTDLP_COOKIES_FROM_BROWSER; // e.g. "chrome" or "firefox"
+      }
+      if (process.env.YTDLP_COOKIES_FILE) {
+        baseOpts["cookies"] = process.env.YTDLP_COOKIES_FILE; // e.g. "/app/cookies.txt"
+      }
+
+      let result;
       try {
-        info = await ytdl.getInfo(url, { requestOptions });
-      } catch (error: any) {
-        console.error("❌ Failed to get video info:", error.message);
+        // Run yt-dlp. It will download, pick formats, and merge via ffmpeg automatically.
+        result = await youtubedl(url, baseOpts);
+        console.log("yt-dlp finished:", result);
+      } catch (e: any) {
+        console.error("❌ yt-dlp failed:", e?.stderr || e?.message || e);
         return NextResponse.json(
           {
             error:
-              "YouTube blocked the request (possibly region/age-restricted or throttled). " +
-              "This server only supports public videos. Try a different video URL.",
+              "Download failed. The video may be age/region restricted or blocked. " +
+              "This server supports public videos without login.",
           },
           { status: 502 }
         );
       }
 
-      const safeTitle = info.videoDetails.title.replace(/[\\/:*?"<>|]/g, "_");
-      const outputPath = path.join(uploadDir, `${safeTitle}.mp4`);
-
-      // 🎯 Attempt to pick a combined format first (most reliable for public use)
-      const combinedFormat = ytdl.chooseFormat(info.formats, {
-        quality: "highest",
-        filter: (f) => f.hasVideo && f.hasAudio,
-      });
-
-      if (combinedFormat) {
-        console.log("🎞️ Using combined video+audio format...");
-        const stream = ytdl.downloadFromInfo(info, {
-          format: combinedFormat,
-          requestOptions,
-          highWaterMark: 1 << 25,
-        });
-        const fileStream = fs.createWriteStream(outputPath);
-        await pump(stream, fileStream);
-      } else {
-        // ⚙️ Fallback to adaptive (split) if combined not available
-        console.log("🎥 Using adaptive streams (split video/audio)...");
-        const videoFormat = ytdl.chooseFormat(info.formats, {
-          quality: "highestvideo",
-          filter: (f) => f.hasVideo && !f.hasAudio,
-        });
-        const audioFormat = ytdl.chooseFormat(info.formats, {
-          quality: "highestaudio",
-          filter: (f) => f.hasAudio && !f.hasVideo,
-        });
-
-        if (!videoFormat || !audioFormat)
-          return NextResponse.json(
-            { error: "No suitable video/audio format found." },
-            { status: 500 }
-          );
-
-        const videoPath = path.join(uploadDir, `${safeTitle}_video.mp4`);
-        const audioPath = path.join(uploadDir, `${safeTitle}_audio.mp4`);
-
-        await Promise.all([
-          pump(
-            ytdl.downloadFromInfo(info, {
-              format: videoFormat,
-              requestOptions,
-              highWaterMark: 1 << 25,
-            }),
-            fs.createWriteStream(videoPath)
-          ),
-          pump(
-            ytdl.downloadFromInfo(info, {
-              format: audioFormat,
-              requestOptions,
-              highWaterMark: 1 << 25,
-            }),
-            fs.createWriteStream(audioPath)
-          ),
-        ]);
-
-        console.log("✅ Downloaded split streams — merging with FFmpeg...");
-        await mergeWithFFmpeg(videoPath, audioPath, outputPath);
-        fs.unlink(videoPath, () => {});
-        fs.unlink(audioPath, () => {});
+      // Resolve the actual output file path: yt-dlp uses the template to write the file.
+      // Find the .mp4 recently written in uploadDir by checking mtime.
+      const file = await pickMostRecentFile(uploadDir, ".mp4");
+      if (!file) {
+        return NextResponse.json(
+          { error: "Download completed but output file was not found." },
+          { status: 500 }
+        );
       }
 
-      const stats = await fs.promises.stat(outputPath);
+      const stats = await fs.promises.stat(file.fullPath);
       await db.query(
         "INSERT INTO files (name, path, size, folder_id, user_id, type) VALUES (?, ?, ?, ?, ?, ?)",
-        [`${safeTitle}.mp4`, outputPath, stats.size, folderId, session.user.id, "youtube"]
+        [file.name, file.fullPath, stats.size, folderId, session.user.id, "youtube"]
       );
 
-      console.log(`✅ Saved YouTube video: ${safeTitle}.mp4 (${stats.size} bytes)`);
+      console.log(`✅ Saved YouTube video: ${file.name} (${stats.size} bytes)`);
 
       return NextResponse.json({
         success: true,
         type: "youtube",
-        filename: `${safeTitle}.mp4`,
+        filename: file.name,
         size: stats.size,
       });
     }
@@ -195,7 +161,25 @@ export async function POST(req: Request) {
 }
 
 /* -------------------------------------------------------------------------- */
-/*                               FFmpeg Helper                                */
+/*                      helper: find the most recent mp4                      */
+/* -------------------------------------------------------------------------- */
+async function pickMostRecentFile(dir: string, ext: string) {
+  const entries = await fs.promises.readdir(dir, { withFileTypes: true });
+  const files = await Promise.all(
+    entries
+      .filter((d) => d.isFile() && d.name.toLowerCase().endsWith(ext))
+      .map(async (d) => {
+        const fullPath = path.join(dir, d.name);
+        const s = await fs.promises.stat(fullPath);
+        return { name: d.name, fullPath, mtimeMs: s.mtimeMs };
+      })
+  );
+  files.sort((a, b) => b.mtimeMs - a.mtimeMs);
+  return files[0];
+}
+
+/* -------------------------------------------------------------------------- */
+/*                (Only needed if you keep manual ffmpeg merges)              */
 /* -------------------------------------------------------------------------- */
 async function mergeWithFFmpeg(videoPath: string, audioPath: string, outputPath: string) {
   return new Promise<void>((resolve, reject) => {
@@ -207,15 +191,7 @@ async function mergeWithFFmpeg(videoPath: string, audioPath: string, outputPath:
       "-c:a", "aac",
       outputPath,
     ]);
-
     ffmpeg.stderr.on("data", (d) => process.stdout.write(d));
-    ffmpeg.on("close", (code) => {
-      if (code === 0) {
-        console.log("🎬 FFmpeg merge successful!");
-        resolve();
-      } else {
-        reject(new Error(`FFmpeg failed with code ${code}`));
-      }
-    });
+    ffmpeg.on("close", (code) => (code === 0 ? resolve() : reject(new Error(`FFmpeg failed ${code}`))));
   });
 }
