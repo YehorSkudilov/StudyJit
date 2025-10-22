@@ -6,7 +6,7 @@ import { promisify } from "util";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/authOptions";
 import db from "@/lib/db";
-import ytdl from "@distube/ytdl-core"; // 👈 make sure installed
+import ytdl from "@distube/ytdl-core";
 
 const pump = promisify(pipeline);
 
@@ -40,27 +40,50 @@ export async function POST(req: Request) {
 
       console.log(`🎬 Downloading YouTube video: ${url}`);
 
-      // Add headers to make it look like a real browser request
+      // Enhanced headers with cookies
       const agentOptions = {
         requestOptions: {
           headers: {
             "User-Agent":
               "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
             "Accept-Language": "en-US,en;q=0.9",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+            "Accept-Encoding": "gzip, deflate, br",
+            "Referer": "https://www.youtube.com/",
+            "Origin": "https://www.youtube.com",
+            "DNT": "1",
+            "Connection": "keep-alive",
+            "Upgrade-Insecure-Requests": "1",
+            "Sec-Fetch-Dest": "document",
+            "Sec-Fetch-Mode": "navigate",
+            "Sec-Fetch-Site": "none",
+            "Sec-Fetch-User": "?1",
+            "Cache-Control": "max-age=0",
+            // Add your YouTube cookies here - get them from browser DevTools
+            "Cookie": process.env.YOUTUBE_COOKIES || ""
           },
         },
       };
 
-      // Fetch metadata
-      const info = await ytdl.getInfo(url, agentOptions);
+      // Fetch metadata with retry logic
+      let info;
+      try {
+        info = await ytdl.getInfo(url, agentOptions);
+      } catch (error: any) {
+        console.error("❌ Failed to get video info:", error.message);
+        return NextResponse.json({ 
+          error: "Failed to fetch video. YouTube may be blocking the request. Try using cookies." 
+        }, { status: 500 });
+      }
+
       const title = info.videoDetails.title.replace(/[\\/:*?"<>|]/g, "_");
       const filename = `${title}.mp4`;
       const filePath = path.join(uploadDir, filename);
 
-      // Create download stream
+      // Get best format with audio
       const videoStream = ytdl(url, {
-        quality: "highestvideo",
-        filter: (format) => format.container === "mp4",
+        quality: "highest",
+        filter: (format) => format.hasVideo && format.hasAudio,
         ...agentOptions,
       });
 
