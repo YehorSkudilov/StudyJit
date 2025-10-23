@@ -175,29 +175,62 @@ export default function FilesPage() {
     await refreshData(activeFolderId);
   };
 
-/* ---------------- YouTube Upload ---------------- */
-const handleYouTubeUpload = async (url: string) => {
-  try {
-    const res = await fetch("/api/items/files/upload", {
-      method: "POST",
-      headers: {
-        "x-url": encodeURIComponent(url.trim()),
-        "x-folder": activeFolderId ?? "root",
-      },
-    });
+  /* ---------------- YouTube Upload ---------------- */
+  const handleYouTubeUpload = async (url: string, onProgress?: (p: number) => void) => {
+    try {
+      const res = await fetch("/api/items/files/upload", {
+        method: "POST",
+        headers: {
+          "x-url": encodeURIComponent(url.trim()),
+          "x-folder": activeFolderId ?? "root",
+          "Accept": "text/event-stream",
+        },
+      });
 
-    if (!res.ok) {
-      const err = await res.json();
-      throw new Error(err.error || "Upload failed");
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || "Upload failed");
+      }
+
+      // Read the SSE stream
+      const reader = res.body?.getReader();
+      const decoder = new TextDecoder();
+
+      if (!reader) {
+        throw new Error("No response body");
+      }
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        const chunk = decoder.decode(value);
+        const lines = chunk.split("\n");
+
+        for (const line of lines) {
+          if (line.startsWith("data: ")) {
+            const data = line.slice(6).trim();
+
+            if (data === "complete") {
+              await refreshData(activeFolderId);
+              setAlertMessage("🎬 YouTube video uploaded successfully!");
+              return;
+            } else if (data === "error") {
+              throw new Error("Download failed");
+            } else {
+              const progress = parseFloat(data);
+              if (!isNaN(progress) && onProgress) {
+                onProgress(progress);
+              }
+            }
+          }
+        }
+      }
+    } catch (err: any) {
+      setAlertMessage(err.message || "Failed to upload YouTube video.");
+      throw err;
     }
-
-    await refreshData(activeFolderId);
-    setAlertMessage("🎬 YouTube video uploaded successfully!");
-  } catch (err: any) {
-    setAlertMessage(err.message || "Failed to upload YouTube video.");
-  }
-};
-
+  };
 
   /* ---------------- Drag & Drop ---------------- */
   const handleDropOnFolder = async (source: Item | Item[], destinationFolderId: string) => {
@@ -366,7 +399,6 @@ const handleYouTubeUpload = async (url: string) => {
         ]}
       />
 
-      {/* Pass folder ID + YouTube upload handler */}
       <FileUploadPopup
         isOpen={isFileUploadOpen}
         onClose={() => setIsFileUploadOpen(false)}
