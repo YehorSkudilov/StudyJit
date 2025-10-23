@@ -169,15 +169,35 @@ export default function LearningSpace() {
   };
 
   /* ---------------- Quiz Create ---------------- */
-  const handleCreateQuiz = async (quizName: string, description?: string) => {
-    await fetch("/api/items/quizzes/create", {
+const handleCreateQuiz = async (quizName: string, description?: string) => {
+  try {
+    const res = await fetch("/api/items/quizzes/create", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ name: quizName, description, folder_id: activeFolderId }),
     });
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      console.error("❌ [CreateQuiz] Failed:", err);
+      setAlertMessage(
+        err?.error
+          ? `Error: ${err.error}\n${err.details ? "Details: " + err.details : ""}`
+          : `Unknown error (${res.status})`
+      );
+      return;
+    }
+
+    const data = await res.json();
+    console.log("✅ [CreateQuiz] Success:", data);
     await refreshData(activeFolderId);
     setIsCreateQuizOpen(false);
-  };
+  } catch (err: any) {
+    console.error("❌ [CreateQuiz] Network or runtime error:", err);
+    setAlertMessage(`Network error: ${err.message}`);
+  }
+};
+
 
   /* ---------------- Drag → Drop onto folder ---------------- */
   const handleDropOnFolder = async (source: Item | Item[], destinationFolderId: string) => {
