@@ -2,13 +2,9 @@ import { NextResponse } from "next/server";
 import db from "@/lib/db";
 
 /* ------------------------- Utility: Ensure Column ------------------------- */
-async function ensureColumnExists(
-  table: string,
-  column: string,
-  definition: string
-) {
-  const [rows] = await db.query(`SHOW COLUMNS FROM ${table} LIKE ?`, [column]);
-  if ((rows as any[]).length === 0) {
+async function ensureColumnExists(table: string, column: string, definition: string) {
+  const [rows]: any = await db.query(`SHOW COLUMNS FROM ${table} LIKE ?`, [column]);
+  if (rows.length === 0) {
     console.log(`🟡 Adding missing column '${column}' to '${table}'...`);
     await db.query(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
     console.log(`✅ Added '${column}' to '${table}'`);
@@ -17,6 +13,7 @@ async function ensureColumnExists(
 
 /* ------------------------- Utility: Drop Old Columns ------------------------- */
 async function dropOldColumns() {
+  // Drop old quiz columns
   const [quizCols]: any = await db.query(`SHOW COLUMNS FROM quizzes`);
   const quizColNames = quizCols.map((c: any) => c.Field);
 
@@ -28,6 +25,7 @@ async function dropOldColumns() {
     }
   }
 
+  // Drop old folder path column
   const [folderCols]: any = await db.query(`SHOW COLUMNS FROM folders`);
   const folderColNames = folderCols.map((c: any) => c.Field);
   if (folderColNames.includes("path")) {
@@ -39,6 +37,7 @@ async function dropOldColumns() {
 
 /* --------------------------- Database Setup --------------------------- */
 async function initDatabase() {
+  /* ---------------- USERS ---------------- */
   await db.query(`
     CREATE TABLE IF NOT EXISTS users (
       id INT AUTO_INCREMENT PRIMARY KEY,
@@ -50,39 +49,40 @@ async function initDatabase() {
     );
   `);
 
+  /* ---------------- FOLDERS ---------------- */
   await db.query(`
     CREATE TABLE IF NOT EXISTS folders (
       id INT AUTO_INCREMENT PRIMARY KEY,
       user_id INT NOT NULL,
       name VARCHAR(255) NOT NULL,
+      parent_id INT NULL,
+      context ENUM('quizzes','files') NOT NULL DEFAULT 'quizzes',
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
     );
   `);
 
-  await ensureColumnExists("folders", "parent_id", "INT NULL");
-  await ensureColumnExists(
-    "folders",
-    "context",
-    "ENUM('quizzes','files') NOT NULL DEFAULT 'quizzes'"
-  );
-
+  /* ---------------- FILES ---------------- */
   await db.query(`
     CREATE TABLE IF NOT EXISTS files (
       id INT AUTO_INCREMENT PRIMARY KEY,
       user_id INT NOT NULL,
+      folder_id INT NULL,
       name VARCHAR(255) NOT NULL,
+      path TEXT NULL,                 -- ✅ Include it directly
       size BIGINT,
       mime_type VARCHAR(255),
       uploaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+      FOREIGN KEY (folder_id) REFERENCES folders(id) ON DELETE SET NULL
     );
   `);
 
-  // ✅ Fix: Ensure 'path' column exists for file reading
+  // 🔒 Ensure for backward compatibility
   await ensureColumnExists("files", "folder_id", "INT NULL");
   await ensureColumnExists("files", "path", "TEXT NULL");
 
+  /* ---------------- QUIZZES ---------------- */
   await db.query(`
     CREATE TABLE IF NOT EXISTS quizzes (
       id INT AUTO_INCREMENT PRIMARY KEY,
@@ -92,11 +92,15 @@ async function initDatabase() {
       prompt TEXT,
       num_questions INT DEFAULT 10,
       generation_status ENUM('never_generated','queued','pending','success','failed') DEFAULT 'never_generated',
+      folder_id INT NULL,
+      last_score DECIMAL(5,2) NULL,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+      FOREIGN KEY (folder_id) REFERENCES folders(id) ON DELETE SET NULL
     );
   `);
 
+  // 🔄 Update ENUM if needed
   const [enumCheck]: any = await db.query(`SHOW COLUMNS FROM quizzes LIKE 'generation_status'`);
   const enumType = enumCheck[0]?.Type || "";
   if (!enumType.includes("queued")) {
@@ -110,9 +114,7 @@ async function initDatabase() {
     console.log("✅ Updated ENUM with 'queued' value");
   }
 
-  await ensureColumnExists("quizzes", "folder_id", "INT NULL");
-  await ensureColumnExists("quizzes", "last_score", "DECIMAL(5,2) NULL");
-
+  /* ---------------- QUIZ QUESTIONS ---------------- */
   await db.query(`
     CREATE TABLE IF NOT EXISTS quiz_questions (
       id INT AUTO_INCREMENT PRIMARY KEY,
@@ -129,6 +131,7 @@ async function initDatabase() {
     );
   `);
 
+  /* ---------------- CLEANUP ---------------- */
   await dropOldColumns();
 
   console.log("✅ Database schema synchronized successfully (path supported).");

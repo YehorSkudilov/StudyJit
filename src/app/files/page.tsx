@@ -179,30 +179,30 @@ export default function FilesPage() {
 const handleYouTubeUpload = async (url: string, onProgress?: (p: number) => void) => {
   try {
     const res = await fetch("/api/items/files/upload", {
-      method: "POST",  // ✅ FIXED: Must be POST for x-url
+      method: "POST",
       headers: {
-        "x-url": encodeURIComponent(url.trim()),
-        "x-folder": activeFolderId ?? "root",
-        "Accept": "text/event-stream",
+        "Content-Type": "application/json", // ✅ match backend expectation
+        Accept: "text/event-stream",
       },
-      body: new Uint8Array(0),  // ✅ Empty body for POST
+      body: JSON.stringify({
+        url: url.trim(),
+        folder: activeFolderId ?? "root",
+      }),
     });
 
     if (!res.ok) {
       const text = await res.text();
-      let errorMsg = "Upload failed";
       try {
         const err = JSON.parse(text);
-        errorMsg = err.error || errorMsg;
+        throw new Error(err.error || "YouTube download failed");
       } catch {
-        errorMsg = text || errorMsg;
+        throw new Error(text || "YouTube download failed");
       }
-      throw new Error(errorMsg);
     }
 
-    // ✅ FIXED: Proper SSE parsing
+    // ✅ SSE parsing (progress tracking)
     const reader = res.body?.getReader();
-    if (!reader) throw new Error("No response body");
+    if (!reader) throw new Error("No response stream");
 
     const decoder = new TextDecoder();
     let buffer = "";
@@ -213,29 +213,24 @@ const handleYouTubeUpload = async (url: string, onProgress?: (p: number) => void
 
       buffer += decoder.decode(value, { stream: true });
       const lines = buffer.split("\n");
-      buffer = lines.pop() || ""; // Keep incomplete line
+      buffer = lines.pop() || "";
 
       for (const line of lines) {
-        if (line.startsWith("data: ")) {
-          const dataStr = line.slice(6).trim();
-          
+        if (line.startsWith("data:")) {
+          const raw = line.slice(5).trim();
           try {
-            const data = JSON.parse(dataStr); // ✅ Parse JSON data
-            
-            if (data.status === "complete") {
+            const json = JSON.parse(raw);
+            if (json.percent !== undefined && onProgress) {
+              onProgress(json.percent);
+            } else if (json.status === "complete") {
               await refreshData(activeFolderId);
               setAlertMessage("🎬 YouTube video downloaded successfully!");
               return;
-            } else if (data.status === "error") {
-              throw new Error(data.error || "Download failed");
-            } else {
-              // Progress update
-              if (data.percent !== undefined && onProgress) {
-                onProgress(data.percent);
-              }
+            } else if (json.status === "error") {
+              throw new Error(json.error || "Download failed");
             }
-          } catch (e) {
-            console.warn("Invalid SSE data:", dataStr);
+          } catch {
+            console.warn("Invalid SSE data:", raw);
           }
         }
       }
@@ -249,6 +244,7 @@ const handleYouTubeUpload = async (url: string, onProgress?: (p: number) => void
     throw err;
   }
 };
+
 
   /* ---------------- Drag & Drop ---------------- */
   const handleDropOnFolder = async (source: Item | Item[], destinationFolderId: string) => {
