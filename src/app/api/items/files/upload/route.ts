@@ -24,7 +24,7 @@ export async function POST(req: Request) {
     const contentType = req.headers.get("content-type") || "";
 
     /* ---------------------------------------------------------------------- */
-    /* 🧩 CASE 1: YouTube Download (SSE Streaming with live progress)         */
+    /* 🧩 CASE 1: YouTube Download (SSE streaming with normalized progress)   */
     /* ---------------------------------------------------------------------- */
     if (contentType.includes("application/json")) {
       const { url, folder } = await req.json();
@@ -51,49 +51,69 @@ export async function POST(req: Request) {
         "--no-warnings",
         "--progress",
         "--newline",
-        "--console-title",
       ];
 
-      // ✅ Stream setup
       const { readable, writable } = new TransformStream();
       const writer = writable.getWriter();
+
       const send = async (obj: any) => {
         await writer.write(encoder.encode(`data: ${JSON.stringify(obj)}\n\n`));
       };
 
-      // ✅ Spawn yt-dlp and capture both stdout and stderr
+      // spawn yt-dlp
       const proc = spawn("yt-dlp", args, { stdio: ["ignore", "pipe", "pipe"] });
       proc.stdout.setEncoding("utf-8");
       proc.stderr.setEncoding("utf-8");
 
-      // 🧩 Helper to parse lines for progress
-      const handleData = async (data: string) => {
+      // state for normalization
+      let phase: "video" | "audio" | "merge" = "video";
+      let videoDone = false;
+
+      const parseProgress = async (data: string) => {
         const lines = data.split(/\r?\n/);
         for (const line of lines) {
+          if (!line.trim()) continue;
+
+          // detect phase switch
+          if (/\[download\] Destination:/.test(line)) {
+            if (videoDone) phase = "audio";
+          }
+          if (/\[Merger\]/.test(line) || /\[ExtractAudio\]/.test(line)) {
+            phase = "merge";
+          }
+
           const match = line.match(/\[download\]\s+([\d.]+)%/);
           if (match) {
             const percent = parseFloat(match[1]);
-            await send({ percent });
+            let normalized = percent;
+            if (phase === "video") normalized = percent * 0.5;        // 0–50
+            else if (phase === "audio") normalized = 50 + percent * 0.4 / 100 * 100; // 50–90
+            else if (phase === "merge") normalized = 90 + percent * 0.1 / 100 * 100; // 90–100
+            await send({ percent: Math.min(normalized, 99.5) });
+          }
+
+          if (/\[download\] 100%/.test(line)) {
+            if (phase === "video") videoDone = true;
           }
         }
       };
 
-      proc.stdout.on("data", handleData);
-      proc.stderr.on("data", handleData);
+      proc.stdout.on("data", parseProgress);
+      proc.stderr.on("data", parseProgress);
 
-      // ✅ Handle process error
       proc.on("error", async (err) => {
         await send({ status: "error", error: err.message });
         await writer.close();
       });
 
-      // ✅ Handle process close
       proc.on("close", async (code) => {
         try {
           if (code !== 0) {
             await send({ status: "error", error: "Download failed" });
           } else {
-            // ✅ Insert newest file into DB
+            // indicate merge + db insert
+            await send({ status: "merging" });
+
             const files = await fs.promises.readdir(uploadDir);
             const latestFile = files
               .map((f) => ({
@@ -107,12 +127,16 @@ export async function POST(req: Request) {
               const stats = await fs.promises.stat(filePath);
               const folderId = folder && folder !== "root" ? folder : null;
 
+              // tiny fake progress steps for DB insert
+              await send({ status: "db", percent: 99 });
               await db.query(
                 "INSERT INTO files (name, path, size, folder_id, user_id) VALUES (?, ?, ?, ?, ?)",
                 [latestFile.name, filePath, stats.size, folderId, session.user.id]
               );
             }
-            await send({ status: "complete" });
+
+            // final completion event
+            await send({ percent: 100, status: "complete" });
           }
         } catch (err: any) {
           await send({ status: "error", error: err.message });
@@ -121,7 +145,6 @@ export async function POST(req: Request) {
         }
       });
 
-      // ✅ Return event stream
       return new Response(readable, {
         headers: {
           "Content-Type": "text/event-stream; charset=utf-8",
@@ -134,7 +157,7 @@ export async function POST(req: Request) {
     }
 
     /* ---------------------------------------------------------------------- */
-    /* 📦 CASE 2: Chunked File Upload (Standard file upload)                  */
+    /* 📦 CASE 2: Chunked File Upload                                         */
     /* ---------------------------------------------------------------------- */
     const range = req.headers.get("content-range");
     const filenameHeader = req.headers.get("x-filename");
