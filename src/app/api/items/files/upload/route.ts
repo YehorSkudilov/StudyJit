@@ -16,17 +16,17 @@ export const preferredRegion = "auto";
 export const fetchCache = "force-no-store";
 
 /* -------------------------------------------------------------------------- */
-/*                              Utility helpers                               */
+/*                              Utility Helpers                               */
 /* -------------------------------------------------------------------------- */
 
 const COOKIES_PATH = path.join(process.cwd(), "cookies.txt");
+
 function getCookiesArgs() {
-  if (fs.existsSync(COOKIES_PATH)) return ["--cookies", COOKIES_PATH];
-  return [];
+  return fs.existsSync(COOKIES_PATH) ? ["--cookies", COOKIES_PATH] : [];
 }
 
 /* -------------------------------------------------------------------------- */
-/*                             YouTube Downloader                             */
+/*                            YouTube Info Fetcher                            */
 /* -------------------------------------------------------------------------- */
 
 class SimpleYouTubeDownloader {
@@ -39,7 +39,6 @@ class SimpleYouTubeDownloader {
       "--no-warnings",
       "--no-call-home",
       "--no-playlist",
-      "--no-clean-info-json",
       ...getCookiesArgs(),
       this.url,
     ];
@@ -55,34 +54,21 @@ class SimpleYouTubeDownloader {
       proc.on("close", (code) => {
         if (code === 0 && data.trim()) {
           try {
-            // Parse line-by-line for multiple JSON objects
-            const lines = data.trim().split('\n');
-            const info = lines.map(line => {
-              try {
-                return JSON.parse(line);
-              } catch {
-                return null;
-              }
-            }).filter(Boolean);
-            
-            if (info.length > 0) {
-              console.log(`✅ Got info: ${info[0].title}`);
-              resolve(info[0]);
-            } else {
-              reject(new Error("Failed to parse yt-dlp JSON output"));
-            }
+            const info = JSON.parse(data);
+            console.log(`✅ Got info: ${info.title}`);
+            resolve(info);
           } catch {
             reject(new Error("Failed to parse yt-dlp JSON output"));
           }
         } else {
           console.error("❌ yt-dlp info error:", error);
-          if (error.includes("Sign in") || error.includes("age")) {
+          if (error.includes("Sign in"))
             reject(
               new Error(
-                "This video is age-restricted or private. Add cookies.txt to enable authenticated downloads."
+                "This video is age-restricted or private. Add cookies.txt for authenticated downloads."
               )
             );
-          } else reject(new Error("Cannot access video: " + error));
+          else reject(new Error("Cannot access video: " + error));
         }
       });
     });
@@ -90,7 +76,7 @@ class SimpleYouTubeDownloader {
 }
 
 /* -------------------------------------------------------------------------- */
-/*                                  MAIN POST                                 */
+/*                                  POST API                                  */
 /* -------------------------------------------------------------------------- */
 
 export async function POST(req: Request) {
@@ -103,26 +89,25 @@ export async function POST(req: Request) {
     const range = req.headers.get("content-range");
     const filenameHeader = req.headers.get("x-filename");
     const folderHeader = req.headers.get("x-folder");
-    const acceptHeader = req.headers.get("accept");
-
     const uploadDir = path.resolve("/shared-files");
     await fs.promises.mkdir(uploadDir, { recursive: true });
 
     /* ---------------------------------------------------------------------- */
-    /*                       CASE 1: YouTube URL DOWNLOAD                     */
+    /*                          Case 1: YouTube Download                      */
     /* ---------------------------------------------------------------------- */
     if (urlHeader) {
       const url = decodeURIComponent(urlHeader.trim());
       const folderId = folderHeader && folderHeader !== "root" ? folderHeader : null;
 
-      // If the client connects with Accept: text/event-stream, stream progress live
+      // Stream progress via SSE if client requests it
       if (req.headers.get("accept") === "text/event-stream") {
         const encoder = new TextEncoder();
 
         const readable = new ReadableStream({
           start(controller) {
-            console.log(`🎬 Starting YouTube download with progress: ${url}`);
+            console.log(`🎬 Starting yt-dlp download: ${url}`);
             const outputPath = path.join(uploadDir, "%(title)s.%(ext)s");
+
             const args = [
               "-f",
               "bestvideo+bestaudio/best",
@@ -133,88 +118,58 @@ export async function POST(req: Request) {
               "--newline",
               "--no-warnings",
               "--no-call-home",
-              "--no-clean-info-json",
-              "-j",
-              "--no-simulate",
-              "--progress",
+              "--write-info-json",
+              "--write-thumbnail",
               ...getCookiesArgs(),
               url,
             ];
 
             const proc = spawn("yt-dlp", args);
-            let finalFilename: string | null = null;
 
             proc.stdout.on("data", (chunk) => {
-              const lines = chunk.toString().split('\n');
-              
-              for (const line of lines) {
-                // Try to parse JSON output for filename
-                if (line.trim().startsWith('{')) {
-                  try {
-                    const json = JSON.parse(line);
-                    if (json._filename || json.filename) {
-                      finalFilename = json._filename || json.filename;
-                    }
-                  } catch (e) {
-                    // Not JSON, continue
-                  }
-                }
-                
-                // Parse download progress
-                const percentMatch = line.match(/(\d+(?:\.\d+)?)%/);
-                if (percentMatch) {
-                  const percent = parseFloat(percentMatch[1]);
-                  controller.enqueue(encoder.encode(`data: ${percent}\n\n`));
-                }
+              const line = chunk.toString();
+              const match = line.match(/(\d+(?:\.\d+)?)%/);
+              if (match) {
+                const percent = parseFloat(match[1]);
+                controller.enqueue(encoder.encode(`data: ${percent}\n\n`));
               }
             });
 
             proc.stderr.on("data", (chunk) => {
-              const line = chunk.toString();
-              console.error("yt-dlp stderr:", line);
-              
-              // Also check stderr for progress
-              const percentMatch = line.match(/(\d+(?:\.\d+)?)%/);
-              if (percentMatch) {
-                const percent = parseFloat(percentMatch[1]);
-                controller.enqueue(encoder.encode(`data: ${percent}\n\n`));
+              const msg = chunk.toString();
+              if (
+                msg.includes("Sign in") ||
+                msg.includes("Private") ||
+                msg.includes("HTTP Error 403")
+              ) {
+                controller.enqueue(
+                  encoder.encode(`data: error|auth\n\n`)
+                );
               }
+              console.error("yt-dlp:", msg);
             });
 
             proc.on("close", async (code) => {
               if (code === 0) {
                 try {
-                  // Find the downloaded file
-                  let filePath: string | null = null;
-                  let fileName: string | null = null;
+                  const files = await fs.promises.readdir(uploadDir);
+                  const mp4s = files
+                    .filter((f) => f.endsWith(".mp4"))
+                    .map((f) => ({
+                      name: f,
+                      time: fs.statSync(path.join(uploadDir, f)).mtime.getTime(),
+                    }))
+                    .sort((a, b) => b.time - a.time);
 
-                  if (finalFilename && fs.existsSync(finalFilename)) {
-                    filePath = finalFilename;
-                    fileName = path.basename(finalFilename);
-                  } else {
-                    // Fallback: find newest .mp4 file
-                    const files = await fs.promises.readdir(uploadDir);
-                    const mp4Files = files
-                      .filter((f) => f.endsWith(".mp4") || f.endsWith(".mkv") || f.endsWith(".webm"))
-                      .map((f) => ({
-                        name: f,
-                        time: fs.statSync(path.join(uploadDir, f)).mtime.getTime(),
-                      }))
-                      .sort((a, b) => b.time - a.time);
-
-                    if (mp4Files.length > 0) {
-                      fileName = mp4Files[0].name;
-                      filePath = path.join(uploadDir, fileName);
-                    }
-                  }
-
-                  if (filePath && fileName) {
+                  const newest = mp4s[0];
+                  if (newest) {
+                    const filePath = path.join(uploadDir, newest.name);
                     const stats = await fs.promises.stat(filePath);
 
                     await db.query(
                       "INSERT INTO files (name, path, size, folder_id, user_id, type) VALUES (?, ?, ?, ?, ?, ?)",
                       [
-                        fileName,
+                        newest.name,
                         filePath,
                         stats.size,
                         folderId,
@@ -224,20 +179,17 @@ export async function POST(req: Request) {
                     );
 
                     controller.enqueue(encoder.encode(`data: complete\n\n`));
-                    controller.close();
-                    console.log(`✅ YouTube download complete: ${fileName}`);
+                    console.log(`✅ Download complete: ${newest.name}`);
                   } else {
-                    console.error("❌ Could not find downloaded file");
                     controller.enqueue(encoder.encode(`data: error\n\n`));
-                    controller.close();
                   }
-                } catch (e) {
-                  console.error("❌ Error finalizing download:", e);
+                } catch (err) {
+                  console.error("💥 Finalization error:", err);
                   controller.enqueue(encoder.encode(`data: error\n\n`));
+                } finally {
                   controller.close();
                 }
               } else {
-                console.error(`❌ yt-dlp exited with code ${code}`);
                 controller.enqueue(encoder.encode(`data: error\n\n`));
                 controller.close();
               }
@@ -254,26 +206,26 @@ export async function POST(req: Request) {
         });
       }
 
-      // Fallback if not using SSE (non-stream clients)
+      // Fallback (non-SSE)
       try {
         const downloader = new SimpleYouTubeDownloader(url, uploadDir);
         const info: any = await downloader.getVideoInfo();
         return NextResponse.json({ info });
       } catch (error: any) {
-        console.error("💥 Download failed:", error.message);
+        console.error("💥 Info fetch failed:", error.message);
         return NextResponse.json({ error: error.message }, { status: 500 });
       }
     }
 
     /* ---------------------------------------------------------------------- */
-    /*                        CASE 2: NORMAL FILE UPLOAD                      */
+    /*                         Case 2: Normal File Upload                     */
     /* ---------------------------------------------------------------------- */
     if (!range || !filenameHeader)
       return NextResponse.json({ error: "Missing upload headers" }, { status: 400 });
 
     const match = range.match(/bytes (\d+)-(\d+)\/(\d+)/);
     if (!match)
-      return NextResponse.json({ error: "Invalid Content-Range header" }, { status: 400 });
+      return NextResponse.json({ error: "Invalid Content-Range" }, { status: 400 });
 
     const [, startStr, endStr, totalStr] = match;
     const start = parseInt(startStr);
@@ -289,6 +241,7 @@ export async function POST(req: Request) {
     const fileStream = fs.createWriteStream(filePath, { flags });
     await pump(body, fileStream);
 
+    // Only insert after last chunk
     if (end + 1 >= total) {
       const stats = await fs.promises.stat(filePath);
       await db.query(
@@ -300,7 +253,7 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ success: true, start, end, total });
   } catch (err: any) {
-    console.error("💥 Upload error:", err.message);
+    console.error("💥 Upload error:", err);
     return NextResponse.json(
       { error: `Unexpected failure: ${err.message}` },
       { status: 500 }
@@ -321,7 +274,7 @@ export async function GET(req: Request) {
     const { searchParams } = new URL(req.url);
     const url = searchParams.get("url");
     if (!url)
-      return NextResponse.json({ error: "URL parameter required" }, { status: 400 });
+      return NextResponse.json({ error: "Missing ?url parameter" }, { status: 400 });
 
     const downloader = new SimpleYouTubeDownloader(url, "");
     const info: any = await downloader.getVideoInfo();
