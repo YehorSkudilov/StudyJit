@@ -1,42 +1,27 @@
-# Use official Node.js LTS Alpine image
-FROM node:22-alpine
+# 🟢 Use Debian Slim instead of Alpine
+FROM node:22-slim
 
-# Add community repo and install build + OCR dependencies
-RUN apk add --no-cache \
-    tesseract-ocr \
-    tesseract-ocr-data-eng \
-    bash \
-    git \
-    python3 \
-    make \
-    g++ \
-    libc6-compat
+# Install deps (apt instead of apk)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3 python3-pip ffmpeg tesseract-ocr curl git make g++ ca-certificates \
+ && rm -rf /var/lib/apt/lists/*
 
-# Set working directory
+# Download yt-dlp binary
+RUN curl -L -o /usr/local/bin/yt-dlp \
+    "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp" && \
+    chmod a+rx /usr/local/bin/yt-dlp
+
 WORKDIR /app
-
-# Copy dependency files
 COPY package*.json ./
-
-# Install dependencies
-RUN npm ci
-
-# Copy the rest of your app
+RUN npm ci --no-audit --production
 COPY . .
-
-# Build the Next.js app
 RUN npm run build
 
-# ✅ Disable Next.js telemetry & enable Node streaming
 ENV NODE_ENV=production \
     NEXT_TELEMETRY_DISABLED=1 \
     NODE_OPTIONS="--max-old-space-size=4096"
 
-# ✅ Create and set permissions for upload folder
-RUN mkdir -p /shared-files && chmod -R 777 /shared-files
+RUN mkdir -p /shared-files /app/downloads && chmod -R 777 /shared-files /app/downloads
 
-# Expose port
 EXPOSE 3000
-
-# ✅ Use production server (not dev) – streams correctly
 CMD ["npm", "run", "start"]
