@@ -176,76 +176,79 @@ export default function FilesPage() {
   };
 
   /* ---------------- YouTube Upload ---------------- */
-  const handleYouTubeUpload = async (url: string, onProgress?: (p: number) => void) => {
-    try {
-      const res = await fetch("/api/items/files/upload", {
-        method: "POST",
-        headers: {
-          "x-url": encodeURIComponent(url.trim()),
-          "x-folder": activeFolderId ?? "root",
-          "Accept": "text/event-stream",
-        },
-        // Empty body required for POST
-        body: new Uint8Array(0),
-      });
+const handleYouTubeUpload = async (url: string, onProgress?: (p: number) => void) => {
+  try {
+    const res = await fetch("/api/items/files/upload", {
+      method: "POST",  // ✅ FIXED: Must be POST for x-url
+      headers: {
+        "x-url": encodeURIComponent(url.trim()),
+        "x-folder": activeFolderId ?? "root",
+        "Accept": "text/event-stream",
+      },
+      body: new Uint8Array(0),  // ✅ Empty body for POST
+    });
 
-      if (!res.ok) {
-        const text = await res.text();
-        let errorMsg = "Upload failed";
-        try {
-          const err = JSON.parse(text);
-          errorMsg = err.error || errorMsg;
-        } catch {
-          errorMsg = text || errorMsg;
-        }
-        throw new Error(errorMsg);
+    if (!res.ok) {
+      const text = await res.text();
+      let errorMsg = "Upload failed";
+      try {
+        const err = JSON.parse(text);
+        errorMsg = err.error || errorMsg;
+      } catch {
+        errorMsg = text || errorMsg;
       }
+      throw new Error(errorMsg);
+    }
 
-      // Read the SSE stream
-      const reader = res.body?.getReader();
-      const decoder = new TextDecoder();
+    // ✅ FIXED: Proper SSE parsing
+    const reader = res.body?.getReader();
+    if (!reader) throw new Error("No response body");
 
-      if (!reader) {
-        throw new Error("No response body");
-      }
+    const decoder = new TextDecoder();
+    let buffer = "";
 
-      let buffer = "";
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
 
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n");
+      buffer = lines.pop() || ""; // Keep incomplete line
 
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split("\n");
-        
-        // Keep the last incomplete line in the buffer
-        buffer = lines.pop() || "";
-
-        for (const line of lines) {
-          if (line.startsWith("data: ")) {
-            const data = line.slice(6).trim();
-
-            if (data === "complete") {
+      for (const line of lines) {
+        if (line.startsWith("data: ")) {
+          const dataStr = line.slice(6).trim();
+          
+          try {
+            const data = JSON.parse(dataStr); // ✅ Parse JSON data
+            
+            if (data.status === "complete") {
               await refreshData(activeFolderId);
-              setAlertMessage("🎬 YouTube video uploaded successfully!");
+              setAlertMessage("🎬 YouTube video downloaded successfully!");
               return;
-            } else if (data === "error") {
-              throw new Error("Download failed");
+            } else if (data.status === "error") {
+              throw new Error(data.error || "Download failed");
             } else {
-              const progress = parseFloat(data);
-              if (!isNaN(progress) && onProgress) {
-                onProgress(progress);
+              // Progress update
+              if (data.percent !== undefined && onProgress) {
+                onProgress(data.percent);
               }
             }
+          } catch (e) {
+            console.warn("Invalid SSE data:", dataStr);
           }
         }
       }
-    } catch (err: any) {
-      console.error("YouTube upload error:", err);
-      setAlertMessage(err.message || "Failed to upload YouTube video.");
-      throw err;
     }
-  };
+
+    await refreshData(activeFolderId);
+    setAlertMessage("🎬 YouTube video downloaded successfully!");
+  } catch (err: any) {
+    console.error("YouTube download error:", err);
+    setAlertMessage(err.message || "Failed to download YouTube video.");
+    throw err;
+  }
+};
 
   /* ---------------- Drag & Drop ---------------- */
   const handleDropOnFolder = async (source: Item | Item[], destinationFolderId: string) => {
