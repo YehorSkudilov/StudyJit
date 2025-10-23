@@ -29,10 +29,19 @@ function getCookiesArgs() {
 /*                            YouTube Info Fetcher                            */
 /* -------------------------------------------------------------------------- */
 
+interface VideoInfo {
+  title: string;
+  duration: number;
+  thumbnail: string;
+  uploader: string;
+  view_count: number;
+  [key: string]: any;
+}
+
 class SimpleYouTubeDownloader {
   constructor(private url: string, private uploadDir: string) {}
 
-  async getVideoInfo() {
+  async getVideoInfo(): Promise<VideoInfo> {
     console.log("🔍 Fetching video info via yt-dlp...");
     const args = [
       "--dump-json",
@@ -54,7 +63,7 @@ class SimpleYouTubeDownloader {
       proc.on("close", (code) => {
         if (code === 0 && data.trim()) {
           try {
-            const info = JSON.parse(data);
+            const info = JSON.parse(data) as VideoInfo;
             console.log(`✅ Got info: ${info.title}`);
             resolve(info);
           } catch {
@@ -62,13 +71,15 @@ class SimpleYouTubeDownloader {
           }
         } else {
           console.error("❌ yt-dlp info error:", error);
-          if (error.includes("Sign in"))
+          if (error.includes("Sign in") || error.includes("private") || error.includes("age restricted")) {
             reject(
               new Error(
                 "This video is age-restricted or private. Add cookies.txt for authenticated downloads."
               )
             );
-          else reject(new Error("Cannot access video: " + error));
+          } else {
+            reject(new Error("Cannot access video: " + error));
+          }
         }
       });
     });
@@ -79,17 +90,29 @@ class SimpleYouTubeDownloader {
 /*                                  POST API                                  */
 /* -------------------------------------------------------------------------- */
 
+interface FileRecord {
+  name: string;
+  path: string;
+  size: number;
+  folder_id: string | null;
+  user_id: string;
+  type: "youtube" | "file";
+}
+
 export async function POST(req: Request) {
   try {
     const session = await getServerSession(authOptions);
-    if (!session?.user?.id)
+    if (!session?.user?.id) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
 
     const urlHeader = req.headers.get("x-url");
     const range = req.headers.get("content-range");
     const filenameHeader = req.headers.get("x-filename");
     const folderHeader = req.headers.get("x-folder");
     const uploadDir = path.resolve("/shared-files");
+    
+    // Ensure upload directory exists
     await fs.promises.mkdir(uploadDir, { recursive: true });
 
     /* ---------------------------------------------------------------------- */
@@ -104,96 +127,126 @@ export async function POST(req: Request) {
         const encoder = new TextEncoder();
 
         const readable = new ReadableStream({
-          start(controller) {
+          async start(controller) {
             console.log(`🎬 Starting yt-dlp download: ${url}`);
-            const outputPath = path.join(uploadDir, "%(title)s.%(ext)s");
+            
+            try {
+              // First, get video info to determine the filename
+              const downloader = new SimpleYouTubeDownloader(url, uploadDir);
+              const info = await downloader.getVideoInfo();
+              
+              // Sanitize filename
+              const sanitizedTitle = info.title.replace(/[<>:"/\\|?*]/g, '_');
+              const outputPath = path.join(uploadDir, `${sanitizedTitle}.%(ext)s`);
 
-            const args = [
-              "-f",
-              "bestvideo+bestaudio/best",
-              "--merge-output-format",
-              "mp4",
-              "-o",
-              outputPath,
-              "--newline",
-              "--no-warnings",
-              "--no-call-home",
-              "--write-info-json",
-              "--write-thumbnail",
-              ...getCookiesArgs(),
-              url,
-            ];
+              const args = [
+                "-f",
+                "bestvideo+bestaudio/best",
+                "--merge-output-format",
+                "mp4",
+                "-o",
+                outputPath,
+                "--newline",
+                "--no-warnings",
+                "--no-call-home",
+                "--write-info-json",
+                "--write-thumbnail",
+                ...getCookiesArgs(),
+                url,
+              ];
 
-            const proc = spawn("yt-dlp", args);
+              const proc = spawn("yt-dlp", args);
 
-            proc.stdout.on("data", (chunk) => {
-              const line = chunk.toString();
-              const match = line.match(/(\d+(?:\.\d+)?)%/);
-              if (match) {
-                const percent = parseFloat(match[1]);
-                controller.enqueue(encoder.encode(`data: ${percent}\n\n`));
-              }
-            });
+              let downloadComplete = false;
+              let finalFilename = '';
 
-            proc.stderr.on("data", (chunk) => {
-              const msg = chunk.toString();
-              if (
-                msg.includes("Sign in") ||
-                msg.includes("Private") ||
-                msg.includes("HTTP Error 403")
-              ) {
-                controller.enqueue(
-                  encoder.encode(`data: error|auth\n\n`)
-                );
-              }
-              console.error("yt-dlp:", msg);
-            });
+              proc.stdout.on("data", (chunk) => {
+                const line = chunk.toString();
+                const match = line.match(/(\d+(?:\.\d+)?)%/);
+                if (match) {
+                  const percent = parseFloat(match[1]);
+                  controller.enqueue(encoder.encode(`data: ${percent}\n\n`));
+                }
+              });
 
-            proc.on("close", async (code) => {
-              if (code === 0) {
-                try {
-                  const files = await fs.promises.readdir(uploadDir);
-                  const mp4s = files
-                    .filter((f) => f.endsWith(".mp4"))
-                    .map((f) => ({
-                      name: f,
-                      time: fs.statSync(path.join(uploadDir, f)).mtime.getTime(),
-                    }))
-                    .sort((a, b) => b.time - a.time);
-
-                  const newest = mp4s[0];
-                  if (newest) {
-                    const filePath = path.join(uploadDir, newest.name);
-                    const stats = await fs.promises.stat(filePath);
-
-                    await db.query(
-                      "INSERT INTO files (name, path, size, folder_id, user_id, type) VALUES (?, ?, ?, ?, ?, ?)",
-                      [
-                        newest.name,
-                        filePath,
-                        stats.size,
-                        folderId,
-                        session.user.id,
-                        "youtube",
-                      ]
-                    );
-
-                    controller.enqueue(encoder.encode(`data: complete\n\n`));
-                    console.log(`✅ Download complete: ${newest.name}`);
-                  } else {
-                    controller.enqueue(encoder.encode(`data: error\n\n`));
-                  }
-                } catch (err) {
-                  console.error("💥 Finalization error:", err);
-                  controller.enqueue(encoder.encode(`data: error\n\n`));
-                } finally {
+              proc.stderr.on("data", (chunk) => {
+                const msg = chunk.toString();
+                console.error("yt-dlp stderr:", msg);
+                
+                if (
+                  msg.includes("Sign in") ||
+                  msg.includes("Private") ||
+                  msg.includes("HTTP Error 403") ||
+                  msg.includes("age restricted")
+                ) {
+                  controller.enqueue(encoder.encode(`data: error|auth\n\n`));
                   controller.close();
                 }
-              } else {
-                controller.enqueue(encoder.encode(`data: error\n\n`));
+              });
+
+              proc.on("close", async (code) => {
+                if (code === 0 && !downloadComplete) {
+                  try {
+                    // Find the downloaded file
+                    const files = await fs.promises.readdir(uploadDir);
+                    const mp4s = files
+                      .filter((f) => f.endsWith(".mp4") && f.includes(sanitizedTitle))
+                      .map((f) => ({
+                        name: f,
+                        time: fs.statSync(path.join(uploadDir, f)).mtime.getTime(),
+                      }))
+                      .sort((a, b) => b.time - a.time);
+
+                    const newest = mp4s[0];
+                    if (newest) {
+                      finalFilename = newest.name;
+                      const filePath = path.join(uploadDir, finalFilename);
+                      const stats = await fs.promises.stat(filePath);
+
+                      await db.query(
+                        "INSERT INTO files (name, path, size, folder_id, user_id, type) VALUES (?, ?, ?, ?, ?, ?)",
+                        [
+                          finalFilename,
+                          filePath,
+                          stats.size,
+                          folderId,
+                          session.user.id,
+                          "youtube",
+                        ]
+                      );
+
+                      controller.enqueue(encoder.encode(`data: complete|${finalFilename}\n\n`));
+                      console.log(`✅ Download complete: ${finalFilename}`);
+                    } else {
+                      controller.enqueue(encoder.encode(`data: error|No file found\n\n`));
+                    }
+                  } catch (err) {
+                    console.error("💥 Finalization error:", err);
+                    controller.enqueue(encoder.encode(`data: error|${err instanceof Error ? err.message : 'Unknown error'}\n\n`));
+                  } finally {
+                    downloadComplete = true;
+                    controller.close();
+                  }
+                } else if (code !== 0) {
+                  controller.enqueue(encoder.encode(`data: error|Download failed with code ${code}\n\n`));
+                  controller.close();
+                }
+              });
+
+              // Handle process errors
+              proc.on("error", (error) => {
+                console.error("💥 Process error:", error);
+                controller.enqueue(encoder.encode(`data: error|${error.message}\n\n`));
                 controller.close();
-              }
-            });
+              });
+
+            } catch (error) {
+              console.error("💥 Download setup error:", error);
+              controller.enqueue(
+                encoder.encode(`data: error|${error instanceof Error ? error.message : 'Setup failed'}\n\n`)
+              );
+              controller.close();
+            }
           },
         });
 
@@ -206,10 +259,10 @@ export async function POST(req: Request) {
         });
       }
 
-      // Fallback (non-SSE)
+      // Fallback (non-SSE) - just return video info
       try {
         const downloader = new SimpleYouTubeDownloader(url, uploadDir);
-        const info: any = await downloader.getVideoInfo();
+        const info = await downloader.getVideoInfo();
         return NextResponse.json({ info });
       } catch (error: any) {
         console.error("💥 Info fetch failed:", error.message);
@@ -220,12 +273,14 @@ export async function POST(req: Request) {
     /* ---------------------------------------------------------------------- */
     /*                         Case 2: Normal File Upload                     */
     /* ---------------------------------------------------------------------- */
-    if (!range || !filenameHeader)
+    if (!range || !filenameHeader) {
       return NextResponse.json({ error: "Missing upload headers" }, { status: 400 });
+    }
 
     const match = range.match(/bytes (\d+)-(\d+)\/(\d+)/);
-    if (!match)
+    if (!match) {
       return NextResponse.json({ error: "Invalid Content-Range" }, { status: 400 });
+    }
 
     const [, startStr, endStr, totalStr] = match;
     const start = parseInt(startStr);
@@ -234,24 +289,45 @@ export async function POST(req: Request) {
     const filename = decodeURIComponent(filenameHeader);
     const folderId = folderHeader && folderHeader !== "root" ? folderHeader : null;
 
+    // Validate filename
+    if (!filename || filename.includes('..') || filename.includes('/') || filename.includes('\\')) {
+      return NextResponse.json({ error: "Invalid filename" }, { status: 400 });
+    }
+
     const filePath = path.join(uploadDir, filename);
     const flags = start === 0 ? "w" : "a";
 
-    const body = req.body as unknown as NodeJS.ReadableStream;
-    const fileStream = fs.createWriteStream(filePath, { flags });
-    await pump(body, fileStream);
+    try {
+      const body = req.body as unknown as NodeJS.ReadableStream;
+      if (!body) {
+        throw new Error("No request body");
+      }
+      
+      const fileStream = fs.createWriteStream(filePath, { flags });
+      await pump(body, fileStream);
 
-    // Only insert after last chunk
-    if (end + 1 >= total) {
-      const stats = await fs.promises.stat(filePath);
-      await db.query(
-        "INSERT INTO files (name, path, size, folder_id, user_id, type) VALUES (?, ?, ?, ?, ?, ?)",
-        [filename, filePath, stats.size, folderId, session.user.id, "file"]
-      );
-      console.log(`✅ File upload complete: ${filename} (${stats.size} bytes)`);
+      // Only insert after last chunk
+      if (end + 1 >= total) {
+        const stats = await fs.promises.stat(filePath);
+        await db.query(
+          "INSERT INTO files (name, path, size, folder_id, user_id, type) VALUES (?, ?, ?, ?, ?, ?)",
+          [filename, filePath, stats.size, folderId, session.user.id, "file"]
+        );
+        console.log(`✅ File upload complete: ${filename} (${stats.size} bytes)`);
+      }
+
+      return NextResponse.json({ success: true, start, end, total });
+    } catch (error) {
+      // Clean up incomplete file on error
+      try {
+        if (fs.existsSync(filePath)) {
+          await fs.promises.unlink(filePath);
+        }
+      } catch (cleanupError) {
+        console.error("Failed to clean up file:", cleanupError);
+      }
+      throw error;
     }
-
-    return NextResponse.json({ success: true, start, end, total });
   } catch (err: any) {
     console.error("💥 Upload error:", err);
     return NextResponse.json(
@@ -268,16 +344,18 @@ export async function POST(req: Request) {
 export async function GET(req: Request) {
   try {
     const session = await getServerSession(authOptions);
-    if (!session?.user?.id)
+    if (!session?.user?.id) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
 
     const { searchParams } = new URL(req.url);
     const url = searchParams.get("url");
-    if (!url)
+    if (!url) {
       return NextResponse.json({ error: "Missing ?url parameter" }, { status: 400 });
+    }
 
     const downloader = new SimpleYouTubeDownloader(url, "");
-    const info: any = await downloader.getVideoInfo();
+    const info = await downloader.getVideoInfo();
 
     return NextResponse.json({
       title: info.title,
