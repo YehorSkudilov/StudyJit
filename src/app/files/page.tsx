@@ -175,28 +175,29 @@ export default function FilesPage() {
     await refreshData(activeFolderId);
   };
 
-  /* ---------------- YouTube Upload ---------------- */
-  const handleYouTubeUpload = async (url: string) => {
-    try {
-      const res = await fetch("/api/items/files/upload", {
-        method: "POST",
-        headers: {
-          "x-url": encodeURIComponent(url.trim()),
-          "x-folder": activeFolderId ?? "root",
-        },
-      });
+/* ---------------- YouTube Upload ---------------- */
+const handleYouTubeUpload = async (url: string) => {
+  try {
+    const res = await fetch("/api/items/files/upload", {
+      method: "POST",
+      headers: {
+        "x-url": encodeURIComponent(url.trim()),
+        "x-folder": activeFolderId ?? "root",
+      },
+    });
 
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.error || "Upload failed");
-      }
-
-      await refreshData(activeFolderId);
-      setAlertMessage("🎬 YouTube video uploaded successfully!");
-    } catch (err: any) {
-      setAlertMessage(err.message || "Failed to upload YouTube video.");
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.error || "Upload failed");
     }
-  };
+
+    await refreshData(activeFolderId);
+    setAlertMessage("🎬 YouTube video uploaded successfully!");
+  } catch (err: any) {
+    setAlertMessage(err.message || "Failed to upload YouTube video.");
+  }
+};
+
 
   /* ---------------- Drag & Drop ---------------- */
   const handleDropOnFolder = async (source: Item | Item[], destinationFolderId: string) => {
