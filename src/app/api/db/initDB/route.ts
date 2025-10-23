@@ -35,6 +35,20 @@ async function dropOldColumns() {
   }
 }
 
+/* ------------------------- Utility: Drop Unique Constraint ------------------------- */
+async function dropUniqueConstraintIfExists() {
+  const [indexes]: any = await db.query(`SHOW INDEX FROM quizzes`);
+  const uniqueIndexes = indexes.filter((i: any) => i.Non_unique === 0);
+
+  for (const idx of uniqueIndexes) {
+    if (idx.Column_name === "name") {
+      console.log(`🗑️ Dropping UNIQUE constraint '${idx.Key_name}' on quizzes.name...`);
+      await db.query(`ALTER TABLE quizzes DROP INDEX ${idx.Key_name}`);
+      console.log(`✅ UNIQUE constraint '${idx.Key_name}' removed from quizzes.name`);
+    }
+  }
+}
+
 /* --------------------------- Database Setup --------------------------- */
 async function initDatabase() {
   /* ---------------- USERS ---------------- */
@@ -69,7 +83,7 @@ async function initDatabase() {
       user_id INT NOT NULL,
       folder_id INT NULL,
       name VARCHAR(255) NOT NULL,
-      path TEXT NULL,                 -- ✅ Include it directly
+      path TEXT NULL,
       size BIGINT,
       mime_type VARCHAR(255),
       uploaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -78,7 +92,7 @@ async function initDatabase() {
     );
   `);
 
-  // 🔒 Ensure for backward compatibility
+  // ✅ Ensure backward compatibility
   await ensureColumnExists("files", "folder_id", "INT NULL");
   await ensureColumnExists("files", "path", "TEXT NULL");
 
@@ -99,6 +113,9 @@ async function initDatabase() {
       FOREIGN KEY (folder_id) REFERENCES folders(id) ON DELETE SET NULL
     );
   `);
+
+  // 🧩 Drop any UNIQUE constraint on quizzes.name
+  await dropUniqueConstraintIfExists();
 
   // 🔄 Update ENUM if needed
   const [enumCheck]: any = await db.query(`SHOW COLUMNS FROM quizzes LIKE 'generation_status'`);
@@ -134,7 +151,7 @@ async function initDatabase() {
   /* ---------------- CLEANUP ---------------- */
   await dropOldColumns();
 
-  console.log("✅ Database schema synchronized successfully (path supported).");
+  console.log("✅ Database schema synchronized successfully (duplicates allowed).");
   return { success: true };
 }
 
@@ -145,7 +162,10 @@ export async function GET() {
     return NextResponse.json(result);
   } catch (err: any) {
     console.error("❌ initDatabase error:", err);
-    return NextResponse.json({ error: err.message }, { status: 500 });
+    return NextResponse.json(
+      { error: err.message, stack: err.stack },
+      { status: 500 }
+    );
   }
 }
 
