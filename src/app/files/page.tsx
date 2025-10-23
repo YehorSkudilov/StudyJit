@@ -177,26 +177,25 @@ export default function FilesPage() {
 
 /* ---------------- YouTube Upload ---------------- */
 const handleYouTubeUpload = async (url: string) => {
-  try {
-    const res = await fetch("/api/items/files/upload", {
-      method: "POST",
-      headers: {
-        "x-url": encodeURIComponent(url.trim()),
-        "x-folder": activeFolderId ?? "root",
-      },
-    });
+  const encodedUrl = encodeURIComponent(url.trim());
+  const folder = activeFolderId ?? "root";
 
-    if (!res.ok) {
-      const err = await res.json();
-      throw new Error(err.error || "Upload failed");
+  const evtSource = new EventSource(`/api/items/files/upload?x-url=${encodedUrl}&x-folder=${folder}`);
+
+  evtSource.onmessage = async (e) => {
+    if (e.data === "complete") {
+      evtSource.close();
+      await refreshData(activeFolderId);
+      setAlertMessage("🎬 YouTube video uploaded successfully!");
+    } else if (e.data === "error") {
+      evtSource.close();
+      setAlertMessage("💥 YouTube download failed.");
+    } else {
+      console.log(`📊 Progress: ${e.data}%`);
     }
-
-    await refreshData(activeFolderId);
-    setAlertMessage("🎬 YouTube video uploaded successfully!");
-  } catch (err: any) {
-    setAlertMessage(err.message || "Failed to upload YouTube video.");
-  }
+  };
 };
+
 
 
   /* ---------------- Drag & Drop ---------------- */
