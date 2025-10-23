@@ -21,7 +21,7 @@ type FileUploadPopupProps = {
   onClose: () => void;
   activeFolderId?: string | null;
   onFileUpload: (file: File, onProgress?: (progress: number) => void) => Promise<void>;
-  onYouTubeUpload?: (url: string) => Promise<void>;
+  onYouTubeUpload: (url: string, onProgress?: (progress: number) => void) => Promise<void>; // ✅ FIXED: Required + progress callback
 };
 
 export default function FileUploadPopup({
@@ -130,28 +130,10 @@ export default function FileUploadPopup({
           const nameKey = `YT: ${item.url}`;
           setUploadProgress((prev) => ({ ...prev, [nameKey]: 0 }));
 
-          // Progressive YouTube tracking via SSE (optional)
-          const evtSource = new EventSource(
-            `/api/items/files/upload?x-url=${encodeURIComponent(
-              item.url
-            )}&x-folder=${activeFolderId ?? "root"}`
-          );
-
-          evtSource.onmessage = (e) => {
-            if (e.data === "complete") {
-              setUploadProgress((prev) => ({ ...prev, [nameKey]: 100 }));
-              evtSource.close();
-            } else if (e.data === "error") {
-              setUploadProgress((prev) => ({ ...prev, [nameKey]: 0 }));
-              evtSource.close();
-            } else {
-              const percent = parseFloat(e.data);
-              setUploadProgress((prev) => ({ ...prev, [nameKey]: percent }));
-            }
-          };
-
-          // Fallback if SSE not supported
-          if (onYouTubeUpload) await onYouTubeUpload(item.url);
+          // ✅ FIXED: Use parent handler with progress callback - NO EventSource!
+          await onYouTubeUpload(item.url, (progress) => {
+            setUploadProgress((prev) => ({ ...prev, [nameKey]: progress }));
+          });
         }
       }
 
