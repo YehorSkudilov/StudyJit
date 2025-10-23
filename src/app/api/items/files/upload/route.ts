@@ -24,7 +24,7 @@ export async function POST(req: Request) {
     const contentType = req.headers.get("content-type") || "";
 
     /* ---------------------------------------------------------------------- */
-    /* 🧩 CASE 1: YouTube Download (SSE Streaming with pseudo-progress)       */
+    /* 🧩 CASE 1: YouTube Download (SSE streaming with normalized progress)   */
     /* ---------------------------------------------------------------------- */
     if (contentType.includes("application/json")) {
       const { url, folder } = await req.json();
@@ -51,49 +51,55 @@ export async function POST(req: Request) {
         "--no-warnings",
         "--progress",
         "--newline",
-        "--console-title",
       ];
 
       const { readable, writable } = new TransformStream();
       const writer = writable.getWriter();
+
       const send = async (obj: any) => {
         await writer.write(encoder.encode(`data: ${JSON.stringify(obj)}\n\n`));
       };
 
+      // spawn yt-dlp
       const proc = spawn("yt-dlp", args, { stdio: ["ignore", "pipe", "pipe"] });
       proc.stdout.setEncoding("utf-8");
       proc.stderr.setEncoding("utf-8");
 
-      let lastPercent = 0;
-      let isMerging = false;
+      // state for normalization
+      let phase: "video" | "audio" | "merge" = "video";
+      let videoDone = false;
 
-      const handleData = async (data: string) => {
+      const parseProgress = async (data: string) => {
         const lines = data.split(/\r?\n/);
         for (const line of lines) {
-          // Download phase
+          if (!line.trim()) continue;
+
+          // detect phase switch
+          if (/\[download\] Destination:/.test(line)) {
+            if (videoDone) phase = "audio";
+          }
+          if (/\[Merger\]/.test(line) || /\[ExtractAudio\]/.test(line)) {
+            phase = "merge";
+          }
+
           const match = line.match(/\[download\]\s+([\d.]+)%/);
           if (match) {
             const percent = parseFloat(match[1]);
-            lastPercent = percent;
-            await send({ percent });
+            let normalized = percent;
+            if (phase === "video") normalized = percent * 0.5;        // 0–50
+            else if (phase === "audio") normalized = 50 + percent * 0.4 / 100 * 100; // 50–90
+            else if (phase === "merge") normalized = 90 + percent * 0.1 / 100 * 100; // 90–100
+            await send({ percent: Math.min(normalized, 99.5) });
           }
 
-          // Detect merging phase
-          if (line.includes("[Merger]") || line.includes("[ExtractAudio]")) {
-            isMerging = true;
-            await send({ status: "merging" });
-
-            // 🔥 Simulate progress during merge
-            for (let i = 91; i <= 98; i++) {
-              await new Promise((r) => setTimeout(r, 1000));
-              await send({ percent: i });
-            }
+          if (/\[download\] 100%/.test(line)) {
+            if (phase === "video") videoDone = true;
           }
         }
       };
 
-      proc.stdout.on("data", handleData);
-      proc.stderr.on("data", handleData);
+      proc.stdout.on("data", parseProgress);
+      proc.stderr.on("data", parseProgress);
 
       proc.on("error", async (err) => {
         await send({ status: "error", error: err.message });
@@ -105,8 +111,8 @@ export async function POST(req: Request) {
           if (code !== 0) {
             await send({ status: "error", error: "Download failed" });
           } else {
-            // ✅ Database insert phase
-            await send({ status: "db", percent: 99 });
+            // indicate merge + db insert
+            await send({ status: "merging" });
 
             const files = await fs.promises.readdir(uploadDir);
             const latestFile = files
@@ -121,12 +127,15 @@ export async function POST(req: Request) {
               const stats = await fs.promises.stat(filePath);
               const folderId = folder && folder !== "root" ? folder : null;
 
+              // tiny fake progress steps for DB insert
+              await send({ status: "db", percent: 99 });
               await db.query(
                 "INSERT INTO files (name, path, size, folder_id, user_id) VALUES (?, ?, ?, ?, ?)",
                 [latestFile.name, filePath, stats.size, folderId, session.user.id]
               );
             }
 
+            // final completion event
             await send({ percent: 100, status: "complete" });
           }
         } catch (err: any) {
