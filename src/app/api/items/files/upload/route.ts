@@ -258,13 +258,10 @@ export async function GET(req: Request) {
     if (!session?.user?.id)
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-      const { searchParams } = new URL(req.url);
-      const url = searchParams.get("url") || searchParams.get("x-url");
-      const folderHeader = searchParams.get("x-folder");
-
-      if (!url)
-        return NextResponse.json({ error: "Missing x-url or url parameter" }, { status: 400 });
-
+    const { searchParams } = new URL(req.url);
+    const url = searchParams.get("url");
+    if (!url)
+      return NextResponse.json({ error: "URL parameter required" }, { status: 400 });
 
     const downloader = new SimpleYouTubeDownloader(url, "");
     const info: any = await downloader.getVideoInfo();
