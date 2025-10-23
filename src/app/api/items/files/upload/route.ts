@@ -52,30 +52,36 @@ export async function POST(req: Request) {
         "--progress",
         "--newline",
         "--console-title",
-        "--verbose",
       ];
 
-      // ✅ TransformStream allows unbuffered writes (progress events stream immediately)
+      // ✅ Stream setup
       const { readable, writable } = new TransformStream();
       const writer = writable.getWriter();
-
       const send = async (obj: any) => {
         await writer.write(encoder.encode(`data: ${JSON.stringify(obj)}\n\n`));
       };
 
-      const proc = spawn("yt-dlp", args);
+      // ✅ Spawn yt-dlp and capture both stdout and stderr
+      const proc = spawn("yt-dlp", args, { stdio: ["ignore", "pipe", "pipe"] });
+      proc.stdout.setEncoding("utf-8");
       proc.stderr.setEncoding("utf-8");
 
-      // ✅ Capture progress updates from yt-dlp stderr
-      proc.stderr.on("data", async (chunk) => {
-        const match = chunk.match(/\[download\]\s+([\d.]+)%/);
-        if (match) {
-          const percent = parseFloat(match[1]);
-          await send({ percent });
+      // 🧩 Helper to parse lines for progress
+      const handleData = async (data: string) => {
+        const lines = data.split(/\r?\n/);
+        for (const line of lines) {
+          const match = line.match(/\[download\]\s+([\d.]+)%/);
+          if (match) {
+            const percent = parseFloat(match[1]);
+            await send({ percent });
+          }
         }
-      });
+      };
 
-      // ✅ Handle download errors
+      proc.stdout.on("data", handleData);
+      proc.stderr.on("data", handleData);
+
+      // ✅ Handle process error
       proc.on("error", async (err) => {
         await send({ status: "error", error: err.message });
         await writer.close();
@@ -87,7 +93,7 @@ export async function POST(req: Request) {
           if (code !== 0) {
             await send({ status: "error", error: "Download failed" });
           } else {
-            // ✅ Insert file into DB
+            // ✅ Insert newest file into DB
             const files = await fs.promises.readdir(uploadDir);
             const latestFile = files
               .map((f) => ({
@@ -106,7 +112,6 @@ export async function POST(req: Request) {
                 [latestFile.name, filePath, stats.size, folderId, session.user.id]
               );
             }
-
             await send({ status: "complete" });
           }
         } catch (err: any) {
@@ -116,20 +121,20 @@ export async function POST(req: Request) {
         }
       });
 
-      // ✅ Return SSE response with all proper headers (forces streaming)
+      // ✅ Return event stream
       return new Response(readable, {
         headers: {
           "Content-Type": "text/event-stream; charset=utf-8",
           "Cache-Control": "no-cache, no-transform",
           "Connection": "keep-alive",
-          "X-Accel-Buffering": "no", // disables nginx/vercel buffering
+          "X-Accel-Buffering": "no",
           "Transfer-Encoding": "chunked",
         },
       });
     }
 
     /* ---------------------------------------------------------------------- */
-    /* 📦 CASE 2: Chunked File Upload (Normal file upload)                    */
+    /* 📦 CASE 2: Chunked File Upload (Standard file upload)                  */
     /* ---------------------------------------------------------------------- */
     const range = req.headers.get("content-range");
     const filenameHeader = req.headers.get("x-filename");
