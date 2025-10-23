@@ -28,7 +28,7 @@ export async function POST(req: NextRequest) {
       description = "",
       prompt = "",
       numQuestions = 10,
-      folder_id = null, // 👈 will come from frontend
+      folder_id = null,
     } = body;
 
     console.log("🟢 [CreateQuiz] Body:", body);
@@ -40,21 +40,7 @@ export async function POST(req: NextRequest) {
 
     const validNumQuestions = Math.min(Math.max(Number(numQuestions), 1), 50);
 
-    // 4️⃣ Prevent duplicate names in same folder (optional)
-    const [existing]: any = await db.query(
-      `SELECT id FROM quizzes WHERE user_id = ? AND name = ? AND IFNULL(folder_id, 'root') = IFNULL(?, 'root')`,
-      [userId, name.trim(), folder_id]
-    );
-
-    if (existing.length > 0) {
-      console.warn("🟠 [CreateQuiz] Duplicate quiz name in folder detected");
-      return NextResponse.json(
-        { error: "A quiz with this name already exists in this folder" },
-        { status: 409 }
-      );
-    }
-
-    // 5️⃣ Insert quiz (folder_id can be NULL or a valid ID)
+    // 4️⃣ Directly insert (no duplicate check)
     const [result]: any = await db.query(
       `INSERT INTO quizzes (user_id, folder_id, name, description, prompt, num_questions, generation_status)
        VALUES (?, ?, ?, ?, ?, ?, 'never_generated')`,
