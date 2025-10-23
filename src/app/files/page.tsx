@@ -177,37 +177,73 @@ export default function FilesPage() {
 
   /* ---------------- YouTube Upload ---------------- */
 const handleYouTubeUpload = async (url: string, onProgress?: (p: number) => void) => {
-  return new Promise<void>((resolve, reject) => {
-    const es = new EventSource(`/api/items/files/upload?url=${encodeURIComponent(url)}&folder=${activeFolderId ?? "root"}`);
+  try {
+    const res = await fetch("/api/items/files/upload", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json", // ✅ match backend expectation
+        Accept: "text/event-stream",
+      },
+      body: JSON.stringify({
+        url: url.trim(),
+        folder: activeFolderId ?? "root",
+      }),
+    });
 
-    es.onmessage = async (event) => {
+    if (!res.ok) {
+      const text = await res.text();
       try {
-        const json = JSON.parse(event.data);
-        if (json.percent !== undefined && onProgress) {
-          onProgress(json.percent);
-        } else if (json.status === "complete") {
-          await refreshData(activeFolderId);
-          setAlertMessage("🎬 YouTube video downloaded successfully!");
-          es.close();
-          resolve();
-        } else if (json.status === "error") {
-          setAlertMessage(json.error || "Download failed");
-          es.close();
-          reject(new Error(json.error || "Download failed"));
-        }
-      } catch (err) {
-        console.warn("Invalid event data:", event.data);
+        const err = JSON.parse(text);
+        throw new Error(err.error || "YouTube download failed");
+      } catch {
+        throw new Error(text || "YouTube download failed");
       }
-    };
+    }
 
-    es.onerror = (err) => {
-      console.error("EventSource error:", err);
-      es.close();
-      reject(new Error("SSE connection failed"));
-    };
-  });
+    // ✅ SSE parsing (progress tracking)
+    const reader = res.body?.getReader();
+    if (!reader) throw new Error("No response stream");
+
+    const decoder = new TextDecoder();
+    let buffer = "";
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n");
+      buffer = lines.pop() || "";
+
+      for (const line of lines) {
+        if (line.startsWith("data:")) {
+          const raw = line.slice(5).trim();
+          try {
+            const json = JSON.parse(raw);
+            if (json.percent !== undefined && onProgress) {
+              onProgress(json.percent);
+            } else if (json.status === "complete") {
+              await refreshData(activeFolderId);
+              setAlertMessage("🎬 YouTube video downloaded successfully!");
+              return;
+            } else if (json.status === "error") {
+              throw new Error(json.error || "Download failed");
+            }
+          } catch {
+            console.warn("Invalid SSE data:", raw);
+          }
+        }
+      }
+    }
+
+    await refreshData(activeFolderId);
+    setAlertMessage("🎬 YouTube video downloaded successfully!");
+  } catch (err: any) {
+    console.error("YouTube download error:", err);
+    setAlertMessage(err.message || "Failed to download YouTube video.");
+    throw err;
+  }
 };
-
 
 
   /* ---------------- Drag & Drop ---------------- */
