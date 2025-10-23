@@ -266,29 +266,34 @@ export default function FileUploadPopup({
           )}
         </div>
 
-        {/* Add YouTube Link */}
-        <div className="flex items-center gap-2">
-          <Link2 className="w-4 h-4 text-gray-500" />
-          <input
-            type="url"
-            placeholder="https://www.youtube.com/watch?v=..."
-            value={youtubeUrl}
-            onChange={(e) => setYoutubeUrl(e.target.value)}
-            disabled={isUploading}
-            className="flex-1 px-3 py-2 border rounded-lg dark:bg-gray-700 dark:border-gray-600"
-          />
-          <button
-            onClick={handleAddYoutube}
-            disabled={isUploading || !youtubeUrl.trim()}
-            className={`px-4 py-2 rounded-lg font-medium text-white flex items-center gap-2 transition ${
-              isUploading || !youtubeUrl.trim()
-                ? "bg-gray-400 cursor-not-allowed"
-                : "bg-red-600 hover:bg-red-700"
-            }`}
-          >
-            <Youtube className="w-4 h-4" /> Add
-          </button>
-        </div>
+{/* YouTube Link Input (mobile-optimized) */}
+<div className="flex flex-col sm:flex-row sm:items-center gap-3">
+  <div className="flex items-center gap-2 w-full">
+    <Link2 className="w-5 h-5 text-gray-500 shrink-0" />
+    <input
+      type="url"
+      placeholder="https://www.youtube.com/watch?v=..."
+      value={youtubeUrl}
+      onChange={(e) => setYoutubeUrl(e.target.value)}
+      disabled={isUploading}
+      className="flex-1 px-3 py-2 text-sm sm:text-base border rounded-lg focus:outline-none focus:ring-2 
+                 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:focus:ring-blue-400 
+                 placeholder-gray-400 dark:placeholder-gray-500"
+    />
+  </div>
+
+  <button
+    onClick={handleAddYoutube}
+    disabled={isUploading || !youtubeUrl.trim()}
+    className={`w-full sm:w-auto px-4 py-2 rounded-lg font-medium text-white flex items-center justify-center gap-2 transition-all
+      ${isUploading || !youtubeUrl.trim()
+        ? "bg-gray-400 cursor-not-allowed"
+        : "bg-red-600 hover:bg-red-700 active:scale-[0.98]"
+      }`}
+  >
+    <Youtube className="w-4 h-4" /> <span className="hidden sm:inline">Add</span>
+  </button>
+</div>
 
         {/* Error Message */}
         {error && (
