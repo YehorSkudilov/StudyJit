@@ -67,21 +67,45 @@ const args = [
 
 
   // Create a streamable response
-  const stream = new ReadableStream({
-    start(controller) {
-      const proc = spawn("yt-dlp", args);
+const stream = new ReadableStream({
+  start(controller) {
+    const proc = spawn("yt-dlp", args);
 
-      proc.stderr.on("data", (data) => {
-        const text = data.toString();
-        const match = text.match(/\[download\]\s+([\d.]+)%/);
-        if (match) {
-          const percent = match[1];
-          controller.enqueue(encoder.encode(`data: ${percent}\n\n`));
+    proc.stderr.on("data", (data) => {
+      const text = data.toString();
+      const match = text.match(/\[download\]\s+([\d.]+)%/);
+      if (match) {
+        const percent = parseFloat(match[1]);
+        // ✅ Send JSON-formatted progress events
+        controller.enqueue(
+          encoder.encode(`data: ${JSON.stringify({ percent })}\n\n`)
+        );
+      }
+    });
+
+    // ✅ Handle process errors
+    proc.on("error", (err) => {
+      controller.enqueue(
+        encoder.encode(
+          `data: ${JSON.stringify({ status: "error", error: err.message })}\n\n`
+        )
+      );
+      controller.close();
+    });
+
+    proc.on("close", async (code) => {
+      try {
+        if (code !== 0) {
+          controller.enqueue(
+            encoder.encode(
+              `data: ${JSON.stringify({ status: "error", error: "Download failed." })}\n\n`
+            )
+          );
+          controller.close();
+          return;
         }
-      });
 
-      proc.on("close", async () => {
-        // Find newest file
+        // ✅ On success, find the newest file and insert into DB
         const files = await fs.promises.readdir(uploadDir);
         const latestFile = files
           .map((f) => ({
@@ -94,17 +118,33 @@ const args = [
           const filePath = path.join(uploadDir, latestFile.name);
           const stats = await fs.promises.stat(filePath);
           const folderId = folder && folder !== "root" ? folder : null;
+
           await db.query(
             "INSERT INTO files (name, path, size, folder_id, user_id) VALUES (?, ?, ?, ?, ?)",
             [latestFile.name, filePath, stats.size, folderId, session.user.id]
           );
         }
 
-        controller.enqueue(encoder.encode("data: complete\n\n"));
+        // ✅ Signal completion to frontend
+        controller.enqueue(
+          encoder.encode(
+            `data: ${JSON.stringify({ status: "complete" })}\n\n`
+          )
+        );
         controller.close();
-      });
-    },
-  });
+      } catch (err: any) {
+        // ✅ Send error to frontend
+        controller.enqueue(
+          encoder.encode(
+            `data: ${JSON.stringify({ status: "error", error: err.message })}\n\n`
+          )
+        );
+        controller.close();
+      }
+    });
+  },
+});
+
 
   return new Response(stream, {
     headers: {
