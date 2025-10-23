@@ -103,6 +103,7 @@ export async function POST(req: Request) {
     const range = req.headers.get("content-range");
     const filenameHeader = req.headers.get("x-filename");
     const folderHeader = req.headers.get("x-folder");
+    const acceptHeader = req.headers.get("accept");
 
     const uploadDir = path.resolve("/shared-files");
     await fs.promises.mkdir(uploadDir, { recursive: true });

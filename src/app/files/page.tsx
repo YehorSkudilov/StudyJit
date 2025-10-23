@@ -185,11 +185,20 @@ export default function FilesPage() {
           "x-folder": activeFolderId ?? "root",
           "Accept": "text/event-stream",
         },
+        // Empty body required for POST
+        body: new Uint8Array(0),
       });
 
       if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.error || "Upload failed");
+        const text = await res.text();
+        let errorMsg = "Upload failed";
+        try {
+          const err = JSON.parse(text);
+          errorMsg = err.error || errorMsg;
+        } catch {
+          errorMsg = text || errorMsg;
+        }
+        throw new Error(errorMsg);
       }
 
       // Read the SSE stream
@@ -200,12 +209,17 @@ export default function FilesPage() {
         throw new Error("No response body");
       }
 
+      let buffer = "";
+
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
 
-        const chunk = decoder.decode(value);
-        const lines = chunk.split("\n");
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        
+        // Keep the last incomplete line in the buffer
+        buffer = lines.pop() || "";
 
         for (const line of lines) {
           if (line.startsWith("data: ")) {
@@ -227,6 +241,7 @@ export default function FilesPage() {
         }
       }
     } catch (err: any) {
+      console.error("YouTube upload error:", err);
       setAlertMessage(err.message || "Failed to upload YouTube video.");
       throw err;
     }
