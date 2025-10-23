@@ -24,7 +24,7 @@ export async function POST(req: Request) {
     const contentType = req.headers.get("content-type") || "";
 
     /* ---------------------------------------------------------------------- */
-    /* 🧩 CASE 1: YouTube Download (SSE Streaming)                            */
+    /* 🧩 CASE 1: YouTube Download (SSE Streaming with live progress)         */
     /* ---------------------------------------------------------------------- */
     if (contentType.includes("application/json")) {
       const { url, folder } = await req.json();
@@ -55,84 +55,81 @@ export async function POST(req: Request) {
         "--verbose",
       ];
 
-      // 🔥 Use TransformStream to allow immediate flushing (no buffering)
+      // ✅ TransformStream allows unbuffered writes (progress events stream immediately)
       const { readable, writable } = new TransformStream();
       const writer = writable.getWriter();
 
-      const proc = spawn("yt-dlp", args);
+      const send = async (obj: any) => {
+        await writer.write(encoder.encode(`data: ${JSON.stringify(obj)}\n\n`));
+      };
 
-      proc.stderr.on("data", (data) => {
-        const text = data.toString();
-        const match = text.match(/\[download\]\s+([\d.]+)%/);
+      const proc = spawn("yt-dlp", args);
+      proc.stderr.setEncoding("utf-8");
+
+      // ✅ Capture progress updates from yt-dlp stderr
+      proc.stderr.on("data", async (chunk) => {
+        const match = chunk.match(/\[download\]\s+([\d.]+)%/);
         if (match) {
           const percent = parseFloat(match[1]);
-          writer.write(encoder.encode(`data: ${JSON.stringify({ percent })}\n\n`));
+          await send({ percent });
         }
       });
 
-      proc.on("error", (err) => {
-        writer.write(
-          encoder.encode(`data: ${JSON.stringify({ status: "error", error: err.message })}\n\n`)
-        );
-        writer.close();
+      // ✅ Handle download errors
+      proc.on("error", async (err) => {
+        await send({ status: "error", error: err.message });
+        await writer.close();
       });
 
+      // ✅ Handle process close
       proc.on("close", async (code) => {
         try {
           if (code !== 0) {
-            writer.write(
-              encoder.encode(
-                `data: ${JSON.stringify({ status: "error", error: "Download failed" })}\n\n`
-              )
-            );
-            writer.close();
-            return;
+            await send({ status: "error", error: "Download failed" });
+          } else {
+            // ✅ Insert file into DB
+            const files = await fs.promises.readdir(uploadDir);
+            const latestFile = files
+              .map((f) => ({
+                name: f,
+                time: fs.statSync(path.join(uploadDir, f)).mtime.getTime(),
+              }))
+              .sort((a, b) => b.time - a.time)[0];
+
+            if (latestFile) {
+              const filePath = path.join(uploadDir, latestFile.name);
+              const stats = await fs.promises.stat(filePath);
+              const folderId = folder && folder !== "root" ? folder : null;
+
+              await db.query(
+                "INSERT INTO files (name, path, size, folder_id, user_id) VALUES (?, ?, ?, ?, ?)",
+                [latestFile.name, filePath, stats.size, folderId, session.user.id]
+              );
+            }
+
+            await send({ status: "complete" });
           }
-
-          // ✅ Find newest downloaded file
-          const files = await fs.promises.readdir(uploadDir);
-          const latestFile = files
-            .map((f) => ({
-              name: f,
-              time: fs.statSync(path.join(uploadDir, f)).mtime.getTime(),
-            }))
-            .sort((a, b) => b.time - a.time)[0];
-
-          if (latestFile) {
-            const filePath = path.join(uploadDir, latestFile.name);
-            const stats = await fs.promises.stat(filePath);
-            const folderId = folder && folder !== "root" ? folder : null;
-
-            await db.query(
-              "INSERT INTO files (name, path, size, folder_id, user_id) VALUES (?, ?, ?, ?, ?)",
-              [latestFile.name, filePath, stats.size, folderId, session.user.id]
-            );
-          }
-
-          writer.write(encoder.encode(`data: ${JSON.stringify({ status: "complete" })}\n\n`));
-          writer.close();
         } catch (err: any) {
-          writer.write(
-            encoder.encode(
-              `data: ${JSON.stringify({ status: "error", error: err.message })}\n\n`
-            )
-          );
-          writer.close();
+          await send({ status: "error", error: err.message });
+        } finally {
+          await writer.close();
         }
       });
 
+      // ✅ Return SSE response with all proper headers (forces streaming)
       return new Response(readable, {
         headers: {
-          "Content-Type": "text/event-stream",
-          "Cache-Control": "no-cache",
+          "Content-Type": "text/event-stream; charset=utf-8",
+          "Cache-Control": "no-cache, no-transform",
           "Connection": "keep-alive",
+          "X-Accel-Buffering": "no", // disables nginx/vercel buffering
           "Transfer-Encoding": "chunked",
         },
       });
     }
 
     /* ---------------------------------------------------------------------- */
-    /* 📦 CASE 2: Chunked File Upload (Standard Upload)                       */
+    /* 📦 CASE 2: Chunked File Upload (Normal file upload)                    */
     /* ---------------------------------------------------------------------- */
     const range = req.headers.get("content-range");
     const filenameHeader = req.headers.get("x-filename");

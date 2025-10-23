@@ -220,6 +220,8 @@ const handleYouTubeUpload = async (url: string, onProgress?: (p: number) => void
           const raw = line.slice(5).trim();
           try {
             const json = JSON.parse(raw);
+                  console.log("YT progress event:", json);
+
             if (json.percent !== undefined && onProgress) {
               onProgress(json.percent);
             } else if (json.status === "complete") {
