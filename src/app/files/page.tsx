@@ -429,9 +429,25 @@ const handleYouTubeUpload = async (url: string, onProgress?: (p: number) => void
       />
 
       {alertMessage && <AlertPopup message={alertMessage} onClose={() => setAlertMessage(null)} />}
-      {confirmDelete && (
-        <AlertPopup message={`Delete ${selectedItems.length} item(s)?`} onClose={confirmDeleteAction} />
-      )}
+{confirmDelete && (
+  <AlertPopup
+    message={`Delete ${selectedItems.length} item(s)? This cannot be undone.`}
+    onClose={() => setConfirmDelete(false)} // close if overlay or ESC
+    actions={[
+      {
+        label: "Cancel",
+        color: "gray",
+        onClick: () => setConfirmDelete(false),
+      },
+      {
+        label: "Delete",
+        color: "red",
+        onClick: confirmDeleteAction,
+      },
+    ]}
+  />
+)}
+
     </div>
   );
 }

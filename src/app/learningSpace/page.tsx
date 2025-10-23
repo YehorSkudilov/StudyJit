@@ -364,11 +364,24 @@ export default function LearningSpace() {
       )}
 
       {confirmDelete && (
-        <AlertPopup
-          message={`Delete ${selectedItems.length} item(s)? This cannot be undone.`}
-          onClose={confirmDeleteAction}
-        />
-      )}
+  <AlertPopup
+    message={`Delete ${selectedItems.length} item(s)? This cannot be undone.`}
+    onClose={() => setConfirmDelete(false)} // close without deleting
+    actions={[
+      {
+        label: "Cancel",
+        color: "gray",
+        onClick: () => setConfirmDelete(false),
+      },
+      {
+        label: "Delete",
+        color: "red",
+        onClick: confirmDeleteAction,
+      },
+    ]}
+  />
+)}
+
     </div>
   );
 }
