@@ -1,27 +1,52 @@
-# 🟢 Use Debian Slim instead of Alpine
-FROM node:22-slim
+# Use official Node.js LTS Alpine image
+FROM node:22-alpine
 
-# Install deps (apt instead of apk)
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    python3 python3-pip ffmpeg tesseract-ocr curl git make g++ ca-certificates \
- && rm -rf /var/lib/apt/lists/*
+# Add community repo and install build + OCR + ffmpeg + yt-dlp dependencies
+RUN apk add --no-cache \
+    bash \
+    git \
+    python3 \
+    make \
+    g++ \
+    libc6-compat \
+    ffmpeg \
+    tesseract-ocr \
+    tesseract-ocr-data-eng \
+    curl \
+    ca-certificates
 
-# Download yt-dlp binary
-RUN curl -L -o /usr/local/bin/yt-dlp \
-    "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp" && \
-    chmod a+rx /usr/local/bin/yt-dlp
+# 🧩 Install latest yt-dlp binary
+RUN curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp \
+    -o /usr/local/bin/yt-dlp && chmod a+rx /usr/local/bin/yt-dlp
 
+# Verify installs (optional sanity check)
+RUN yt-dlp --version && ffmpeg -version && tesseract --version
+
+# Set working directory
 WORKDIR /app
+
+# Copy dependency files
 COPY package*.json ./
-RUN npm ci --no-audit --production
+
+# Install Node dependencies cleanly
+RUN npm ci
+
+# Copy the rest of your app
 COPY . .
+
+# Build the Next.js app
 RUN npm run build
 
+# ✅ Disable Next.js telemetry & enable Node streaming
 ENV NODE_ENV=production \
     NEXT_TELEMETRY_DISABLED=1 \
     NODE_OPTIONS="--max-old-space-size=4096"
 
-RUN mkdir -p /shared-files /app/downloads && chmod -R 777 /shared-files /app/downloads
+# ✅ Create and set permissions for upload folder
+RUN mkdir -p /shared-files && chmod -R 777 /shared-files
 
+# Expose port
 EXPOSE 3000
+
+# ✅ Use production server (not dev) – streams correctly
 CMD ["npm", "run", "start"]
