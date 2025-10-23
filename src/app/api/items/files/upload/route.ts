@@ -3,11 +3,10 @@ import fs from "fs";
 import path from "path";
 import { pipeline } from "stream";
 import { promisify } from "util";
+import { spawn } from "child_process";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/authOptions";
 import db from "@/lib/db";
-import ytdl from "@distube/ytdl-core";
-import { spawn } from "child_process";
 
 const pump = promisify(pipeline);
 
@@ -16,140 +15,127 @@ export const dynamic = "force-dynamic";
 export const preferredRegion = "auto";
 export const fetchCache = "force-no-store";
 
-// Simple YouTube downloader inspired by Dr-Drake/yt-download
-class SimpleYouTubeDownloader {
-  private uploadDir: string;
+/* -------------------------------------------------------------------------- */
+/*                              Utility helpers                               */
+/* -------------------------------------------------------------------------- */
 
-  constructor(private url: string, uploadDir: string) {
-    this.uploadDir = uploadDir;
-  }
+// Optional cookies file (exported from browser via Get cookies.txt extension)
+const COOKIES_PATH = path.join(process.cwd(), "cookies.txt");
+function getCookiesArgs() {
+  if (fs.existsSync(COOKIES_PATH)) return ["--cookies", COOKIES_PATH];
+  return [];
+}
+
+/* -------------------------------------------------------------------------- */
+/*                             YT-DLP Downloader                              */
+/* -------------------------------------------------------------------------- */
+
+class SimpleYouTubeDownloader {
+  constructor(private url: string, private uploadDir: string) {}
 
   async getVideoInfo() {
-    try {
-      console.log("🔍 Getting video info...");
-      
-      // Simple request options like Dr-Drake's approach
-      const requestOptions = {
-        headers: {
-          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
-        },
-      };
+    console.log("🔍 Fetching video info via yt-dlp...");
 
-      const info = await ytdl.getInfo(this.url, { requestOptions });
-      
-      if (!info.videoDetails) {
-        throw new Error('Video not found or unavailable');
-      }
+    const args = [
+      "--dump-json",
+      "--no-warnings",
+      "--no-call-home",
+      "--no-playlist",
+      ...getCookiesArgs(),
+      this.url,
+    ];
 
-      console.log(`✅ Got info: ${info.videoDetails.title}`);
-      return info;
+    return new Promise((resolve, reject) => {
+      const proc = spawn("yt-dlp", args);
+      let data = "";
+      let error = "";
 
-    } catch (error: unknown) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      console.error("❌ Failed to get video info:", errorMessage);
-      
-      // Provide user-friendly error messages
-      if (errorMessage.includes('Video unavailable')) {
-        throw new Error('This video is unavailable. It may be private, deleted, or restricted.');
-      } else if (errorMessage.includes('age verification') || errorMessage.includes('Sign in')) {
-        throw new Error('This video is age-restricted and cannot be downloaded without YouTube authentication.');
-      } else if (errorMessage.includes('not found')) {
-        throw new Error('Video not found. Please check the URL.');
-      } else {
-        throw new Error(`Cannot access video: ${errorMessage}`);
-      }
-    }
+      proc.stdout.on("data", (chunk) => (data += chunk.toString()));
+      proc.stderr.on("data", (chunk) => (error += chunk.toString()));
+
+      proc.on("close", (code) => {
+        if (code === 0 && data.trim()) {
+          try {
+            const info = JSON.parse(data);
+            console.log(`✅ Got info: ${info.title}`);
+            resolve(info);
+          } catch (e) {
+            reject(new Error("Failed to parse yt-dlp JSON output"));
+          }
+        } else {
+          console.error("❌ yt-dlp info error:", error);
+          if (error.includes("Sign in"))
+            reject(
+              new Error(
+                "This video is age-restricted or private. Add cookies.txt to enable authenticated downloads."
+              )
+            );
+          else reject(new Error("Cannot access video: " + error));
+        }
+      });
+    });
   }
 
   async download(): Promise<{ path: string; size: number; title: string }> {
-    const info = await this.getVideoInfo();
-    const safeTitle = info.videoDetails.title.replace(/[\\/:*?"<>|]/g, "_").substring(0, 200);
+    const info: any = await this.getVideoInfo();
+    const safeTitle = info.title.replace(/[\\/:*?"<>|]/g, "_").substring(0, 200);
     const outputPath = path.join(this.uploadDir, `${safeTitle}.mp4`);
 
+    const args = [
+      "-f",
+      "bestvideo+bestaudio/best",
+      "--merge-output-format",
+      "mp4",
+      "-o",
+      outputPath,
+      "--newline", // Progress output
+      "--no-warnings",
+      "--no-call-home",
+      ...getCookiesArgs(),
+      this.url,
+    ];
+
+    console.log("🚀 Starting yt-dlp download...");
+
     return new Promise((resolve, reject) => {
-      console.log('🚀 Starting download...');
+      const proc = spawn("yt-dlp", args);
+      let lastProgress = 0;
 
-      try {
-        // Choose the best available format
-        const format = ytdl.chooseFormat(info.formats, {
-          quality: 'highest',
-          filter: (format) => format.hasVideo && format.hasAudio && format.container === 'mp4'
-        });
-
-        if (!format) {
-          // Fallback to any available format
-          const fallbackFormat = ytdl.chooseFormat(info.formats, {
-            quality: 'highest'
-          });
-          
-          if (!fallbackFormat) {
-            throw new Error('No suitable video format available');
-          }
-        }
-
-        const selectedFormat = format || ytdl.chooseFormat(info.formats, { quality: 'highest' });
-        
-        console.log(`📹 Selected format: ${selectedFormat.qualityLabel}`);
-
-        const video = ytdl.downloadFromInfo(info, {
-          format: selectedFormat,
-          highWaterMark: 1 << 25, // 32MB buffer
-        });
-
-        let downloadedBytes = 0;
-        let totalBytes = selectedFormat.contentLength ? parseInt(selectedFormat.contentLength) : 0;
-        let lastProgress = 0;
-
-        video.on('progress', (chunkLength) => {
-          downloadedBytes += chunkLength;
-          if (totalBytes > 0) {
-            const progress = (downloadedBytes / totalBytes) * 100;
-            if (progress - lastProgress >= 10) { // Log every 10%
+      proc.stdout.on("data", (chunk) => {
+        const line = chunk.toString();
+        if (line.includes("[download]")) {
+          const match = line.match(/(\d+(?:\.\d+)?)%/);
+          if (match) {
+            const progress = parseFloat(match[1]);
+            if (progress - lastProgress >= 10) {
               console.log(`📊 Download progress: ${progress.toFixed(1)}%`);
               lastProgress = progress;
             }
           }
-        });
+        }
+      });
 
-        const fileStream = fs.createWriteStream(outputPath);
-        
-        video.pipe(fileStream);
+      proc.stderr.on("data", (chunk) => {
+        console.error("yt-dlp:", chunk.toString());
+      });
 
-        fileStream.on('finish', async () => {
+      proc.on("close", async (code) => {
+        if (code === 0) {
           try {
             const stats = await fs.promises.stat(outputPath);
-            console.log(`✅ Download complete: ${safeTitle}.mp4 (${(stats.size / 1024 / 1024).toFixed(2)} MB)`);
-            
-            resolve({
-              path: outputPath,
-              size: stats.size,
-              title: `${safeTitle}.mp4`
-            });
-          } catch (error) {
-            reject(new Error('Failed to verify downloaded file'));
+            console.log(
+              `✅ Download complete: ${safeTitle}.mp4 (${(
+                stats.size /
+                1024 /
+                1024
+              ).toFixed(2)} MB)`
+            );
+            resolve({ path: outputPath, size: stats.size, title: `${safeTitle}.mp4` });
+          } catch (e) {
+            reject(new Error("Failed to verify downloaded file"));
           }
-        });
-
-        fileStream.on('error', (error) => {
-          reject(new Error(`File write error: ${error.message}`));
-        });
-
-        video.on('error', (error) => {
-          reject(new Error(`Download error: ${error.message}`));
-        });
-
-        // 15-minute timeout
-        const timeout = setTimeout(() => {
-          video.destroy();
-          reject(new Error('Download timeout after 15 minutes'));
-        }, 15 * 60 * 1000);
-
-        video.on('end', () => clearTimeout(timeout));
-        video.on('error', () => clearTimeout(timeout));
-
-      } catch (error) {
-        reject(error);
-      }
+        } else reject(new Error("yt-dlp exited with code " + code));
+      });
     });
   }
 }
@@ -157,6 +143,7 @@ class SimpleYouTubeDownloader {
 /* -------------------------------------------------------------------------- */
 /*                                  MAIN POST                                 */
 /* -------------------------------------------------------------------------- */
+
 export async function POST(req: Request) {
   try {
     const session = await getServerSession(authOptions);
@@ -178,16 +165,12 @@ export async function POST(req: Request) {
       const url = decodeURIComponent(urlHeader.trim());
       const folderId = folderHeader && folderHeader !== "root" ? folderHeader : null;
 
-      if (!ytdl.validateURL(url))
-        return NextResponse.json({ error: "Invalid YouTube URL" }, { status: 400 });
-
       console.log(`🎬 Starting YouTube download: ${url}`);
 
       try {
         const downloader = new SimpleYouTubeDownloader(url, uploadDir);
         const result = await downloader.download();
 
-        // Save to database
         await db.query(
           "INSERT INTO files (name, path, size, folder_id, user_id, type) VALUES (?, ?, ?, ?, ?, ?)",
           [result.title, result.path, result.size, folderId, session.user.id, "youtube"]
@@ -199,16 +182,9 @@ export async function POST(req: Request) {
           filename: result.title,
           size: result.size,
         });
-
-      } catch (error: unknown) {
-        console.error("💥 Download failed:", error instanceof Error ? error.message : String(error));
-        
-        const errorMessage = error instanceof Error ? error.message : String(error);
-        
-        // Simple error responses like Dr-Drake's approach
-        return NextResponse.json({ 
-          error: errorMessage
-        }, { status: 500 });
+      } catch (error: any) {
+        console.error("💥 Download failed:", error.message);
+        return NextResponse.json({ error: error.message }, { status: 500 });
       }
     }
 
@@ -232,12 +208,8 @@ export async function POST(req: Request) {
     const filePath = path.join(uploadDir, filename);
     const flags = start === 0 ? "w" : "a";
 
-    if (!req.body)
-      return NextResponse.json({ error: "Missing request body" }, { status: 400 });
-
-    const fileStream = fs.createWriteStream(filePath, { flags });
-    
     const body = req.body as unknown as NodeJS.ReadableStream;
+    const fileStream = fs.createWriteStream(filePath, { flags });
     await pump(body, fileStream);
 
     if (end + 1 >= total) {
@@ -250,18 +222,19 @@ export async function POST(req: Request) {
     }
 
     return NextResponse.json({ success: true, start, end, total });
-  } catch (err: unknown) {
-    console.error("💥 Upload error:", err instanceof Error ? err.message : String(err));
+  } catch (err: any) {
+    console.error("💥 Upload error:", err.message);
     return NextResponse.json(
-      {
-        error: `Unexpected failure: ${err instanceof Error ? err.message : String(err)}`
-      },
+      { error: `Unexpected failure: ${err.message}` },
       { status: 500 }
     );
   }
 }
 
-// Simple GET endpoint for video info
+/* -------------------------------------------------------------------------- */
+/*                                  GET INFO                                  */
+/* -------------------------------------------------------------------------- */
+
 export async function GET(req: Request) {
   try {
     const session = await getServerSession(authOptions);
@@ -269,32 +242,22 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
     const { searchParams } = new URL(req.url);
-    const url = searchParams.get('url');
-
-    if (!url) {
+    const url = searchParams.get("url");
+    if (!url)
       return NextResponse.json({ error: "URL parameter required" }, { status: 400 });
-    }
-
-    if (!ytdl.validateURL(url)) {
-      return NextResponse.json({ error: "Invalid YouTube URL" }, { status: 400 });
-    }
 
     const downloader = new SimpleYouTubeDownloader(url, "");
-    const info = await downloader.getVideoInfo();
+    const info: any = await downloader.getVideoInfo();
 
     return NextResponse.json({
-      title: info.videoDetails.title,
-      duration: info.videoDetails.lengthSeconds,
-      thumbnail: info.videoDetails.thumbnails[0]?.url,
-      author: info.videoDetails.author.name,
-      viewCount: info.videoDetails.viewCount
+      title: info.title,
+      duration: info.duration,
+      thumbnail: info.thumbnail,
+      author: info.uploader,
+      viewCount: info.view_count,
     });
-
-  } catch (error: unknown) {
-    console.error("💥 Video info fetch error:", error instanceof Error ? error.message : String(error));
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : String(error) },
-      { status: 500 }
-    );
+  } catch (error: any) {
+    console.error("💥 Video info fetch error:", error.message);
+    return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
