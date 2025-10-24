@@ -132,26 +132,22 @@ async function processQuiz(req: NextRequest): Promise<NextResponse> {
       if (block.type === "text") text += block.text.value;
     }
 
-    const parsed = extractAndParseJSON(text.trim());
-    if (!parsed?.questions) throw new Error("Could not parse questions from response.");
+const parsed = extractAndParseJSON(text.trim());
+if (!parsed?.questions) throw new Error("Could not parse questions from response.");
 
-    const formatted = parsed.questions.map((q: any, i: number) => ({
-      id: q.id || i + 1,
-      question: q.question,
-      options: Array.isArray(q.options) ? q.options.slice(0, 4) : ["A", "B", "C", "D"],
-      correct: q.correct || q.answer || q.options?.[0] || "A",
-    }));
+const formatted = parsed.questions.map((q: any, i: number) => ({
+  id: q.id || i + 1,
+  question: q.question,
+  options: Array.isArray(q.options) ? q.options.slice(0, 4) : ["A", "B", "C", "D"],
+  correct: q.correct || q.answer || q.options?.[0] || "A",
+}));
 
-    // 🧹 Clear old questions before inserting new ones (transaction-safe)
-    await db.beginTransaction();
-    try {
-      await db.execute("DELETE FROM quiz_questions WHERE quiz_id = ?", [quizId]);
-      await addQuestionsToQuiz(quizId, formatted, userId);
-      await db.commit();
-    } catch (txErr) {
-      await db.rollback();
-      throw txErr;
-    }
+// 🧹 Delete all existing questions for this quiz before adding new ones
+await db.execute(`DELETE FROM quiz_questions WHERE quiz_id = ? AND user_id = ?`, [quizId, userId]);
+
+// 🧩 Insert newly generated questions
+await addQuestionsToQuiz(quizId, formatted, userId);
+
 
     await db.execute(
       `UPDATE quizzes SET generation_status = 'success', queue_number = NULL WHERE id = ? AND user_id = ?`,
