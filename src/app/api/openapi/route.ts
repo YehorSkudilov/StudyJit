@@ -3,42 +3,59 @@ import { generateOpenApi } from "@/lib/openapi";
 
 export const runtime = "nodejs";
 
-// Define allowed origins explicitly
+// Allowed origins (explicit list of your real domains)
 const allowedOrigins = [
-  "https://studyjit.swagger.yehorskudilov.com", // Swagger UI domain
-  "https://studyjit.yehorskudilov.com",         // API domain
-  "http://localhost:8080",                      // Local dev
-  "http://localhost:3000"
+  "https://studyjit.swagger.yehorskudilov.com",
+  "https://studyjit.yehorskudilov.com",
+  "http://localhost:8080",
+  "http://localhost:3000",
 ];
 
-function getCorsOrigin(origin: string | null): string {
-  if (origin && allowedOrigins.includes(origin)) return origin;
-  return allowedOrigins[0]; // default to Swagger domain
+function getCorsOrigin(origin: string | null): string | null {
+  if (!origin) return null;
+  return allowedOrigins.includes(origin) ? origin : null;
 }
 
-export async function GET(request: Request) {
+// ✅ Handle GET
+export async function GET(req: Request) {
   const spec = generateOpenApi();
-  const origin = request.headers.get("origin");
-  const allowedOrigin = getCorsOrigin(origin);
+  const origin = req.headers.get("origin");
+  const corsOrigin = getCorsOrigin(origin);
 
-  const res = NextResponse.json(spec, { status: 200 });
-  res.headers.set("Access-Control-Allow-Origin", allowedOrigin);
-  res.headers.set("Access-Control-Allow-Methods", "GET, OPTIONS");
-  res.headers.set("Access-Control-Allow-Headers", "Content-Type");
-
-  return res;
+  // Build the response manually (NextResponse sometimes strips headers)
+  return new Response(JSON.stringify(spec), {
+    status: 200,
+    headers: {
+      "Content-Type": "application/json",
+      ...(corsOrigin
+        ? {
+            "Access-Control-Allow-Origin": corsOrigin,
+            Vary: "Origin",
+          }
+        : {}),
+      "Access-Control-Allow-Methods": "GET, OPTIONS",
+      "Access-Control-Allow-Headers": "Content-Type, Authorization",
+    },
+  });
 }
 
-export async function OPTIONS(request: Request) {
-  const origin = request.headers.get("origin");
-  const allowedOrigin = getCorsOrigin(origin);
+// ✅ Handle OPTIONS (preflight)
+export async function OPTIONS(req: Request) {
+  const origin = req.headers.get("origin");
+  const corsOrigin = getCorsOrigin(origin);
 
   return new Response(null, {
     status: 204,
     headers: {
-      "Access-Control-Allow-Origin": allowedOrigin,
+      ...(corsOrigin
+        ? {
+            "Access-Control-Allow-Origin": corsOrigin,
+            Vary: "Origin",
+          }
+        : {}),
       "Access-Control-Allow-Methods": "GET, OPTIONS",
-      "Access-Control-Allow-Headers": "Content-Type",
+      "Access-Control-Allow-Headers": "Content-Type, Authorization",
+      "Access-Control-Max-Age": "86400",
     },
   });
 }
