@@ -304,7 +304,7 @@ export default function QuizDetailsPage() {
       <div className="min-h-screen bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 flex flex-col px-3 sm:px-8 md:px-20 py-6 sm:py-10 gap-6">
         <div className="relative p-4 sm:p-8 bg-white dark:bg-gray-800 rounded-xl shadow flex flex-col gap-6 max-w-4xl w-full mx-auto">
           <button
-            onClick={() => router.back()}
+            onClick={() => router.push("/learningSpace")}
             className="absolute top-6 left-3 sm:top-7 sm:left-4 p-2 text-gray-600 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600 rounded-full transition-colors"
           >
             <ChevronLeft className="w-5 h-5" />
