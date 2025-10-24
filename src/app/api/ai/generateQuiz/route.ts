@@ -206,15 +206,18 @@ async function processQuiz(req: NextRequest): Promise<NextResponse> {
       }
     }
 
-    // Cleanup: delete vector stores (using stable API, not beta)
-    for (const vsId of vectorStoreIds) {
-      try {
-        await openai.vectorStores.delete(vsId);
-        console.log(`🗑️ Deleted vector store ${vsId}`);
-      } catch (err) {
-        console.warn(`⚠️ Failed to delete vector store ${vsId}`);
-      }
+   // Cleanup: delete vector stores (using REST API fallback)
+  for (const vsId of vectorStoreIds) {
+    try {
+      await fetch(`https://api.openai.com/v1/vector_stores/${vsId}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${process.env.OPENAI_API_KEY}` },
+      });
+      console.log(`🗑️ Deleted vector store ${vsId}`);
+    } catch (err) {
+      console.warn(`⚠️ Failed to delete vector store ${vsId}`);
     }
+  }
 
     // Cleanup: delete assistant
     try {
