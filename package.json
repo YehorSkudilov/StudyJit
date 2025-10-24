@@ -27,6 +27,7 @@
     "pdf-parse": "^2.4.3",
     "react": "19.1.0",
     "react-dom": "19.1.0",
+    "swr": "^2.3.6",
     "tesseract.js": "^6.0.1",
     "uuid": "^13.0.0",
     "youtube-dl-exec": "^3.0.26",
