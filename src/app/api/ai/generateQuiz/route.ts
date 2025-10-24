@@ -161,6 +161,16 @@ async function processQuiz(req: NextRequest): Promise<NextResponse> {
 
     if (run.status !== "completed") throw new Error(`Assistant run failed: ${run.status}`);
 
+    // Get vector store IDs for cleanup (created automatically by file_search)
+    const vectorStoreIds: string[] = [];
+    if (run.tools && run.tools.length > 0) {
+      for (const tool of run.tools) {
+        if (tool.type === "file_search" && (tool as any).file_search?.vector_store_ids) {
+          vectorStoreIds.push(...(tool as any).file_search.vector_store_ids);
+        }
+      }
+    }
+
     const messages = await openai.beta.threads.messages.list(thread.id);
     const lastMessage = messages.data[0];
     if (!lastMessage) throw new Error("No assistant response received.");
@@ -193,6 +203,16 @@ async function processQuiz(req: NextRequest): Promise<NextResponse> {
         await openai.files.delete(fileId);
       } catch (err) {
         console.warn(`⚠️ Failed to delete file ${fileId}`);
+      }
+    }
+
+    // Cleanup: delete vector stores (using stable API, not beta)
+    for (const vsId of vectorStoreIds) {
+      try {
+        await openai.vectorStores.delete(vsId);
+        console.log(`🗑️ Deleted vector store ${vsId}`);
+      } catch (err) {
+        console.warn(`⚠️ Failed to delete vector store ${vsId}`);
       }
     }
 
