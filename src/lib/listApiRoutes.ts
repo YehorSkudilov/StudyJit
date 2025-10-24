@@ -1,10 +1,18 @@
 import fs from "fs";
 import path from "path";
 
-export function listApiRoutes(baseDir = path.join(process.cwd(), "app/api")) {
+/**
+ * Recursively scans all API routes in the project under "@/app/api"
+ */
+export function listApiRoutes() {
+  // Resolve "@/app/api" → absolute filesystem path
+  const baseDir = path.join(process.cwd(), "app/api");
+
   const routes: { route: string; file: string }[] = [];
 
   function walk(dir: string, prefix = "") {
+    if (!fs.existsSync(dir)) return;
+
     const files = fs.readdirSync(dir);
     for (const file of files) {
       const fullPath = path.join(dir, file);
@@ -16,12 +24,12 @@ export function listApiRoutes(baseDir = path.join(process.cwd(), "app/api")) {
         const routePath = "/api" + prefix.replace(/\\/g, "/");
         routes.push({
           route: routePath,
-          file: fullPath.replace(process.cwd(), ""),
+          file: `@/app/api${prefix ? "/" + prefix : ""}/route.ts`,
         });
       }
     }
   }
 
-  if (fs.existsSync(baseDir)) walk(baseDir);
+  walk(baseDir);
   return routes.sort((a, b) => a.route.localeCompare(b.route));
 }
