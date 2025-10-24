@@ -26,7 +26,7 @@ services:
   # 🗄️ MySQL database
   db:
     image: mysql:8.0
-    container_name: ${DB_HOST}
+    container_name: "${APP_NAME}-mysql"
     restart: always
     # ports:
     #   - "3306:3306"
@@ -38,6 +38,22 @@ services:
       - db-files:/var/lib/mysql-files
     networks:
       - next-network
+
+  # 📘 Swagger UI
+  swagger:
+    image: swaggerapi/swagger-ui
+    container_name: "${APP_NAME}-swagger"
+    restart: always
+    environment:
+      - SWAGGER_JSON=/docs/openapi.json
+    volumes:
+      - ./docs:/docs
+    ports:
+      - "${SWAGGER_PORT:-8080}:8080"
+    networks:
+      - next-network
+    depends_on:
+      - app
 
 # ✅ Persistent volumes
 volumes:

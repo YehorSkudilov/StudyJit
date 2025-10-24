@@ -2,49 +2,37 @@ import fs from "fs";
 import path from "path";
 
 export function listApiRoutes() {
-  // Check both source and compiled locations
   const candidateDirs = [
     path.join(process.cwd(), "api"),
     path.join(process.cwd(), "app/api"),
     path.join(process.cwd(), "src/app/api"),
-    path.join(process.cwd(), ".next/server/app/api"), // ✅ production build
+    path.join(process.cwd(), ".next/server/app/api"),
   ];
 
   const baseDir = candidateDirs.find((dir) => fs.existsSync(dir));
+  if (!baseDir) return [];
 
-  console.log("🔍 CWD:", process.cwd());
-  console.log("🔍 Candidate dirs:", candidateDirs);
-  console.log("📂 Selected:", baseDir);
-
-  if (!baseDir) {
-    console.warn("⚠️  No API directory found");
-    return [];
-  }
-
-  const routes: { route: string; file: string }[] = [];
+  const routes: { route: string; file: string; methods: string[] }[] = [];
 
   function walk(dir: string, prefix = "") {
     for (const file of fs.readdirSync(dir)) {
-      const fullPath = path.join(dir, file);
-      const stat = fs.statSync(fullPath);
-
-      if (stat.isDirectory()) {
-        walk(fullPath, path.join(prefix, file));
-      } else if (
-        file === "route.ts" ||
-        file === "route.js" ||
-        file === "route.mjs"
-      ) {
-        const routePath = "/api" + prefix.replace(/\\/g, "/");
+      const full = path.join(dir, file);
+      const stat = fs.statSync(full);
+      if (stat.isDirectory()) walk(full, path.join(prefix, file));
+      else if (file.match(/^route\.(t|j|m)js$/)) {
+        const text = fs.readFileSync(full, "utf8");
+        const methods = ["GET", "POST", "PUT", "PATCH", "DELETE"].filter((m) =>
+          text.match(new RegExp(`export\\s+(const|async\\s+function)\\s+${m}`, "i"))
+        );
         routes.push({
-          route: routePath,
-          file: fullPath.replace(process.cwd(), "").replace(/\\/g, "/"),
+          route: "/api" + prefix.replace(/\\/g, "/"),
+          file: full.replace(process.cwd(), "").replace(/\\/g, "/"),
+          methods,
         });
       }
     }
   }
 
   walk(baseDir);
-  console.log("✅ Found routes:", routes.length);
   return routes.sort((a, b) => a.route.localeCompare(b.route));
 }
