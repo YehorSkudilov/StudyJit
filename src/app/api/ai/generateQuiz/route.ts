@@ -157,9 +157,16 @@ async function processQuiz(req: NextRequest): Promise<NextResponse> {
     console.log("✅ Thread created:", thread.id);
 
     console.log("🏃 Running assistant...");
-    const run = await openai.beta.threads.runs.createAndPoll(thread.id, {
-      assistant_id: assistant.id,
-    });
+const run = await openai.beta.threads.runs.createAndPoll(thread.id, {
+  assistant_id: assistant.id,
+  additional_instructions: `
+    Use the uploaded documents as the primary study material for generating quiz questions.
+    If the topic overlaps with the message, prioritize the document context.
+    The questions must directly reflect the information in the attached files whenever possible.
+    If there is no relevant content, fall back to the message prompt.
+  `,
+});
+
     console.log("🧩 Run status:", run.status);
 
     if (run.status !== "completed") throw new Error(`Assistant run failed: ${run.status}`);
