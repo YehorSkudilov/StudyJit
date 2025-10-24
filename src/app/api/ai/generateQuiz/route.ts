@@ -86,6 +86,7 @@ async function processQuiz(req: NextRequest): Promise<NextResponse> {
 
     console.log(`📊 Files → ${documentFiles.length} docs, ${imageFiles.length} imgs, ${audioFiles.length} audio`);
 
+    // Upload document files and collect their IDs
     const documentFileIds: string[] = [];
     for (const file of documentFiles) {
       try {
@@ -94,29 +95,66 @@ async function processQuiz(req: NextRequest): Promise<NextResponse> {
           purpose: "assistants",
         });
         documentFileIds.push(upload.id);
+        console.log(`✅ Uploaded ${file.name} → ${upload.id}`);
       } catch (err: any) {
         console.warn(`⚠️ Upload failed for ${file.name}: ${err.message}`);
       }
     }
 
+    // Create assistant with file_search tool enabled
     const assistant = await openai.beta.assistants.create({
       model: "gpt-4o",
       name: "Quiz Generator",
-      instructions: `Generate ${numQuestions} quiz questions in valid JSON format.`,
+      instructions: `Generate ${numQuestions} quiz questions in valid JSON format based on the provided files and topic.`,
+      tools: documentFileIds.length > 0 ? [{ type: "file_search" }] : [],
       response_format: { type: "json_object" },
     });
 
-    const instruction = `
-      Generate ${numQuestions} quiz questions.
-      Topic: ${message}
-      Respond ONLY in JSON format like:
-      {"questions":[{"id":1,"question":"...","options":["A","B","C","D"],"correct":"A"}]}
-    `;
+    // Build instruction text
+    let instruction = `Generate ${numQuestions} quiz questions.`;
+    if (message) instruction += `\nTopic: ${message}`;
+    if (documentFileIds.length > 0) {
+      instruction += `\n\nUse the attached files as the primary source material for generating questions.`;
+    }
+    instruction += `\n\nRespond ONLY in JSON format like:\n{"questions":[{"id":1,"question":"...","options":["A","B","C","D"],"correct":"A"}]}`;
 
+    // Create message content array
+    const messageContent: any[] = [{ type: "text", text: instruction }];
+
+    // Add image files as content (vision API)
+    for (const imgFile of imageFiles) {
+      try {
+        const base64 = fs.readFileSync(imgFile.path, { encoding: "base64" });
+        const ext = imgFile.name.substring(imgFile.name.lastIndexOf(".")).toLowerCase();
+        const mimeType = ext === ".png" ? "image/png" : "image/jpeg";
+        messageContent.push({
+          type: "image_url",
+          image_url: { url: `data:${mimeType};base64,${base64}` },
+        });
+        console.log(`🖼️ Added image ${imgFile.name} to message`);
+      } catch (err: any) {
+        console.warn(`⚠️ Failed to read image ${imgFile.name}: ${err.message}`);
+      }
+    }
+
+    // Create thread with message and attachments
     const thread = await openai.beta.threads.create({
-      messages: [{ role: "user", content: [{ type: "text", text: instruction }] }],
+      messages: [
+        {
+          role: "user",
+          content: messageContent,
+          // Attach document files here
+          attachments: documentFileIds.map(fileId => ({
+            file_id: fileId,
+            tools: [{ type: "file_search" }],
+          })),
+        },
+      ],
     });
 
+    console.log(`📎 Created thread with ${documentFileIds.length} file attachments`);
+
+    // Run the assistant
     const run = await openai.beta.threads.runs.createAndPoll(thread.id, {
       assistant_id: assistant.id,
     });
@@ -148,6 +186,22 @@ async function processQuiz(req: NextRequest): Promise<NextResponse> {
       `UPDATE quizzes SET generation_status = 'success', queue_number = NULL WHERE id = ? AND user_id = ?`,
       [quizId, userId]
     );
+
+    // Cleanup: delete uploaded files
+    for (const fileId of documentFileIds) {
+      try {
+        await openai.files.delete(fileId);
+      } catch (err) {
+        console.warn(`⚠️ Failed to delete file ${fileId}`);
+      }
+    }
+
+    // Cleanup: delete assistant
+    try {
+      await openai.beta.assistants.delete(assistant.id);
+    } catch (err) {
+      console.warn(`⚠️ Failed to delete assistant ${assistant.id}`);
+    }
 
     console.log(`✅ Quiz ${quizId} successfully generated (${formatted.length} questions).`);
     return NextResponse.json({ success: true, quizId, questionCount: formatted.length });

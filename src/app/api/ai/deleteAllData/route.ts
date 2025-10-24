@@ -14,49 +14,60 @@ export async function GET(req: NextRequest) {
     /*                                FILES                                   */
     /* ---------------------------------------------------------------------- */
     console.log("📂 Fetching all OpenAI uploaded files...");
-    const files = await openai.files.list();
+
+    const allFiles: any[] = [];
+    let after: string | undefined;
+
+    // paginate until no more pages
+    while (true) {
+      const res = await openai.files.list({ after });
+      allFiles.push(...res.data);
+
+      if (!res.has_more) break;
+      after = res.data[res.data.length - 1]?.id; // use last file’s id as next cursor
+    }
+
+    console.log(`🗂️ Total files found: ${allFiles.length}`);
 
     let deletedFileCount = 0;
-    if (files.data.length) {
-      console.log(`🗑️ Found ${files.data.length} files. Deleting...`);
-      for (const file of files.data) {
-        try {
-          await openai.files.delete(file.id);
-          deletedFileCount++;
-          console.log(`✅ Deleted file: ${file.filename} (${file.id})`);
-        } catch (err: any) {
-          console.warn(`⚠️ Could not delete file ${file.id}: ${err.message}`);
-        }
+    for (const file of allFiles) {
+      try {
+        await openai.files.delete(file.id);
+        deletedFileCount++;
+        console.log(`✅ Deleted file: ${file.filename || file.id}`);
+      } catch (err: any) {
+        console.warn(`⚠️ Could not delete file ${file.id}: ${err.message}`);
       }
-    } else {
-      console.log("ℹ️ No files found.");
     }
 
     /* ---------------------------------------------------------------------- */
     /*                             VECTOR STORES                              */
     /* ---------------------------------------------------------------------- */
-    console.log("📊 Fetching vector stores (manual REST)...");
+    console.log("📊 Fetching all vector stores (manual REST)...");
 
-    // Manually fetch all vector stores using REST API
-    const vsList = await fetch("https://api.openai.com/v1/vector_stores", {
-      headers: { Authorization: `Bearer ${apiKey}` },
-    }).then((r) => r.json());
+    const allVectorStores: any[] = [];
+    let vsAfter: string | undefined;
 
-    if (!vsList?.data?.length) {
-      console.log("ℹ️ No vector stores found.");
-      return NextResponse.json({
-        success: true,
-        deletedFiles: deletedFileCount,
-        totalFiles: files.data.length,
-        deletedVectorStores: 0,
-        totalVectorStores: 0,
-      });
+    while (true) {
+      const url = new URL("https://api.openai.com/v1/vector_stores");
+      if (vsAfter) url.searchParams.set("after", vsAfter);
+
+      const vsResponse = await fetch(url.toString(), {
+        headers: { Authorization: `Bearer ${apiKey}` },
+      }).then((r) => r.json());
+
+      if (!vsResponse?.data?.length) break;
+
+      allVectorStores.push(...vsResponse.data);
+      if (!vsResponse.has_more) break;
+
+      vsAfter = vsResponse.data[vsResponse.data.length - 1]?.id;
     }
 
-    let deletedVectorCount = 0;
-    console.log(`🗑️ Found ${vsList.data.length} vector stores. Deleting...`);
+    console.log(`🗂️ Total vector stores found: ${allVectorStores.length}`);
 
-    for (const vs of vsList.data) {
+    let deletedVectorCount = 0;
+    for (const vs of allVectorStores) {
       try {
         await fetch(`https://api.openai.com/v1/vector_stores/${vs.id}`, {
           method: "DELETE",
@@ -75,9 +86,9 @@ export async function GET(req: NextRequest) {
     const summary = {
       success: true,
       deletedFiles: deletedFileCount,
-      totalFiles: files.data.length,
+      totalFiles: allFiles.length,
       deletedVectorStores: deletedVectorCount,
-      totalVectorStores: vsList.data.length,
+      totalVectorStores: allVectorStores.length,
     };
 
     console.log("✅ Cleanup summary:", summary);
