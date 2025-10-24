@@ -96,23 +96,27 @@ async function initDatabase() {
   await ensureColumnExists("files", "folder_id", "INT NULL");
   await ensureColumnExists("files", "path", "TEXT NULL");
 
-  /* ---------------- QUIZZES ---------------- */
-  await db.query(`
-    CREATE TABLE IF NOT EXISTS quizzes (
-      id INT AUTO_INCREMENT PRIMARY KEY,
-      user_id INT NOT NULL,
-      name VARCHAR(255) NOT NULL,
-      description TEXT,
-      prompt TEXT,
-      num_questions INT DEFAULT 10,
-      generation_status ENUM('never_generated','queued','pending','success','failed') DEFAULT 'never_generated',
-      folder_id INT NULL,
-      last_score DECIMAL(5,2) NULL,
-      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-      FOREIGN KEY (folder_id) REFERENCES folders(id) ON DELETE SET NULL
-    );
-  `);
+/* ---------------- QUIZZES ---------------- */
+await db.query(`
+  CREATE TABLE IF NOT EXISTS quizzes (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    user_id INT NOT NULL,
+    name VARCHAR(255) NOT NULL,
+    description TEXT,
+    prompt TEXT,
+    num_questions INT DEFAULT 10,
+    generation_status ENUM('never_generated','queued','pending','success','failed') DEFAULT 'never_generated',
+    folder_id INT NULL,
+    last_score DECIMAL(5,2) NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (folder_id) REFERENCES folders(id) ON DELETE SET NULL
+  );
+`);
+
+// ✅ Add this line
+await ensureColumnExists("quizzes", "queue_number", "INT NULL");
+
 
   // 🧩 Drop any UNIQUE constraint on quizzes.name
   await dropUniqueConstraintIfExists();
@@ -130,6 +134,19 @@ async function initDatabase() {
     `);
     console.log("✅ Updated ENUM with 'queued' value");
   }
+
+  /* ---------------- QUIZ FILES ---------------- */
+await db.query(`
+  CREATE TABLE IF NOT EXISTS quiz_files (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    quiz_id INT NOT NULL,
+    file_id INT NOT NULL,
+    linked_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (quiz_id) REFERENCES quizzes(id) ON DELETE CASCADE,
+    FOREIGN KEY (file_id) REFERENCES files(id) ON DELETE CASCADE
+  );
+`);
+
 
   /* ---------------- QUIZ QUESTIONS ---------------- */
   await db.query(`

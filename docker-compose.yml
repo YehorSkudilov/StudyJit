@@ -29,7 +29,7 @@ services:
     container_name: "${APP_NAME}-mysql"
     restart: always
     ports:
-      - "3306:3306"
+      - "33206:33206"
     environment:
       MYSQL_ROOT_PASSWORD: ${DB_PASS}
       MYSQL_DATABASE: ${DB_NAME}

@@ -39,14 +39,14 @@ export async function addQuestionsToQuiz(
     // 🧹 Clear existing questions
     await db.execute(`DELETE FROM quiz_questions WHERE quiz_id = ?`, [quizId]);
 
-    // 📝 Insert new questions
+    // 📝 Insert new questions with user_id included
     for (const q of questions) {
-      const [a, b, c, d] = q.options || [];
+      const [a, b, c, d] = q.options || ["", "", "", ""];
       await db.execute(
         `INSERT INTO quiz_questions 
-          (quiz_id, question, option_a, option_b, option_c, option_d, correct_answer)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`,
-        [quizId, q.question, a, b, c, d, q.correct]
+          (quiz_id, user_id, question, option_a, option_b, option_c, option_d, correct_answer)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        [quizId, userId, q.question, a, b, c, d, q.correct]
       );
     }
 
