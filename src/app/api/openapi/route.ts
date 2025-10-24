@@ -3,7 +3,7 @@ import { generateOpenApi } from "@/lib/openapi";
 
 export const runtime = "nodejs";
 
-// Allowed origins (explicit list of your real domains)
+// Allowed origins
 const allowedOrigins = [
   "https://studyjit.swagger.yehorskudilov.com",
   "https://studyjit.yehorskudilov.com",
@@ -12,8 +12,7 @@ const allowedOrigins = [
 ];
 
 function getCorsOrigin(origin: string | null): string | null {
-  if (!origin) return null;
-  return allowedOrigins.includes(origin) ? origin : null;
+  return origin && allowedOrigins.includes(origin) ? origin : null;
 }
 
 // ✅ Handle GET
@@ -22,7 +21,6 @@ export async function GET(req: Request) {
   const origin = req.headers.get("origin");
   const corsOrigin = getCorsOrigin(origin);
 
-  // Build the response manually (NextResponse sometimes strips headers)
   return new Response(JSON.stringify(spec), {
     status: 200,
     headers: {
@@ -35,11 +33,13 @@ export async function GET(req: Request) {
         : {}),
       "Access-Control-Allow-Methods": "GET, OPTIONS",
       "Access-Control-Allow-Headers": "Content-Type, Authorization",
+      "Access-Control-Allow-Credentials": "true",
+      "Access-Control-Expose-Headers": "Content-Length, Content-Type",
     },
   });
 }
 
-// ✅ Handle OPTIONS (preflight)
+// ✅ Handle OPTIONS (CORS preflight)
 export async function OPTIONS(req: Request) {
   const origin = req.headers.get("origin");
   const corsOrigin = getCorsOrigin(origin);
@@ -55,6 +55,7 @@ export async function OPTIONS(req: Request) {
         : {}),
       "Access-Control-Allow-Methods": "GET, OPTIONS",
       "Access-Control-Allow-Headers": "Content-Type, Authorization",
+      "Access-Control-Allow-Credentials": "true",
       "Access-Control-Max-Age": "86400",
     },
   });
