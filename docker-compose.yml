@@ -45,7 +45,7 @@ services:
     container_name: "${APP_NAME}-swagger"
     restart: always
     environment:
-      - URL=http://app:3000/api/openapi
+      - URL=https://studyjit.yehorskudilov.com/api/openapi
     volumes:
       - ./docs:/docs
     ports:
