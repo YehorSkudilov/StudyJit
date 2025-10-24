@@ -1,28 +1,42 @@
 import { NextResponse } from "next/server";
 import { generateOpenApi } from "@/lib/openapi";
 
-export const runtime = "nodejs"; // ✅ required for fs access
+export const runtime = "nodejs";
 
-// ✅ Handle GET requests
-export async function GET() {
+// Define allowed origins explicitly
+const allowedOrigins = [
+  "https://studyjit.swagger.yehorskudilov.com", // Swagger UI domain
+  "https://studyjit.yehorskudilov.com",         // API domain
+  "http://localhost:8080",                      // Local dev
+  "http://localhost:3000"
+];
+
+function getCorsOrigin(origin: string | null): string {
+  if (origin && allowedOrigins.includes(origin)) return origin;
+  return allowedOrigins[0]; // default to Swagger domain
+}
+
+export async function GET(request: Request) {
   const spec = generateOpenApi();
+  const origin = request.headers.get("origin");
+  const allowedOrigin = getCorsOrigin(origin);
 
   const res = NextResponse.json(spec, { status: 200 });
-
-  // Add CORS headers so Swagger UI can fetch it from any origin
-  res.headers.set("Access-Control-Allow-Origin", "*");
+  res.headers.set("Access-Control-Allow-Origin", allowedOrigin);
   res.headers.set("Access-Control-Allow-Methods", "GET, OPTIONS");
   res.headers.set("Access-Control-Allow-Headers", "Content-Type");
 
   return res;
 }
 
-// ✅ Handle preflight OPTIONS requests (CORS)
-export async function OPTIONS() {
+export async function OPTIONS(request: Request) {
+  const origin = request.headers.get("origin");
+  const allowedOrigin = getCorsOrigin(origin);
+
   return new Response(null, {
     status: 204,
     headers: {
-      "Access-Control-Allow-Origin": "*",
+      "Access-Control-Allow-Origin": allowedOrigin,
       "Access-Control-Allow-Methods": "GET, OPTIONS",
       "Access-Control-Allow-Headers": "Content-Type",
     },
