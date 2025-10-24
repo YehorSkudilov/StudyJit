@@ -3,11 +3,10 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev --turbopack && npm run generate:openapi",
-    "build": "next build --turbopack --no-lint && npm run generate:openapi",
+    "dev": "next dev --turbopack",
+    "build": "next build --turbopack --no-lint",
     "start": "next start",
-    "lint": "eslint",
-    "generate:openapi": "curl http://localhost:3000/api/openapi > ./docs/openapi.json"
+    "lint": "eslint"
   },
   "dependencies": {
     "@distube/ytdl-core": "^4.16.12",

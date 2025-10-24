@@ -45,7 +45,7 @@ services:
     container_name: "${APP_NAME}-swagger"
     restart: always
     environment:
-      - SWAGGER_JSON=/docs/openapi.json
+      - URL=http://app:3000/api/openapi
     volumes:
       - ./docs:/docs
     ports:
