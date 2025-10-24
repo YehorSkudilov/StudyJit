@@ -51,6 +51,10 @@ async function processQuiz(req: NextRequest): Promise<NextResponse> {
   const userId = Number(quizRows[0].user_id);
   const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY! });
 
+  let vectorStoreId: string | null = null;
+  let documentFileIds: string[] = [];
+  let assistantId: string | null = null;
+
   try {
     const message = form.get("message")?.toString() || "";
     const quizName = form.get("quizName")?.toString() || "Untitled Quiz";
@@ -86,29 +90,65 @@ async function processQuiz(req: NextRequest): Promise<NextResponse> {
 
     console.log(`📊 Files → ${documentFiles.length} docs, ${imageFiles.length} imgs, ${audioFiles.length} audio`);
 
-    // Upload document files and collect their IDs
-    const documentFileIds: string[] = [];
-    for (const file of documentFiles) {
-      try {
-        const upload = await openai.files.create({
-          file: fs.createReadStream(file.path),
-          purpose: "assistants",
+    // Create a custom vector store if we have documents
+    if (documentFiles.length > 0) {
+      const timestamp = Date.now();
+      const randomSuffix = Math.random().toString(36).substring(2, 8);
+      const vectorStoreName = `user_${userId}_quiz_${quizId}_${timestamp}_${randomSuffix}`;
+      
+      vectorStoreId = (await openai.vectorStores.create({
+        name: vectorStoreName,
+      })).id;
+      
+      console.log(`🗄️ Created vector store: ${vectorStoreId}`);
+
+      // Upload files and add them to the vector store
+      for (const file of documentFiles) {
+        try {
+          const upload = await openai.files.create({
+            file: fs.createReadStream(file.path),
+            purpose: "assistants",
+          });
+          documentFileIds.push(upload.id);
+          console.log(`✅ Uploaded ${file.name} → ${upload.id}`);
+        } catch (err: any) {
+          console.warn(`⚠️ Upload failed for ${file.name}: ${err.message}`);
+        }
+      }
+
+      // Add all uploaded files to the vector store
+      if (documentFileIds.length > 0) {
+        await openai.vectorStores.fileBatches.create(vectorStoreId, {
+          file_ids: documentFileIds,
         });
-        documentFileIds.push(upload.id);
-        console.log(`✅ Uploaded ${file.name} → ${upload.id}`);
-      } catch (err: any) {
-        console.warn(`⚠️ Upload failed for ${file.name}: ${err.message}`);
+        console.log(`📎 Added ${documentFileIds.length} files to vector store`);
+
+        // Wait for vector store to be ready
+        let vsStatus = await openai.vectorStores.retrieve(vectorStoreId);
+        let attempts = 0;
+        while (vsStatus.status === "in_progress" && attempts < 30) {
+          await new Promise(r => setTimeout(r, 1000));
+          vsStatus = await openai.vectorStores.retrieve(vectorStoreId);
+          attempts++;
+        }
+        console.log(`✅ Vector store ready (status: ${vsStatus.status})`);
       }
     }
 
-    // Create assistant with file_search tool enabled
+    // Create assistant with file_search tool configured to use our vector store
     const assistant = await openai.beta.assistants.create({
       model: "gpt-4o",
       name: "Quiz Generator",
       instructions: `Generate ${numQuestions} quiz questions in valid JSON format based on the provided files and topic.`,
-      tools: documentFileIds.length > 0 ? [{ type: "file_search" }] : [],
+      tools: vectorStoreId ? [{ type: "file_search" }] : [],
+      tool_resources: vectorStoreId ? {
+        file_search: {
+          vector_store_ids: [vectorStoreId],
+        },
+      } : undefined,
       response_format: { type: "json_object" },
     });
+    assistantId = assistant.id;
 
     // Build instruction text
     let instruction = `Generate ${numQuestions} quiz questions.`;
@@ -137,22 +177,17 @@ async function processQuiz(req: NextRequest): Promise<NextResponse> {
       }
     }
 
-    // Create thread with message and attachments
+    // Create thread with message (no attachments needed - files are in vector store)
     const thread = await openai.beta.threads.create({
       messages: [
         {
           role: "user",
           content: messageContent,
-          // Attach document files here
-          attachments: documentFileIds.map(fileId => ({
-            file_id: fileId,
-            tools: [{ type: "file_search" }],
-          })),
         },
       ],
     });
 
-    console.log(`📎 Created thread with ${documentFileIds.length} file attachments`);
+    console.log(`🧵 Created thread ${thread.id}`);
 
     // Run the assistant
     const run = await openai.beta.threads.runs.createAndPoll(thread.id, {
@@ -160,16 +195,6 @@ async function processQuiz(req: NextRequest): Promise<NextResponse> {
     });
 
     if (run.status !== "completed") throw new Error(`Assistant run failed: ${run.status}`);
-
-    // Get vector store IDs for cleanup (created automatically by file_search)
-    const vectorStoreIds: string[] = [];
-    if (run.tools && run.tools.length > 0) {
-      for (const tool of run.tools) {
-        if (tool.type === "file_search" && (tool as any).file_search?.vector_store_ids) {
-          vectorStoreIds.push(...(tool as any).file_search.vector_store_ids);
-        }
-      }
-    }
 
     const messages = await openai.beta.threads.messages.list(thread.id);
     const lastMessage = messages.data[0];
@@ -197,32 +222,6 @@ async function processQuiz(req: NextRequest): Promise<NextResponse> {
       [quizId, userId]
     );
 
-    // Cleanup: delete uploaded files
-    for (const fileId of documentFileIds) {
-      try {
-        await openai.files.delete(fileId);
-      } catch (err) {
-        console.warn(`⚠️ Failed to delete file ${fileId}`);
-      }
-    }
-
-    // Cleanup: delete vector stores (using stable API, not beta)
-    for (const vsId of vectorStoreIds) {
-      try {
-        await openai.vectorStores.delete(vsId);
-        console.log(`🗑️ Deleted vector store ${vsId}`);
-      } catch (err) {
-        console.warn(`⚠️ Failed to delete vector store ${vsId}`);
-      }
-    }
-
-    // Cleanup: delete assistant
-    try {
-      await openai.beta.assistants.delete(assistant.id);
-    } catch (err) {
-      console.warn(`⚠️ Failed to delete assistant ${assistant.id}`);
-    }
-
     console.log(`✅ Quiz ${quizId} successfully generated (${formatted.length} questions).`);
     return NextResponse.json({ success: true, quizId, questionCount: formatted.length });
   } catch (error: any) {
@@ -232,6 +231,36 @@ async function processQuiz(req: NextRequest): Promise<NextResponse> {
       [quizId, userId]
     );
     return NextResponse.json({ error: error.message }, { status: 500 });
+  } finally {
+    // Cleanup: delete uploaded files
+    for (const fileId of documentFileIds) {
+      try {
+        await openai.files.delete(fileId);
+        console.log(`🗑️ Deleted file ${fileId}`);
+      } catch (err) {
+        console.warn(`⚠️ Failed to delete file ${fileId}`);
+      }
+    }
+
+    // Cleanup: delete vector store (this also removes file associations)
+    if (vectorStoreId) {
+      try {
+        await openai.vectorStores.delete(vectorStoreId);
+        console.log(`🗑️ Deleted vector store ${vectorStoreId}`);
+      } catch (err) {
+        console.warn(`⚠️ Failed to delete vector store ${vectorStoreId}`);
+      }
+    }
+
+    // Cleanup: delete assistant
+    if (assistantId) {
+      try {
+        await openai.beta.assistants.delete(assistantId);
+        console.log(`🗑️ Deleted assistant ${assistantId}`);
+      } catch (err) {
+        console.warn(`⚠️ Failed to delete assistant ${assistantId}`);
+      }
+    }
   }
 }
 
