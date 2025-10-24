@@ -142,7 +142,16 @@ async function processQuiz(req: NextRequest): Promise<NextResponse> {
       correct: q.correct || q.answer || q.options?.[0] || "A",
     }));
 
-    await addQuestionsToQuiz(quizId, formatted, userId);
+    // 🧹 Clear old questions before inserting new ones (transaction-safe)
+    await db.beginTransaction();
+    try {
+      await db.execute("DELETE FROM quiz_questions WHERE quiz_id = ?", [quizId]);
+      await addQuestionsToQuiz(quizId, formatted, userId);
+      await db.commit();
+    } catch (txErr) {
+      await db.rollback();
+      throw txErr;
+    }
 
     await db.execute(
       `UPDATE quizzes SET generation_status = 'success', queue_number = NULL WHERE id = ? AND user_id = ?`,
