@@ -477,12 +477,25 @@ export default function QuizDetailsPage() {
             />
 
             <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 mt-1">
-              <button
-                className="px-5 py-3 bg-blue-600 text-white rounded hover:bg-blue-700 transition flex-1 text-sm sm:text-base"
-                onClick={handleSaveAndGenerate}
-              >
-                Save & Generate
-              </button>
+<button
+  className={`px-5 py-3 rounded flex-1 text-sm sm:text-base transition ${
+    generationStatus === "queued" || generationStatus === "pending"
+      ? "bg-gray-400 text-gray-200 cursor-not-allowed"
+      : "bg-blue-600 text-white hover:bg-blue-700"
+  }`}
+  onClick={() => {
+    if (generationStatus === "queued" || generationStatus === "pending") return;
+    handleSaveAndGenerate();
+  }}
+  disabled={generationStatus === "queued" || generationStatus === "pending"}
+>
+  {generationStatus === "queued"
+    ? "Queued..."
+    : generationStatus === "pending"
+    ? "Generating..."
+    : "Save & Generate"}
+</button>
+
               <button
                 className={`px-5 py-3 rounded flex-1 text-sm sm:text-base transition ${
                   generationStatus === "success"
