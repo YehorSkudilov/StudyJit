@@ -6,7 +6,7 @@ import path from "path";
  */
 export function listApiRoutes() {
   // Resolve "@/app/api" → absolute filesystem path
-  const baseDir = path.join(process.cwd(), "app/api");
+const baseDir = path.resolve(process.cwd(), "api");
   console.log("🔍 CWD:", process.cwd());
 console.log("🔍 Looking for routes in:", baseDir);
 console.log("📂 Exists?", fs.existsSync(baseDir));
