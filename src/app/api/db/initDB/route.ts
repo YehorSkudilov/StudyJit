@@ -11,44 +11,6 @@ async function ensureColumnExists(table: string, column: string, definition: str
   }
 }
 
-/* ------------------------- Utility: Drop Old Columns ------------------------- */
-async function dropOldColumns() {
-  // Drop old quiz columns
-  const [quizCols]: any = await db.query(`SHOW COLUMNS FROM quizzes`);
-  const quizColNames = quizCols.map((c: any) => c.Field);
-
-  for (const col of ["folder_path", "path"]) {
-    if (quizColNames.includes(col)) {
-      console.log(`🗑️ Dropping old column '${col}' from 'quizzes'...`);
-      await db.query(`ALTER TABLE quizzes DROP COLUMN ${col}`);
-      console.log(`✅ Dropped '${col}' from 'quizzes'`);
-    }
-  }
-
-  // Drop old folder path column
-  const [folderCols]: any = await db.query(`SHOW COLUMNS FROM folders`);
-  const folderColNames = folderCols.map((c: any) => c.Field);
-  if (folderColNames.includes("path")) {
-    console.log("🗑️ Dropping old column 'path' from 'folders'...");
-    await db.query(`ALTER TABLE folders DROP COLUMN path`);
-    console.log("✅ Dropped 'path' from 'folders'");
-  }
-}
-
-/* ------------------------- Utility: Drop Unique Constraint ------------------------- */
-async function dropUniqueConstraintIfExists() {
-  const [indexes]: any = await db.query(`SHOW INDEX FROM quizzes`);
-  const uniqueIndexes = indexes.filter((i: any) => i.Non_unique === 0);
-
-  for (const idx of uniqueIndexes) {
-    if (idx.Column_name === "name") {
-      console.log(`🗑️ Dropping UNIQUE constraint '${idx.Key_name}' on quizzes.name...`);
-      await db.query(`ALTER TABLE quizzes DROP INDEX ${idx.Key_name}`);
-      console.log(`✅ UNIQUE constraint '${idx.Key_name}' removed from quizzes.name`);
-    }
-  }
-}
-
 /* --------------------------- Database Setup --------------------------- */
 async function initDatabase() {
   /* ---------------- USERS ---------------- */
@@ -92,61 +54,39 @@ async function initDatabase() {
     );
   `);
 
-  // ✅ Ensure backward compatibility
-  await ensureColumnExists("files", "folder_id", "INT NULL");
-  await ensureColumnExists("files", "path", "TEXT NULL");
+  /* ---------------- QUIZZES ---------------- */
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS quizzes (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      user_id INT NOT NULL,
+      name VARCHAR(255) NOT NULL,
+      description TEXT,
+      prompt TEXT,
+      num_questions INT DEFAULT 10,
+      generation_status ENUM('never_generated','queued','pending','success','failed') DEFAULT 'never_generated',
+      queue_number INT NULL,
+      folder_id INT NULL,
+      last_score DECIMAL(5,2) NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+      FOREIGN KEY (folder_id) REFERENCES folders(id) ON DELETE SET NULL
+    );
+  `);
 
-/* ---------------- QUIZZES ---------------- */
-await db.query(`
-  CREATE TABLE IF NOT EXISTS quizzes (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    user_id INT NOT NULL,
-    name VARCHAR(255) NOT NULL,
-    description TEXT,
-    prompt TEXT,
-    num_questions INT DEFAULT 10,
-    generation_status ENUM('never_generated','queued','pending','success','failed') DEFAULT 'never_generated',
-    folder_id INT NULL,
-    last_score DECIMAL(5,2) NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-    FOREIGN KEY (folder_id) REFERENCES folders(id) ON DELETE SET NULL
-  );
-`);
-
-// ✅ Add this line
-await ensureColumnExists("quizzes", "queue_number", "INT NULL");
-
-
-  // 🧩 Drop any UNIQUE constraint on quizzes.name
-  await dropUniqueConstraintIfExists();
-
-  // 🔄 Update ENUM if needed
-  const [enumCheck]: any = await db.query(`SHOW COLUMNS FROM quizzes LIKE 'generation_status'`);
-  const enumType = enumCheck[0]?.Type || "";
-  if (!enumType.includes("queued")) {
-    console.log("🟡 Updating 'generation_status' ENUM to include 'queued'...");
-    await db.query(`
-      ALTER TABLE quizzes 
-      MODIFY COLUMN generation_status 
-      ENUM('never_generated','queued','pending','success','failed') 
-      DEFAULT 'never_generated';
-    `);
-    console.log("✅ Updated ENUM with 'queued' value");
-  }
+  // Ensure queue_number exists for existing databases
+  await ensureColumnExists("quizzes", "queue_number", "INT NULL");
 
   /* ---------------- QUIZ FILES ---------------- */
-await db.query(`
-  CREATE TABLE IF NOT EXISTS quiz_files (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    quiz_id INT NOT NULL,
-    file_id INT NOT NULL,
-    linked_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (quiz_id) REFERENCES quizzes(id) ON DELETE CASCADE,
-    FOREIGN KEY (file_id) REFERENCES files(id) ON DELETE CASCADE
-  );
-`);
-
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS quiz_files (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      quiz_id INT NOT NULL,
+      file_id INT NOT NULL,
+      linked_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (quiz_id) REFERENCES quizzes(id) ON DELETE CASCADE,
+      FOREIGN KEY (file_id) REFERENCES files(id) ON DELETE CASCADE
+    );
+  `);
 
   /* ---------------- QUIZ QUESTIONS ---------------- */
   await db.query(`
@@ -165,10 +105,7 @@ await db.query(`
     );
   `);
 
-  /* ---------------- CLEANUP ---------------- */
-  await dropOldColumns();
-
-  console.log("✅ Database schema synchronized successfully (duplicates allowed).");
+  console.log("✅ Database schema synchronized successfully.");
   return { success: true };
 }
 
