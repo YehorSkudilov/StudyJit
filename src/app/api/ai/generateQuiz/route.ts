@@ -39,6 +39,36 @@ function extractAndParseJSON(text: string): any {
 }
 
 /* -------------------------------------------------------------------------- */
+/*                           AUTO-RECOVER QUEUED JOBS                         */
+/* -------------------------------------------------------------------------- */
+async function recoverStuckQueuedJobs() {
+  try {
+    const [rows]: any = await db.query(
+      "SELECT id FROM quizzes WHERE generation_status = 'queued'"
+    );
+
+    if (!rows.length) {
+      console.log("✅ No queued jobs to recover.");
+      return;
+    }
+
+    console.log(`♻️ Recovering ${rows.length} stuck queued quiz(es)...`);
+
+    for (const row of rows) {
+      const form = new FormData();
+      form.append("quizId", String(row.id));
+      // minimal payload; the rest will be fetched from DB in processQuiz()
+      enqueueQuizJob(row.id, form);
+    }
+
+    console.log("🔁 Recovered all queued jobs into memory.");
+  } catch (err: any) {
+    console.error("❌ Failed to recover queued jobs:", err);
+  }
+}
+
+
+/* -------------------------------------------------------------------------- */
 /*                           MAIN PROCESS FUNCTION                            */
 /* -------------------------------------------------------------------------- */
 async function processQuiz(req: NextRequest): Promise<NextResponse> {
@@ -159,21 +189,7 @@ async function processQuiz(req: NextRequest): Promise<NextResponse> {
       assistant_id: assistant.id,
     });
 
-    if (run.status !== "completed") throw new Error(`Assistant run failed: ${run.status}`);
-
-    // Get vector store IDs for cleanup (created automatically by file_search)
-// console.log("🧰 run.tools =", JSON.stringify(run.tools, null, 2));
-
-// const vectorStoreIds =
-//   Array.isArray(run.tools)
-//     ? run.tools.flatMap((t: any) =>
-//         t.type === "file_search" && t.file_search?.vector_store_ids
-//           ? t.file_search.vector_store_ids
-//           : []
-//       )
-//     : [];
-
-// console.log("🧩 vectorStoreIds:", vectorStoreIds);
+    if (run.status !== "completed") throw new Error(`Assistant run failed: ${run.status}`)
 
 if (run.status !== "completed") throw new Error(`Assistant run failed: ${run.status}`);
 
@@ -337,3 +353,5 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: err.message }, { status: 500 });
   }
 }
+
+recoverStuckQueuedJobs();
