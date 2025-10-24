@@ -150,18 +150,20 @@ async function processQuiz(req: NextRequest): Promise<NextResponse> {
       {"questions":[{"id":1,"question":"...","options":["A","B","C","D"],"correct":"A"}]}
     `;
 
-    console.log("🧵 Creating thread...");
+console.log("🧵 Creating thread...");
 const thread = await openai.beta.threads.create({
   messages: [
     {
       role: "user",
-      content: [
-        { type: "text", text: instruction },
-        ...(documentFileIds.map((id) => ({ type: "file_reference", file_id: id })) as any),
-      ],
+      content: instruction, // now just a simple string
+      attachments: documentFileIds.map((id) => ({
+        file_id: id,
+        tools: [{ type: "file_search" }], // enables assistant to read the file
+      })),
     },
   ],
 });
+
 
 
     console.log("✅ Thread created:", thread.id);
