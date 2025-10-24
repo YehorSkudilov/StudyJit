@@ -3,7 +3,6 @@ import { generateOpenApi } from "@/lib/openapi";
 
 export const runtime = "nodejs";
 
-// Allowed origins
 const allowedOrigins = [
   "https://studyjit.swagger.yehorskudilov.com",
   "https://studyjit.yehorskudilov.com",
@@ -15,7 +14,9 @@ function getCorsOrigin(origin: string | null): string | null {
   return origin && allowedOrigins.includes(origin) ? origin : null;
 }
 
-// ✅ Handle GET
+/* -------------------------------------------------------------------------- */
+/*                                   GET                                      */
+/* -------------------------------------------------------------------------- */
 export async function GET(req: Request) {
   const spec = generateOpenApi();
   const origin = req.headers.get("origin");
@@ -25,21 +26,26 @@ export async function GET(req: Request) {
     status: 200,
     headers: {
       "Content-Type": "application/json",
+      "Access-Control-Allow-Methods": "GET, OPTIONS",
+      "Access-Control-Allow-Headers": "Content-Type, Authorization",
+      "Access-Control-Allow-Credentials": "true",
+      "Access-Control-Expose-Headers": "Content-Length, Content-Type",
       ...(corsOrigin
         ? {
             "Access-Control-Allow-Origin": corsOrigin,
             Vary: "Origin",
           }
-        : {}),
-      "Access-Control-Allow-Methods": "GET, OPTIONS",
-      "Access-Control-Allow-Headers": "Content-Type, Authorization",
-      "Access-Control-Allow-Credentials": "true",
-      "Access-Control-Expose-Headers": "Content-Length, Content-Type",
+        : {
+            // fallback for validators / no-origin fetches
+            "Access-Control-Allow-Origin": "*",
+          }),
     },
   });
 }
 
-// ✅ Handle OPTIONS (CORS preflight)
+/* -------------------------------------------------------------------------- */
+/*                                 OPTIONS (CORS)                             */
+/* -------------------------------------------------------------------------- */
 export async function OPTIONS(req: Request) {
   const origin = req.headers.get("origin");
   const corsOrigin = getCorsOrigin(origin);
@@ -47,16 +53,18 @@ export async function OPTIONS(req: Request) {
   return new Response(null, {
     status: 204,
     headers: {
+      "Access-Control-Allow-Methods": "GET, OPTIONS",
+      "Access-Control-Allow-Headers": "Content-Type, Authorization",
+      "Access-Control-Allow-Credentials": "true",
+      "Access-Control-Max-Age": "86400",
       ...(corsOrigin
         ? {
             "Access-Control-Allow-Origin": corsOrigin,
             Vary: "Origin",
           }
-        : {}),
-      "Access-Control-Allow-Methods": "GET, OPTIONS",
-      "Access-Control-Allow-Headers": "Content-Type, Authorization",
-      "Access-Control-Allow-Credentials": "true",
-      "Access-Control-Max-Age": "86400",
+        : {
+            "Access-Control-Allow-Origin": "*",
+          }),
     },
   });
 }
