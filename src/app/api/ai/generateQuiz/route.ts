@@ -162,18 +162,28 @@ async function processQuiz(req: NextRequest): Promise<NextResponse> {
     if (run.status !== "completed") throw new Error(`Assistant run failed: ${run.status}`);
 
     // Get vector store IDs for cleanup (created automatically by file_search)
-console.log("🧰 run.tools =", JSON.stringify(run.tools, null, 2));
+// console.log("🧰 run.tools =", JSON.stringify(run.tools, null, 2));
 
+// const vectorStoreIds =
+//   Array.isArray(run.tools)
+//     ? run.tools.flatMap((t: any) =>
+//         t.type === "file_search" && t.file_search?.vector_store_ids
+//           ? t.file_search.vector_store_ids
+//           : []
+//       )
+//     : [];
+
+// console.log("🧩 vectorStoreIds:", vectorStoreIds);
+
+if (run.status !== "completed") throw new Error(`Assistant run failed: ${run.status}`);
+
+// ✅ Retrieve vector store IDs from the thread (the reliable way)
+const threadInfo = await openai.beta.threads.retrieve(thread.id);
 const vectorStoreIds =
-  Array.isArray(run.tools)
-    ? run.tools.flatMap((t: any) =>
-        t.type === "file_search" && t.file_search?.vector_store_ids
-          ? t.file_search.vector_store_ids
-          : []
-      )
-    : [];
+  threadInfo.tool_resources?.file_search?.vector_store_ids || [];
 
-console.log("🧩 vectorStoreIds:", vectorStoreIds);
+console.log("🧩 Retrieved vectorStoreIds from thread:", vectorStoreIds);
+
 
     const messages = await openai.beta.threads.messages.list(thread.id);
     const lastMessage = messages.data[0];
