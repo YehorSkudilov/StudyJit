@@ -53,16 +53,16 @@ export function NewCourseModal({
         <div className="grid grid-cols-[8rem_1fr] gap-3">
           <div>
             <label className="label">Code</label>
-            <input className="input" placeholder="COMP 3760" value={draft.code} onChange={(e) => setDraft({ ...draft, code: e.target.value })} />
+            <input className="input" placeholder="BIO 101" value={draft.code} onChange={(e) => setDraft({ ...draft, code: e.target.value })} />
           </div>
           <div>
             <label className="label">Name</label>
-            <input className="input" placeholder="Algorithms" value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} autoFocus />
+            <input className="input" placeholder="Introduction to Biology" value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} autoFocus />
           </div>
         </div>
         <div>
           <label className="label">Term (optional)</label>
-          <input className="input" placeholder="Fall 2026" value={draft.term} onChange={(e) => setDraft({ ...draft, term: e.target.value })} />
+          <input className="input" placeholder="Spring 2025" value={draft.term} onChange={(e) => setDraft({ ...draft, term: e.target.value })} />
         </div>
         <div>
           <label className="label">Colour</label>
@@ -97,10 +97,10 @@ export function NewCourseModal({
 
 /* ------------------------------ Import with AI ------------------------------ */
 
-const example = `COMP 3760 - BBY - Algorithms (merge 202630 50121 46919)
-Fall 2026
-MATH-3042-0 - Applied Probability and Statistics - 50115
-Fall 2026`;
+const example = `BIO-101-02 - Introduction to Biology (Lecture, Section 2)
+Spring 2025
+HIST 210 - World History II - CRN 48213
+Spring 2025`;
 
 /** Paste a course list from your school's site; the AI reads the courses out, you tick the ones to add. */
 export function ImportCoursesModal({

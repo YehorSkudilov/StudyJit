@@ -49,10 +49,10 @@ public class Course
 {
     public int Id { get; set; }
     public string UserId { get; set; } = "";
-    /// <summary>The course code, e.g. "COMP 3760"; may be empty.</summary>
+    /// <summary>The course code, e.g. "BIO 101"; may be empty.</summary>
     public string Code { get; set; } = "";
     public string Name { get; set; } = "";
-    /// <summary>When it's taken, e.g. "Fall 2026"; may be empty.</summary>
+    /// <summary>When it's taken, e.g. "Spring 2025"; may be empty.</summary>
     public string Term { get; set; } = "";
     /// <summary>A colour key the web app picks the course's colour by.</summary>
     public string Color { get; set; } = "blue";

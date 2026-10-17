@@ -23,11 +23,11 @@ public class CourseAssistant(OpenAiQuizClient openAi)
         similar). Pull out the distinct courses they're taking.
 
         For each course:
-        - code: the subject and number in a clean form, e.g. "COMP 3760" or "MATH 3042" (normalise "COMP-3721-0" to
-          "COMP 3721"); empty if there's none.
-        - name: the course title only, cleaned up: drop section numbers, campus codes (like "BBY"), CRNs, "(merge ...)"
-          notes and other enrolment noise. E.g. "Algorithms", "Introduction to Data Communications".
-        - term: the term it's in, written like "Fall 2026" or "Winter 2026", when the text says; otherwise empty.
+        - code: the subject and number in a clean form, e.g. "BIO 101" or "HIST 210" (normalise "HIST-210-01" to
+          "HIST 210"); empty if there's none.
+        - name: the course title only, cleaned up: drop section numbers, campus codes, CRNs, "(merge ...)" notes and
+          other enrolment noise. E.g. "Introduction to Biology", "World History II".
+        - term: the term it's in, written like "Spring 2025" or "Autumn 2025", when the text says; otherwise empty.
 
         List each course once, even if it shows up several times (e.g. lecture and lab sections). Ignore navigation
         and filter labels such as "All", "Ongoing" or term codes on their own. If the text has no courses, return none.
@@ -65,7 +65,7 @@ public class CourseAssistant(OpenAiQuizClient openAi)
         its code and name, with empty file lists.
 
         For each set:
-        - name: short and specific, like "Week 3 · Sorting algorithms" or "Hypothesis testing".
+        - name: short and specific, like "Week 3 · Cell respiration" or "The French Revolution".
         - description: one sentence on what it covers.
         - focus: instructions for the question writer: the topics and skills to test, and anything to emphasise.
         - file_ids: ids from the list only.
@@ -128,7 +128,7 @@ public class CourseAssistant(OpenAiQuizClient openAi)
         mistakes the questions reveal. No introduction and no closing remarks: every line should be worth its space.
         Write in the language of the material.
 
-        title: a short title for the sheet, e.g. "Midterm cheat sheet" or "Sorting algorithms at a glance".
+        title: a short title for the sheet, e.g. "Midterm cheat sheet" or "Cell biology at a glance".
         """;
 
     /// <summary>Writes a cheat sheet for the course from its study material; returns its title and Markdown.</summary>
