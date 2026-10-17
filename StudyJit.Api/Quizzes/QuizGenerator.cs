@@ -30,10 +30,18 @@ public class QuizGenerator(ApiDbContext db, OpenAiQuizClient openAi, ILogger<Qui
         try
         {
             var source = new QuizSource { Name = quiz.Name, Description = quiz.Description, Prompt = quiz.Prompt, Questions = quiz.NumQuestions };
-            var files = await (from link in db.QuizFiles
-                               join file in db.Files on link.FileId equals file.Id
-                               where link.QuizId == quizId && file.UserId == quiz.UserId
-                               select file).ToListAsync(ct);
+            // The quiz's own files; a study set's folder's files; and an exam's study sets' files and guides.
+            var sources = quiz.Kind == QuizKind.Exam && quiz.SourceQuizIds.Count > 0
+                ? await db.Quizzes.AsNoTracking().Where(q => quiz.SourceQuizIds.Contains(q.Id) && q.UserId == quiz.UserId).ToListAsync(ct)
+                : [];
+            var quizIds = sources.Select(q => q.Id).Append(quizId).ToList();
+            var folderIds = sources.Select(q => q.FolderId).Append(quiz.FolderId).OfType<int>().ToList();
+            var files = await db.Files.Where(f => f.UserId == quiz.UserId && (
+                    db.QuizFiles.Any(l => l.FileId == f.Id && quizIds.Contains(l.QuizId))
+                    || (f.FolderId != null && folderIds.Contains(f.FolderId.Value) && f.CourseId == quiz.CourseId)))
+                .ToListAsync(ct);
+            foreach (var set in sources.Where(s => !string.IsNullOrWhiteSpace(s.Summary)))
+                source.Texts.Add(($"Study guide: {set.Name}", set.Summary!));
             foreach (var file in files)
             {
                 if (!File.Exists(file.Path))
@@ -63,6 +71,7 @@ public class QuizGenerator(ApiDbContext db, OpenAiQuizClient openAi, ILogger<Qui
             }));
             db.QuizTerms.AddRange(generated.Terms.Select(t => new QuizTerm { QuizId = quizId, Term = t.Term, Definition = t.Definition }));
             quiz.Summary = generated.Summary;
+            quiz.CheatSheet = generated.CheatSheet;
             quiz.GenerationStatus = GenerationStatus.Success;
             await db.SaveChangesAsync(ct);
             log.LogInformation("Quiz {QuizId} generated with {Count} questions and {Terms} terms.", quizId, generated.Questions.Count, generated.Terms.Count);

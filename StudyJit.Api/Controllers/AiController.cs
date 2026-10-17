@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
@@ -16,15 +17,20 @@ public record ParseCoursesRequest(string? Text);
 
 public record ParseCoursesResponse(List<ParsedCourse> Courses);
 
-public record AutopilotRequest(int? Sets);
+public record CreatedQuizzesResponse(List<QuizSummary> Created);
 
-public record AutopilotResponse(List<QuizSummary> Created);
+public record OrganizeResponse(List<FolderPlan> Folders);
+
+public record CreateExamRequest(
+    string? Name,
+    [property: JsonPropertyName("set_ids")] int[] SetIds,
+    int? Questions,
+    string? Focus);
 
 [Route("api/ai")]
 public class AiController(ApiDbContext db, ICurrentUser me, QuizGenerationQueue queue, OpenAiQuizClient openAi, CourseAssistant assistant,
     TimeProvider clock) : ApiControllerBase
 {
-    const int MaxAutopilotSets = 12;
 
     /// <summary>
     /// Queues the quiz for generation from its saved name, description, prompt, question count and linked files.
@@ -72,14 +78,11 @@ public class AiController(ApiDbContext db, ICurrentUser me, QuizGenerationQueue 
         }
     }
 
-    /// <summary>
-    /// Course autopilot: the AI plans the course's study sets from its files (or, with none, from what the course
-    /// covers), and each is created, linked to its files and queued for generation.
-    /// </summary>
-    [HttpPost("courses/{id:int}/autopilot")]
+    /// <summary>The AI's suggested folders for the course's files (e.g. one per week); apply it with POST api/courses/{id}/folders/apply.</summary>
+    [HttpPost("courses/{id:int}/organize")]
     [EnableRateLimiting(RateLimits.Generate)]
-    [ProducesResponseType<AutopilotResponse>(StatusCodes.Status200OK)]
-    public async Task<IActionResult> Autopilot(int id, AutopilotRequest request, CancellationToken ct)
+    [ProducesResponseType<OrganizeResponse>(StatusCodes.Status200OK)]
+    public async Task<IActionResult> Organize(int id, CancellationToken ct)
     {
         if (!assistant.IsConfigured)
             return Error(StatusCodes.Status503ServiceUnavailable, "AI isn't set up on this server.");
@@ -87,46 +90,71 @@ public class AiController(ApiDbContext db, ICurrentUser me, QuizGenerationQueue 
         var course = await db.Courses.FirstOrDefaultAsync(c => c.Id == id && c.UserId == userId, ct);
         if (course == null)
             return NotFoundError("Course not found.");
-
         var files = await db.Files.Where(f => f.UserId == userId && f.CourseId == id).OrderBy(f => f.Name).ToListAsync(ct);
+        if (files.Count == 0)
+            return BadRequestError("Upload some files first.");
         var planFiles = new List<PlanFile>();
         foreach (var f in files)
             planFiles.Add(new PlanFile(f.Id, f.Name, f.Size, await ExcerptAsync(f, ct)));
-
-        List<PlannedSet> plan;
         try
         {
-            var title = string.Join(" ", new[] { course.Code, course.Name, course.Term.Length > 0 ? $"({course.Term})" : "" }.Where(s => s.Length > 0));
-            plan = await assistant.PlanAsync(title, planFiles, Math.Clamp(request.Sets ?? 6, 1, MaxAutopilotSets), ct);
+            var title = string.Join(" ", new[] { course.Code, course.Name }.Where(s => s.Length > 0));
+            return Ok(new OrganizeResponse(await assistant.OrganizeAsync(title, planFiles, ct)));
         }
         catch (QuizGenerationException e)
         {
             return Error(StatusCodes.Status502BadGateway, e.Message);
         }
-        if (plan.Count == 0)
-            return Error(StatusCodes.Status502BadGateway, "The AI couldn't plan any study sets. Try adding files first.");
+    }
 
-        var now = clock.GetUtcNow();
-        var quizzes = plan.Select(p => new Quiz
+    /// <summary>
+    /// Creates an exam from chosen study sets (e.g. the ones a midterm covers) and queues it: the AI writes it from
+    /// those sets' files and study guides.
+    /// </summary>
+    [HttpPost("courses/{id:int}/exams")]
+    [EnableRateLimiting(RateLimits.Generate)]
+    [ProducesResponseType<CreatedQuizzesResponse>(StatusCodes.Status200OK)]
+    public async Task<IActionResult> CreateExam(int id, CreateExamRequest request, CancellationToken ct)
+    {
+        if (!openAi.IsConfigured)
+            return Error(StatusCodes.Status503ServiceUnavailable, "AI isn't set up on this server.");
+        var name = request.Name?.Trim() ?? "";
+        if (name.Length == 0)
+            return BadRequestError("Give the exam a name.");
+        var userId = me.Id;
+        if (!await CoursesController.Owns(db, userId, id, ct))
+            return NotFoundError("Course not found.");
+        var sets = await db.Quizzes.Where(q => q.UserId == userId && q.CourseId == id && q.Kind == QuizKind.Set && request.SetIds.Contains(q.Id))
+            .OrderBy(q => q.Id).ToListAsync(ct);
+        if (sets.Count == 0)
+            return BadRequestError("Pick at least one study set for the exam to cover.");
+
+        var focus = request.Focus?.Trim() ?? "";
+        var exam = new Quiz
         {
             UserId = userId,
             CourseId = id,
-            Name = p.Name.Length > 255 ? p.Name[..255] : p.Name,
-            Description = p.Description,
-            Prompt = p.Focus,
-            NumQuestions = p.Questions,
+            Kind = QuizKind.Exam,
+            SourceQuizIds = sets.Select(s => s.Id).ToList(),
+            Name = name.Length > 255 ? name[..255] : name,
+            Description = $"Covers {string.Join(", ", sets.Select(s => s.Name))}",
+            Prompt = $"This is a cumulative exam ({name}) covering: {string.Join("; ", sets.Select(s => s.Name))}. "
+                + "Spread the questions evenly across those topics, mix recall with application, and make it exam-style."
+                + (focus.Length > 0 ? $" {focus}" : ""),
+            NumQuestions = Math.Clamp(request.Questions ?? 30, 1, QuizzesController.MaxQuestions),
             GenerationStatus = GenerationStatus.Queued,
-            CreatedAt = now,
-        }).ToList();
+            CreatedAt = clock.GetUtcNow(),
+        };
+        return Ok(new CreatedQuizzesResponse(await QueueAsync([exam], ct)));
+    }
+
+    async Task<List<QuizSummary>> QueueAsync(List<Quiz> quizzes, CancellationToken ct)
+    {
         db.Quizzes.AddRange(quizzes);
-        await db.SaveChangesAsync(ct);
-        for (var i = 0; i < plan.Count; i++)
-            db.QuizFiles.AddRange(plan[i].FileIds.Select(fileId => new QuizFile { QuizId = quizzes[i].Id, FileId = fileId, LinkedAt = now }));
         await db.SaveChangesAsync(ct);
         foreach (var quiz in quizzes)
             await queue.EnqueueAsync(quiz.Id, ct);
-
-        return Ok(new AutopilotResponse(quizzes.Select(QuizzesController.Summary).ToList()));
+        return quizzes.Select(QuizzesController.Summary).ToList();
     }
 
     static readonly string[] TextExtensions = [".txt", ".md", ".csv", ".html", ".htm"];

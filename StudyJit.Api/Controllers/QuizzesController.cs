@@ -19,7 +19,9 @@ public record QuizSummary(
     [property: JsonPropertyName("folder_id")] int? FolderId,
     [property: JsonPropertyName("course_id")] int? CourseId,
     [property: JsonPropertyName("last_score")] decimal? LastScore,
-    List<QuestionDto> Questions);
+    List<QuestionDto> Questions,
+    string Kind,
+    [property: JsonPropertyName("source_ids")] List<int> SourceIds);
 
 public record QuizDetail(
     int Id,
@@ -31,7 +33,11 @@ public record QuizDetail(
     [property: JsonPropertyName("last_score")] decimal? LastScore,
     [property: JsonPropertyName("queue_number")] int? QueueNumber,
     [property: JsonPropertyName("course_id")] int? CourseId,
+    [property: JsonPropertyName("folder_id")] int? FolderId,
+    string Kind,
+    [property: JsonPropertyName("source_ids")] List<int> SourceIds,
     string? Summary,
+    [property: JsonPropertyName("cheat_sheet")] string? CheatSheet,
     List<QuestionDto> Questions,
     List<TermDto> Terms);
 
@@ -95,7 +101,7 @@ public class QuizzesController(ApiDbContext db, ICurrentUser me, TimeProvider cl
     }
 
     public static QuizSummary Summary(Quiz q) =>
-        new(q.Id, q.Name, q.Description, q.GenerationStatus, q.NumQuestions, q.FolderId, q.CourseId, q.LastScore, Questions(q));
+        new(q.Id, q.Name, q.Description, q.GenerationStatus, q.NumQuestions, q.FolderId, q.CourseId, q.LastScore, Questions(q), q.Kind, q.SourceQuizIds);
 
     [HttpGet("get/{id:int}")]
     [ProducesResponseType<QuizDetail>(StatusCodes.Status200OK)]
@@ -107,7 +113,7 @@ public class QuizzesController(ApiDbContext db, ICurrentUser me, TimeProvider cl
         if (q == null)
             return NotFoundError("Quiz not found.");
         return Ok(new QuizDetail(q.Id, q.Name, q.Description, q.Prompt, q.NumQuestions, q.GenerationStatus, q.LastScore, q.QueueNumber,
-            q.CourseId, q.Summary, Questions(q), q.Terms.OrderBy(x => x.Id).Select(x => new TermDto(x.Term, x.Definition)).ToList()));
+            q.CourseId, q.FolderId, q.Kind, q.SourceQuizIds, q.Summary, q.CheatSheet, Questions(q), q.Terms.OrderBy(x => x.Id).Select(x => new TermDto(x.Term, x.Definition)).ToList()));
     }
 
     [HttpPost("create")]

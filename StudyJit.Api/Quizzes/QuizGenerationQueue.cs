@@ -14,14 +14,15 @@ public class QuizGenerationQueue(IServiceScopeFactory scopes)
     readonly SemaphoreSlim _signal = new(0);
     int? _running;
 
-    /// <summary>Queues a quiz unless it's already queued or running; returns its place in the queue (0 while running).</summary>
+    /// <summary>
+    /// Queues a quiz unless it's already waiting; returns its place in the queue. A quiz that's generating right now is
+    /// queued again, so changes made meanwhile (e.g. new files) are picked up.
+    /// </summary>
     public async Task<int> EnqueueAsync(int quizId, CancellationToken ct = default)
     {
         int place;
         lock (_lock)
         {
-            if (_running == quizId)
-                return 0;
             if (!_waiting.Contains(quizId))
             {
                 _waiting.Add(quizId);

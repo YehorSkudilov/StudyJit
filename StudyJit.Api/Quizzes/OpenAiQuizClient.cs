@@ -23,7 +23,7 @@ public record GeneratedQuestion(string Question, List<string> Options, string Co
 public record GeneratedTerm(string Term, string Definition);
 
 /// <summary>What one generation writes: the questions, plus a study guide and key terms for the other study modes.</summary>
-public record GeneratedQuiz(List<GeneratedQuestion> Questions, string Summary, List<GeneratedTerm> Terms);
+public record GeneratedQuiz(List<GeneratedQuestion> Questions, string Summary, List<GeneratedTerm> Terms, string CheatSheet);
 
 /// <summary>What a quiz is generated from: the topic, plus text, images and documents from the linked files.</summary>
 public class QuizSource
@@ -66,6 +66,10 @@ public class OpenAiQuizClient(HttpClient http, OpenAiOptions options, ILogger<Op
 
         terms: the 8 to 20 most important terms, names or concepts, each with a short definition (one sentence) that
         doesn't repeat the term itself.
+
+        cheat_sheet: the condensed notes a student would bring into an exam, in Markdown: "## " headings, short "- "
+        bullets, **bold** for what matters most, compact "Term: meaning" lines, and any formulas, rules, steps and common
+        mistakes. No introduction; every line worth its space; about one printed page (350 words at most).
         """;
 
     public async Task<GeneratedQuiz> GenerateAsync(QuizSource source, CancellationToken ct)
@@ -203,6 +207,7 @@ public class OpenAiQuizClient(HttpClient http, OpenAiOptions options, ILogger<Op
         })),
         ["summary"] = SchemaString(),
         ["terms"] = SchemaArray(SchemaObject(new() { ["term"] = SchemaString(), ["definition"] = SchemaString() })),
+        ["cheat_sheet"] = SchemaString(),
     });
 
 
@@ -236,12 +241,13 @@ public class OpenAiQuizClient(HttpClient http, OpenAiOptions options, ILogger<Op
             .Select(x => new GeneratedTerm(x.Term.Trim(), x.Definition.Trim()))
             .DistinctBy(x => x.Term, StringComparer.OrdinalIgnoreCase)
             .Take(MaxTerms).ToList();
-        return new GeneratedQuiz(kept.Take(wanted).ToList(), quiz?.Summary?.Trim() ?? "", terms);
+        return new GeneratedQuiz(kept.Take(wanted).ToList(), quiz?.Summary?.Trim() ?? "", terms, quiz?.CheatSheet?.Trim() ?? "");
     }
 
     const int MaxTerms = 30;
 
-    record QuizJson(List<GeneratedQuestion>? Questions, string? Summary, List<GeneratedTerm>? Terms);
+    record QuizJson(List<GeneratedQuestion>? Questions, string? Summary, List<GeneratedTerm>? Terms,
+        [property: System.Text.Json.Serialization.JsonPropertyName("cheat_sheet")] string? CheatSheet);
 
     /// <summary>How long an upload lives if it isn't deleted (OpenAI's shortest is an hour).</summary>
     const int UploadLifetimeSeconds = 6 * 3600;

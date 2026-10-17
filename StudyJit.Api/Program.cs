@@ -108,6 +108,7 @@ builder.Services.AddSingleton(openAi);
 builder.Services.AddHttpClient<OpenAiQuizClient>(c => c.Timeout = TimeSpan.FromSeconds(openAi.TimeoutSeconds));
 builder.Services.AddScoped<QuizGenerator>();
 builder.Services.AddScoped<CourseAssistant>();
+builder.Services.AddScoped<StudySetSync>();
 builder.Services.AddSingleton<QuizGenerationQueue>();
 builder.Services.AddHostedService<QuizGenerationWorker>();
 

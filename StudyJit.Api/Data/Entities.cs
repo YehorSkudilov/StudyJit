@@ -41,6 +41,8 @@ public class Folder
     public string Name { get; set; } = "";
     public int? ParentId { get; set; }
     public string Context { get; set; } = FolderContext.Quizzes;
+    /// <summary>The course a files folder is in (e.g. "Week 3"); course folders are flat.</summary>
+    public int? CourseId { get; set; }
     public DateTimeOffset CreatedAt { get; set; }
 }
 
@@ -56,20 +58,6 @@ public class Course
     public string Term { get; set; } = "";
     /// <summary>A colour key the web app picks the course's colour by.</summary>
     public string Color { get; set; } = "blue";
-    public DateTimeOffset CreatedAt { get; set; }
-}
-
-/// <summary>A condensed, printable summary of a course, written by the AI from its study sets.</summary>
-public class CheatSheet
-{
-    public int Id { get; set; }
-    public string UserId { get; set; } = "";
-    public int CourseId { get; set; }
-    public string Title { get; set; } = "";
-    /// <summary>What the user asked it to focus on, if anything.</summary>
-    public string Focus { get; set; } = "";
-    /// <summary>Markdown.</summary>
-    public string Content { get; set; } = "";
     public DateTimeOffset CreatedAt { get; set; }
 }
 
@@ -96,12 +84,23 @@ public static class GenerationStatus
     public const string Failed = "failed";
 }
 
+/// <summary>What a quiz is: a study set (usually one per course folder) or an exam built from study sets.</summary>
+public static class QuizKind
+{
+    public const string Set = "set";
+    public const string Exam = "exam";
+}
+
 public class Quiz
 {
     public int Id { get; set; }
     public string UserId { get; set; } = "";
+    /// <summary>For a study set, the course folder it covers: that folder's files are always part of it.</summary>
     public int? FolderId { get; set; }
     public int? CourseId { get; set; }
+    public string Kind { get; set; } = QuizKind.Set;
+    /// <summary>For an exam, the study sets it covers.</summary>
+    public List<int> SourceQuizIds { get; set; } = [];
     public string Name { get; set; } = "";
     public string? Description { get; set; }
     public string? Prompt { get; set; }
@@ -112,6 +111,8 @@ public class Quiz
     public decimal? LastScore { get; set; }
     /// <summary>A short study guide of the material, written with the questions.</summary>
     public string? Summary { get; set; }
+    /// <summary>A condensed, printable one-page version of the material, written with the questions.</summary>
+    public string? CheatSheet { get; set; }
     public DateTimeOffset CreatedAt { get; set; }
 
     public List<QuizQuestion> Questions { get; set; } = [];

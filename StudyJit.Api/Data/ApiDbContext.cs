@@ -8,7 +8,6 @@ public class ApiDbContext(DbContextOptions<ApiDbContext> options) : IdentityDbCo
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
     public DbSet<Folder> Folders => Set<Folder>();
     public DbSet<Course> Courses => Set<Course>();
-    public DbSet<CheatSheet> CheatSheets => Set<CheatSheet>();
     public DbSet<StoredFile> Files => Set<StoredFile>();
     public DbSet<Quiz> Quizzes => Set<Quiz>();
     public DbSet<QuizQuestion> QuizQuestions => Set<QuizQuestion>();
@@ -44,6 +43,8 @@ public class ApiDbContext(DbContextOptions<ApiDbContext> options) : IdentityDbCo
             e.HasIndex(f => new { f.UserId, f.Context, f.ParentId });
             e.HasOne<AppUser>().WithMany().HasForeignKey(f => f.UserId).OnDelete(DeleteBehavior.Cascade);
             e.HasOne<Folder>().WithMany().HasForeignKey(f => f.ParentId).OnDelete(DeleteBehavior.Cascade);
+            e.HasIndex(f => f.CourseId);
+            e.HasOne<Course>().WithMany().HasForeignKey(f => f.CourseId).OnDelete(DeleteBehavior.Cascade);
         });
 
         // Deleting a course deletes its study sets and files (see CoursesController); the keys only clear as a fallback.
@@ -55,13 +56,6 @@ public class ApiDbContext(DbContextOptions<ApiDbContext> options) : IdentityDbCo
             e.Property(c => c.Color).HasMaxLength(20);
             e.HasIndex(c => c.UserId);
             e.HasOne<AppUser>().WithMany().HasForeignKey(c => c.UserId).OnDelete(DeleteBehavior.Cascade);
-        });
-
-        b.Entity<CheatSheet>(e =>
-        {
-            e.Property(s => s.Title).HasMaxLength(255);
-            e.HasIndex(s => s.CourseId);
-            e.HasOne<Course>().WithMany().HasForeignKey(s => s.CourseId).OnDelete(DeleteBehavior.Cascade);
         });
 
         b.Entity<StoredFile>(e =>
@@ -80,6 +74,8 @@ public class ApiDbContext(DbContextOptions<ApiDbContext> options) : IdentityDbCo
         {
             e.Property(q => q.Name).HasMaxLength(255);
             e.Property(q => q.GenerationStatus).HasMaxLength(20);
+            e.Property(q => q.Kind).HasMaxLength(10).HasDefaultValue(QuizKind.Set);
+            e.Property(q => q.SourceQuizIds).HasDefaultValueSql("'{}'");
             e.Property(q => q.LastScore).HasPrecision(5, 2);
             e.HasIndex(q => new { q.UserId, q.FolderId });
             e.HasIndex(q => q.GenerationStatus);

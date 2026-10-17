@@ -9,6 +9,7 @@ using Microsoft.Extensions.Options;
 using StudyJit.Api.Auth;
 using StudyJit.Api.Data;
 using StudyJit.Api.Files;
+using StudyJit.Api.Quizzes;
 
 namespace StudyJit.Api.Controllers;
 
@@ -33,7 +34,8 @@ public record DeletedFileResponse(bool Success, int Id);
 
 /// <summary>The user's files: uploads (in chunks) and YouTube downloads, which quizzes are generated from.</summary>
 [Route("api/items/files")]
-public partial class FilesController(ApiDbContext db, ICurrentUser me, FileStorage storage, TimeProvider clock, IOptions<JsonOptions> json) : ApiControllerBase
+public partial class FilesController(ApiDbContext db, ICurrentUser me, FileStorage storage, TimeProvider clock, IOptions<JsonOptions> json,
+    StudySetSync studySets) : ApiControllerBase
 {
     /// <summary>Most a chunk may be (the web app sends 5 MB).</summary>
     const int MaxChunkBytes = 16 * 1024 * 1024;
@@ -62,6 +64,7 @@ public partial class FilesController(ApiDbContext db, ICurrentUser me, FileStora
         db.Files.Remove(file);
         await db.SaveChangesAsync();
         storage.Delete(file.Path);
+        await studySets.FoldersChangedAsync([file.FolderId], HttpContext.RequestAborted);
         return Ok(new DeletedFileResponse(true, id));
     }
 
@@ -77,6 +80,7 @@ public partial class FilesController(ApiDbContext db, ICurrentUser me, FileStora
         await db.SaveChangesAsync();
         foreach (var file in files)
             storage.Delete(file.Path);
+        await studySets.FoldersChangedAsync(files.Select(f => f.FolderId), HttpContext.RequestAborted);
         return Ok(Success());
     }
 
@@ -136,6 +140,8 @@ public partial class FilesController(ApiDbContext db, ICurrentUser me, FileStora
         int? courseId = int.TryParse(Request.Headers["X-Course"].ToString(), out var c) ? c : null;
         if (courseId != null && !await CoursesController.Owns(db, userId, courseId.Value, ct))
             return NotFoundError("Course not found.");
+        if (folderId != null && courseId != null && !await db.Folders.AnyAsync(f => f.Id == folderId && f.CourseId == courseId, ct))
+            return NotFoundError("Folder not found in this course.");
 
         var path = storage.PathFor(userId, fileName);
         if (start > 0 && (!System.IO.File.Exists(path) || new FileInfo(path).Length != start))
@@ -184,6 +190,7 @@ public partial class FilesController(ApiDbContext db, ICurrentUser me, FileStora
         var name = Path.GetFileName(path);
         // Uploading a file with the same name again replaces it.
         var existing = await db.Files.FirstOrDefaultAsync(f => f.UserId == userId && f.Path == path, ct);
+        var previousFolder = existing?.FolderId;
         var file = existing ?? db.Files.Add(new StoredFile { UserId = userId, Path = path }).Entity;
         file.Name = name;
         file.FolderId = folderId;
@@ -192,6 +199,8 @@ public partial class FilesController(ApiDbContext db, ICurrentUser me, FileStora
         file.MimeType = FileStorage.MimeTypeOf(name);
         file.UploadedAt = clock.GetUtcNow();
         await db.SaveChangesAsync(ct);
+        // A file landing in (or leaving) a course folder regenerates that folder's study set.
+        await studySets.FoldersChangedAsync([previousFolder, file.FolderId], ct);
     }
 
     [GeneratedRegex(@"^bytes (\d+)-(\d+)/(\d+)$")]
