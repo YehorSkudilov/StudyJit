@@ -72,15 +72,18 @@ export default function Navbar() {
 
   return (
     <nav className="print:hidden sticky top-0 z-[5000] w-full border-b border-stroke/70 bg-surface/75 backdrop-blur-xl">
-      <div className="mx-auto max-w-7xl h-16 px-4 sm:px-6 flex items-center gap-3">
-        <Link href="/home" className="flex items-center transition hover:opacity-80 flex-shrink-0">
-          <Logo size={34} showName={!context} />
-        </Link>
+      {/* Three columns, the outer two of equal width, so the tabs stay centred whatever sits beside them. */}
+      <div className="mx-auto max-w-7xl h-16 px-4 sm:px-6 grid grid-cols-[1fr_auto_1fr] items-center gap-3">
+        <div className="flex items-center gap-3 min-w-0">
+          <Link href="/home" className="flex items-center transition hover:opacity-80 flex-shrink-0">
+            <Logo size={34} showName={!context} />
+          </Link>
 
-        {context && <CourseSwitcher course={course} courses={courses} />}
+          {context && <CourseSwitcher course={course} courses={courses} />}
+        </div>
 
         {/* Tabs, with a pill that slides to the active one */}
-        <ul className={`hidden lg:flex items-center gap-1 rounded-full bg-surface-2 p-1 ${context ? 'ml-2' : 'mx-auto'}`}>
+        <ul className="hidden lg:flex items-center gap-1 rounded-full bg-surface-2 p-1">
           {tabs.map((tab) => (
             <li key={tab.href} className="relative">
               {tab.active && (
@@ -103,7 +106,7 @@ export default function Navbar() {
           ))}
         </ul>
 
-        <div className="ml-auto flex items-center gap-2">
+        <div className="col-start-3 flex items-center justify-end gap-2">
           <button
             className="icon-btn lg:hidden"
             onClick={() => setMenuOpen(!menuOpen)}
