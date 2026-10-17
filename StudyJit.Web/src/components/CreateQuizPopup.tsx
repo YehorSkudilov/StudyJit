@@ -1,7 +1,8 @@
 "use client";
 
-import { X, BookPlus, AlertCircle } from "lucide-react";
+import { AlertCircle, BookPlus, Loader2 } from "lucide-react";
 import { useState } from "react";
+import Modal from "@/components/ui/Modal";
 
 type CreateQuizPopupProps = {
   isOpen: boolean;
@@ -9,21 +10,16 @@ type CreateQuizPopupProps = {
   onCreateQuiz: (quizName: string, description?: string) => Promise<void> | void;
 };
 
-export default function CreateQuizPopup({
-  isOpen,
-  onClose,
-  onCreateQuiz,
-}: CreateQuizPopupProps) {
+export default function CreateQuizPopup({ isOpen, onClose, onCreateQuiz }: CreateQuizPopupProps) {
   const [quizName, setQuizName] = useState("");
   const [description, setDescription] = useState("");
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  if (!isOpen) return null;
-
-  const handleSubmit = async () => {
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
     if (!quizName.trim()) {
-      setError("Quiz name is required.");
+      setError("Give your study set a name.");
       return;
     }
 
@@ -51,80 +47,51 @@ export default function CreateQuizPopup({
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 px-4 sm:px-0">
-      <div
-        className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl 
-                   w-[90vw] sm:w-full sm:max-w-sm 
-                   max-h-[85vh] overflow-y-auto 
-                   p-5 sm:p-6 flex flex-col gap-4"
-      >
-        {/* Header */}
-        <div className="flex items-center justify-between">
-          <div className="w-12 sm:w-16"></div>
-          <h2 className="text-lg sm:text-xl font-bold text-gray-900 dark:text-gray-100 flex-1 text-center">
-            New Quiz
-          </h2>
-          <div className="w-12 sm:w-16 flex justify-end">
-            <button
-              onClick={handleCancel}
-              disabled={isSubmitting}
-              className={`text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 transition ${
-                isSubmitting ? "opacity-50 cursor-not-allowed" : ""
-              }`}
-            >
-              <X className="w-5 h-5" />
-            </button>
-          </div>
+    <Modal
+      isOpen={isOpen}
+      onClose={handleCancel}
+      locked={isSubmitting}
+      title="New study set"
+      icon={<BookPlus className="w-5 h-5" />}
+    >
+      <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+        <div>
+          <label className="label">Name</label>
+          <input
+            type="text"
+            placeholder="e.g. Cell Biology, Chapter 3"
+            value={quizName}
+            onChange={(e) => setQuizName(e.target.value)}
+            disabled={isSubmitting}
+            className="input"
+            autoFocus
+          />
+        </div>
+        <div>
+          <label className="label">Description (optional)</label>
+          <textarea
+            placeholder="What's it about?"
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            disabled={isSubmitting}
+            className="input resize-none h-24"
+          />
         </div>
 
-        {/* Input fields */}
-        <input
-          type="text"
-          placeholder="Enter Quiz Title"
-          value={quizName}
-          onChange={(e) => setQuizName(e.target.value)}
-          disabled={isSubmitting}
-          className="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 
-                     focus:outline-none focus:ring-2 focus:ring-blue-500 
-                     dark:bg-gray-700 dark:text-gray-100 disabled:opacity-50 
-                     text-base sm:text-lg"
-        />
-
-        <textarea
-          placeholder="Enter Quiz Description (optional)"
-          value={description}
-          onChange={(e) => setDescription(e.target.value)}
-          disabled={isSubmitting}
-          className="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 
-                     focus:outline-none focus:ring-2 focus:ring-blue-500 
-                     dark:bg-gray-700 dark:text-gray-100 resize-none 
-                     h-24 disabled:opacity-50 text-base sm:text-lg"
-        />
-
-        {/* Error Message */}
         {error && (
-          <div className="flex items-center gap-2 text-red-600 dark:text-red-400 text-sm">
+          <div className="flex items-center gap-2 text-red-500 text-sm">
             <AlertCircle className="w-4 h-4" />
             {error}
           </div>
         )}
 
-        {/* Create Button */}
-        <button
-          onClick={handleSubmit}
-          disabled={isSubmitting}
-          className={`w-full py-2 sm:py-2.5 rounded-lg flex justify-center items-center gap-2 
-                     text-white font-medium text-base sm:text-lg transition-all 
-                     active:scale-[0.98] ${
-            isSubmitting
-              ? "bg-gray-400 cursor-not-allowed"
-              : "bg-blue-600 hover:bg-blue-700 shadow-md"
-          }`}
-        >
-          <BookPlus className="w-5 h-5" />
-          {isSubmitting ? "Creating..." : "Create Quiz"}
+        <p className="text-xs text-muted">Next you&apos;ll add your files and let the AI build questions, flashcards and a study guide.</p>
+
+        <button type="submit" disabled={isSubmitting} className="btn-primary w-full">
+          {isSubmitting ? <Loader2 className="w-5 h-5 animate-spin" /> : <BookPlus className="w-5 h-5" />}
+          {isSubmitting ? "Creating…" : "Create study set"}
         </button>
-      </div>
-    </div>
+      </form>
+    </Modal>
   );
 }

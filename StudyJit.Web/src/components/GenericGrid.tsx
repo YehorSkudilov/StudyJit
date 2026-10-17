@@ -85,8 +85,8 @@ function DropToParentZone() {
       className={`w-full h-14 mb-4 flex items-center justify-center rounded-lg border-2 border-dashed transition
         ${
           isOver
-            ? "border-blue-500 bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300"
-            : "border-gray-400/50 text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"
+            ? "border-brand bg-brand-soft text-brand"
+            : "border-stroke text-muted"
         }`}
     >
       Drop here to move up one level
@@ -111,9 +111,9 @@ function FolderDropWrapper({
   return (
     <div
       ref={setNodeRef}
-      className={`transition rounded-xl ${
+      className={`h-full transition rounded-2xl ${
         isOver
-          ? "ring-4 ring-blue-400 ring-offset-2 dark:ring-blue-500 scale-[1.02]"
+          ? "ring-4 ring-brand/60 ring-offset-2 ring-offset-background scale-[1.03]"
           : "ring-0"
       }`}
     >
@@ -141,6 +141,8 @@ export default function GenericGrid({
   onDropOnFolder,
   onDropToParent,
   context = "files",
+  emptyState,
+  onOpen,
 }: {
   items: Item[];
   selectedItems: string[];
@@ -157,6 +159,10 @@ export default function GenericGrid({
   ) => void | Promise<void>;
   onDropToParent?: (source: Item | Item[]) => void | Promise<void>;
   context?: "files" | "quizzes";
+  /** Shown instead of the grid when there's nothing in it. */
+  emptyState?: React.ReactNode;
+  /** A plain click (no modifier keys, nothing selected) opens the item instead of selecting it; return false to select it after all. */
+  onOpen?: (item: Item) => boolean | void;
 }) {
   /* -------------------- Prevent browser text selection -------------------- */
   useEffect(() => {
@@ -266,6 +272,11 @@ const handleItemClick = (e: React.MouseEvent, itemId: string) => {
   e.stopPropagation();
   const isSelected = selectedItems.includes(itemId);
 
+  if (onOpen && !e.shiftKey && !e.ctrlKey && !e.metaKey && selectedItems.length === 0) {
+    const item = items.find((i) => i.id === itemId);
+    if (item && onOpen(item) !== false) return;
+  }
+
   const idxOf = (id: string | null) =>
     id ? visibleItems.findIndex((i) => i.id === id) : -1;
 
@@ -348,8 +359,9 @@ const visibleItems = useMemo(() => {
         items={!isOverFolder ? visibleItems.map((i) => i.id) : []}
         strategy={rectSortingStrategy}
       >
+        {items.length === 0 && emptyState}
         <div className="grid gap-4 grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 items-stretch [grid-auto-rows:1fr] select-none">
-          {visibleItems.map((item) => {
+          {visibleItems.map((item, index) => {
             const isSelected = selectedItems.includes(item.id);
             const content = renderItem(item, isSelected, (e) =>
               handleItemClick(e, item.id)
@@ -357,12 +369,19 @@ const visibleItems = useMemo(() => {
 
             return (
               <SortableItem key={item.id} id={item.id} item={item}>
-                <FolderDropWrapper
-                  id={item.id}
-                  onHoverChange={(hover) => setIsOverFolder(hover)}
+                <motion.div
+                  className="h-full"
+                  initial={{ opacity: 0, y: 16, scale: 0.97 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  transition={{ delay: Math.min(index, 12) * 0.035, duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
                 >
-                  {content}
-                </FolderDropWrapper>
+                  <FolderDropWrapper
+                    id={item.id}
+                    onHoverChange={(hover) => setIsOverFolder(hover)}
+                  >
+                    {content}
+                  </FolderDropWrapper>
+                </motion.div>
               </SortableItem>
             );
           })}
@@ -381,7 +400,7 @@ const visibleItems = useMemo(() => {
           >
             {renderItem(mainDragged, true, () => {})}
             {draggingItems.length > 1 && (
-              <div className="absolute bottom-2 right-2 bg-blue-600 text-white text-xs px-2 py-1 rounded-full shadow-md">
+              <div className="absolute bottom-2 right-2 bg-brand text-white text-xs font-bold px-2 py-1 rounded-full shadow-md">
                 +{draggingItems.length - 1} more
               </div>
             )}

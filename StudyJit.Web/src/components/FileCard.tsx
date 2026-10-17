@@ -24,41 +24,21 @@ export default function FileCard({
   onClick,
   onDoubleClick,
 }: FileCardProps) {
+  const ext = fileName.includes(".") ? fileName.split(".").pop()!.toUpperCase().slice(0, 4) : "FILE";
   return (
     <div
       onClick={onClick}
       onDoubleClick={onDoubleClick}
-      className={`p-6 bg-white dark:bg-gray-800 rounded-xl shadow flex flex-col transition-colors hover:bg-blue-50 dark:hover:bg-gray-700 hover:shadow-md cursor-pointer ${
-        selected ? "ring-2 ring-blue-500" : ""
+      className={`card card-hover group h-full p-5 flex flex-col gap-3 cursor-pointer ${
+        selected ? "ring-2 ring-brand border-brand" : ""
       }`}
     >
-      <div className="flex items-center justify-between">
-        <div className="flex items-start gap-2 w-full">
-          <svg
-            className="w-6 h-6 text-gray-500 dark:text-gray-400 flex-shrink-0 mt-1"
-            xmlns="http://www.w3.org/2000/svg"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth="2"
-              d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8l-6-6z"
-            />
-          </svg>
-
-          {/* ✅ Full name shown, wraps naturally */}
-          <div className="flex flex-col flex-1 overflow-hidden">
-            <h3 className="font-semibold text-gray-900 dark:text-gray-100 break-words whitespace-normal">
-              {fileName}
-            </h3>
-            <span className="text-xs text-gray-500 dark:text-gray-300">
-              {formatSize(fileSize)}
-            </span>
-          </div>
-        </div>
+      <span className="w-10 h-10 rounded-xl bg-sky-500/15 text-sky-600 dark:text-sky-400 flex items-center justify-center text-[10px] font-extrabold tracking-wide transition group-hover:scale-110">
+        {ext}
+      </span>
+      <div className="min-w-0">
+        <h3 className="font-bold leading-snug break-words line-clamp-2">{fileName}</h3>
+        <span className="text-xs text-muted">{formatSize(fileSize)}</span>
       </div>
     </div>
   );

@@ -15,11 +15,8 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
-// Pages where Navbar should NOT be shown
-const NAVBAR_EXCLUDED_PAGES = [
-  "/login",
-  "/",
-];
+// Pages without the Navbar: the landing page and sign-in have their own, and study sessions take the whole screen.
+const NAVBAR_EXCLUDED_PAGES = ["/login", "/study"];
 
 export default function RootLayout({
   children,
@@ -27,16 +24,21 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   const pathname = usePathname();
-  
-  // Check if current page should hide navbar
-  const shouldShowNavbar = !NAVBAR_EXCLUDED_PAGES.some(
-    (excludedPath) => pathname === excludedPath || pathname?.startsWith(`${excludedPath}/`)
-  );
+
+  const shouldShowNavbar =
+    pathname !== "/" &&
+    !NAVBAR_EXCLUDED_PAGES.some((excludedPath) => pathname === excludedPath || pathname?.startsWith(`${excludedPath}/`));
 
   return (
     <html lang="en">
+      <head>
+        <title>StudyJit · Learn smarter with AI</title>
+        <meta
+          name="description"
+          content="Turn your notes into quizzes, flashcards, matching games and study guides, made by AI."
+        />
+      </head>
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
-        {/* Conditionally render Navbar */}
         {shouldShowNavbar && <Navbar />}
 
         <AuthGuard>{children}</AuthGuard>

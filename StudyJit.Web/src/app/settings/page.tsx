@@ -13,26 +13,26 @@ export default function AppSettingsPage() {
     setSettings((p) => ({ ...p, [key]: !p[key] }));
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-b from-blue-50 to-white dark:from-gray-900 dark:to-gray-800 text-gray-900 dark:text-gray-100 px-6">
+    <div className="min-h-[calc(100vh-4rem)] flex flex-col items-center justify-center px-6">
       {/* Card */}
-      <div className="bg-white dark:bg-gray-800 p-8 rounded-xl shadow-lg w-full max-w-xl text-center">
+      <div className="card p-8 w-full max-w-xl text-center">
         {/* ✅ Logo + App Name */}
         <div className="flex flex-col items-center mb-6">
           <Image
-            src="/images/logo.png"
-            alt="App Logo"
+            src="/images/logo-square.png"
+            alt="StudyJit"
             width={100}
             height={100}
             className="mb-2"
             priority
           />
-          <h1 className="text-3xl font-extrabold text-blue-600 dark:text-blue-400">
-            StudyBuddy
+          <h1 className="text-3xl font-extrabold text-gradient">
+            StudyJit
           </h1>
         </div>
 
         {/* Title */}
-        <h2 className="text-2xl font-bold text-blue-600 dark:text-blue-400 mb-8">
+        <h2 className="text-2xl font-bold text-gradient mb-8">
           App Settings
         </h2>
 
@@ -55,7 +55,7 @@ export default function AppSettingsPage() {
         </div>
 
         {/* Save Button */}
-        <button className="w-full mt-8 py-3 bg-blue-600 text-white font-semibold rounded-full hover:bg-blue-700 transition">
+        <button className="btn-primary w-full py-3 mt-8">
           Save Settings
         </button>
       </div>

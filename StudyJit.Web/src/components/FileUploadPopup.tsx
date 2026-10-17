@@ -1,5 +1,7 @@
 "use client";
 
+import Modal from "@/components/ui/Modal";
+
 import {
   X,
   File,
@@ -154,30 +156,7 @@ export default function FileUploadPopup({
 
   /* ---------------- UI ---------------- */
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 px-4">
-      <div
-        className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl 
-                   w-[90vw] sm:w-full sm:max-w-md 
-                   max-h-[85vh] overflow-y-auto 
-                   p-5 sm:p-6 flex flex-col gap-5"
-      >
-        {/* Header */}
-        <div className="flex items-center justify-between">
-          <div className="w-10" />
-          <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100 flex-1 text-center">
-            Upload Files or YouTube Links
-          </h2>
-          <button
-            onClick={handleCancel}
-            disabled={isUploading}
-            className={`text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 transition ${
-              isUploading ? "opacity-50 cursor-not-allowed" : ""
-            }`}
-          >
-            <X className="w-5 h-5" />
-          </button>
-        </div>
-
+    <Modal isOpen onClose={handleCancel} locked={isUploading} title="Upload files" icon={<UploadCloud className="w-5 h-5" />}>
         {/* File Drop Area */}
         <div
           onDrop={handleDrop}
@@ -185,17 +164,17 @@ export default function FileUploadPopup({
           onDragLeave={handleDragLeave}
           className={`flex flex-col gap-4 border-2 border-dashed rounded-xl p-5 transition-colors ${
             isDragging
-              ? "border-blue-500 bg-blue-50 dark:bg-gray-700/30"
-              : "border-gray-300 dark:border-gray-600"
+              ? "border-brand bg-brand-soft scale-[1.01]"
+              : "border-stroke hover:border-brand/50"
           }`}
         >
-          <div className="flex flex-col items-center text-gray-500 dark:text-gray-300 text-center gap-2">
-            <UploadCloud className="w-8 h-8" />
+          <div className="flex flex-col items-center text-muted text-center gap-2">
+            <span className="w-14 h-14 rounded-2xl bg-brand-soft text-brand flex items-center justify-center"><UploadCloud className="w-7 h-7" /></span>
             <p className="text-sm">
               Drag & drop files here or{" "}
               <label
                 htmlFor="fileInput"
-                className="text-blue-600 dark:text-blue-400 cursor-pointer hover:underline"
+                className="text-brand font-semibold cursor-pointer hover:underline"
               >
                 browse
               </label>
@@ -219,33 +198,33 @@ export default function FileUploadPopup({
                 return (
                   <div
                     key={idx}
-                    className="flex items-start gap-3 p-3 bg-gray-100 dark:bg-gray-700 rounded-lg shadow-inner"
+                    className="flex items-start gap-3 p-3 bg-surface-2 rounded-xl"
                   >
                     {item.type === "file" ? (
-                      <File className="w-6 h-6 text-blue-500" />
+                      <File className="w-6 h-6 text-brand" />
                     ) : (
                       <Youtube className="w-6 h-6 text-red-600" />
                     )}
                     <div className="flex flex-col w-full">
-                      <span className="text-gray-900 dark:text-gray-100 font-medium break-all">
+                      <span className="font-medium break-all">
                         {item.type === "file"
                           ? item.file.name
                           : item.url.replace(/^https?:\/\//, "")}
                       </span>
-                      <span className="text-sm text-gray-500 dark:text-gray-400">
+                      <span className="text-sm text-muted">
                         {item.type === "file"
                           ? `${(item.file.size / 1024 / 1024).toFixed(2)} MB`
                           : "YouTube video"}
                       </span>
                       {isUploading && progress !== undefined && (
                         <>
-                          <div className="mt-2 w-full bg-gray-200 dark:bg-gray-600 rounded-full h-2 overflow-hidden">
+                          <div className="mt-2 w-full bg-stroke rounded-full h-2 overflow-hidden">
                             <div
-                              className="bg-blue-600 h-2 transition-all duration-300 ease-out"
+                              className="bg-gradient-to-r from-brand to-brand-2 h-2 transition-all duration-300 ease-out"
                               style={{ width: `${progress}%` }}
                             />
                           </div>
-                          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                          <p className="text-xs text-muted mt-1">
                             {progress.toFixed(1)}% uploaded
                           </p>
                         </>
@@ -269,27 +248,21 @@ export default function FileUploadPopup({
 {/* YouTube Link Input (mobile-optimized) */}
 <div className="flex flex-col sm:flex-row sm:items-center gap-3">
   <div className="flex items-center gap-2 w-full">
-    <Link2 className="w-5 h-5 text-gray-500 shrink-0" />
+    <Link2 className="w-5 h-5 text-muted shrink-0" />
     <input
       type="url"
       placeholder="https://www.youtube.com/watch?v=..."
       value={youtubeUrl}
       onChange={(e) => setYoutubeUrl(e.target.value)}
       disabled={isUploading}
-      className="flex-1 px-3 py-2 text-sm sm:text-base border rounded-lg focus:outline-none focus:ring-2 
-                 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:focus:ring-blue-400 
-                 placeholder-gray-400 dark:placeholder-gray-500"
+      className="input flex-1 py-2 text-sm"
     />
   </div>
 
   <button
     onClick={handleAddYoutube}
     disabled={isUploading || !youtubeUrl.trim()}
-    className={`w-full sm:w-auto px-4 py-2 rounded-lg font-medium text-white flex items-center justify-center gap-2 transition-all
-      ${isUploading || !youtubeUrl.trim()
-        ? "bg-gray-400 cursor-not-allowed"
-        : "bg-red-600 hover:bg-red-700 active:scale-[0.98]"
-      }`}
+    className="btn w-full sm:w-auto text-white bg-red-600 hover:bg-red-700 px-4 py-2"
   >
     <Youtube className="w-4 h-4" /> <span className="hidden sm:inline">Add</span>
   </button>
@@ -297,7 +270,7 @@ export default function FileUploadPopup({
 
         {/* Error Message */}
         {error && (
-          <div className="flex items-center gap-2 text-red-600 dark:text-red-400 text-sm">
+          <div className="flex items-center gap-2 text-red-500 text-sm">
             <AlertCircle className="w-4 h-4" /> {error}
           </div>
         )}
@@ -306,12 +279,7 @@ export default function FileUploadPopup({
         <button
           onClick={handleUploadSubmit}
           disabled={uploadItems.length === 0 || isUploading}
-          className={`w-full py-2 sm:py-2.5 rounded-lg font-medium flex items-center justify-center gap-2 
-                       text-base sm:text-lg transition-all active:scale-[0.98] ${
-            uploadItems.length > 0 && !isUploading
-              ? "bg-blue-600 text-white hover:bg-blue-700 shadow-md"
-              : "bg-gray-400 text-gray-200 cursor-not-allowed"
-          }`}
+          className="btn-primary w-full"
         >
           {isUploading ? (
             <>
@@ -322,7 +290,6 @@ export default function FileUploadPopup({
             "Upload All"
           )}
         </button>
-      </div>
-    </div>
+    </Modal>
   );
 }

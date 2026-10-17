@@ -4,6 +4,6 @@ export interface Item {
   name: string;
   description?: string;
   size?: number;
-  generation_status?: "pending" | "success" | "failed" | null;
+  generation_status?: "never_generated" | "queued" | "pending" | "success" | "failed" | null;
   [key: string]: any;
 }

@@ -100,7 +100,7 @@ export default function ProfilePage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-b from-blue-50 to-white dark:from-gray-900 dark:to-gray-800">
+      <div className="min-h-[calc(100vh-4rem)] flex items-center justify-center">
         <div className="text-center">
           <div className="w-16 h-16 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
           <p className="text-gray-600 dark:text-gray-400">Loading profile...</p>
@@ -110,9 +110,9 @@ export default function ProfilePage() {
   }
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-b from-blue-50 to-white dark:from-gray-900 dark:to-gray-800 text-gray-900 dark:text-gray-100 px-6 py-12">
-      <div className="bg-white dark:bg-gray-800 p-8 rounded-xl shadow-lg w-full max-w-2xl">
-        <h2 className="text-3xl font-bold text-blue-600 dark:text-blue-400 mb-6 text-center">
+    <div className="min-h-[calc(100vh-4rem)] flex flex-col items-center justify-center px-6 py-12">
+      <div className="card p-8 w-full max-w-2xl">
+        <h2 className="text-3xl font-bold text-gradient mb-6 text-center">
           Your Profile
         </h2>
 
@@ -138,7 +138,7 @@ export default function ProfilePage() {
               type="text"
               value={profile.name}
               onChange={(e) => setProfile({ ...profile, name: e.target.value })}
-              className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-transparent focus:ring-2 focus:ring-blue-400 focus:border-transparent transition"
+              className="input"
               required
             />
           </div>
@@ -152,7 +152,7 @@ export default function ProfilePage() {
               type="email"
               value={profile.email}
               onChange={(e) => setProfile({ ...profile, email: e.target.value })}
-              className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-transparent focus:ring-2 focus:ring-blue-400 focus:border-transparent transition"
+              className="input"
               required
             />
           </div>
@@ -166,7 +166,7 @@ export default function ProfilePage() {
               rows={4}
               value={profile.bio}
               onChange={(e) => setProfile({ ...profile, bio: e.target.value })}
-              className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-transparent focus:ring-2 focus:ring-blue-400 focus:border-transparent resize-none transition"
+              className="input resize-none"
             />
           </div>
 
@@ -188,7 +188,7 @@ export default function ProfilePage() {
                     setProfile({ ...profile, currentPassword: e.target.value })
                   }
                   placeholder="Enter current password"
-                  className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-transparent focus:ring-2 focus:ring-blue-400 focus:border-transparent transition"
+                  className="input"
                 />
               </div>
 
@@ -202,7 +202,7 @@ export default function ProfilePage() {
                   value={profile.newPassword}
                   onChange={(e) => setProfile({ ...profile, newPassword: e.target.value })}
                   placeholder="Enter new password"
-                  className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-transparent focus:ring-2 focus:ring-blue-400 focus:border-transparent transition"
+                  className="input"
                 />
               </div>
 
@@ -234,7 +234,7 @@ export default function ProfilePage() {
           <button
             type="submit"
             disabled={saving}
-            className="w-full py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white font-semibold rounded-lg transition flex items-center justify-center"
+            className="btn-primary w-full py-3"
           >
             {saving ? (
               <>

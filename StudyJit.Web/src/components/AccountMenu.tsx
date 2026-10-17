@@ -1,6 +1,8 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
+import Link from 'next/link';
+import { AnimatePresence, motion } from 'framer-motion';
 import { UserCircle, LogOut, Settings, Mail, Info } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { signOut } from '@/lib/api';
@@ -27,49 +29,51 @@ export default function AccountMenu() {
   };
 
   return (
-    <div className="relative inline-block text-left" ref={menuRef}>
+    <div className="relative" ref={menuRef}>
       <button
         onClick={() => setOpen(!open)}
-        className="group flex items-center justify-center w-10 h-10 rounded-full bg-gray-800 hover:bg-gray-700 transition shadow-md"
+        aria-label="Account"
+        className="flex items-center justify-center w-10 h-10 rounded-full bg-gradient-to-br from-brand to-brand-2 text-white shadow-md transition hover:scale-105 active:scale-95"
       >
-        <UserCircle size={22} className="text-gray-100 group-hover:text-white transition" />
+        <UserCircle size={22} />
       </button>
 
-      {open && (
-<div
-  className="fixed right-8 top-19 w-52 rounded-xl border border-gray-700/40 dark:border-gray-300/30
-             bg-white dark:bg-gray-900 shadow-[0_4px_18px_rgba(0,0,0,0.2)] overflow-hidden z-[3000]"
->
-
-          <div className="py-1 text-sm">
-            <MenuItem href="/profile" icon={<UserCircle size={18} />} text="Profile" />
-            <MenuItem href="/settings" icon={<Settings size={18} />} text="Settings" />
-            <MenuItem href="/contact" icon={<Mail size={18} />} text="Contact" />
-            <MenuItem href="/about" icon={<Info size={18} />} text="About" />
-
-            {/* Divider uses same tone as text */}
-            <hr className="border-gray-700/40 dark:border-gray-300/30 my-1" />
-
+      <AnimatePresence>
+        {open && (
+          <motion.div
+            initial={{ opacity: 0, y: -8, scale: 0.96 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -8, scale: 0.96 }}
+            transition={{ duration: 0.16 }}
+            style={{ transformOrigin: 'top right' }}
+            className="absolute right-0 mt-2 w-56 card p-1.5 z-[3000]"
+          >
+            <MenuItem href="/profile" icon={<UserCircle size={18} />} text="Profile" onClick={() => setOpen(false)} />
+            <MenuItem href="/settings" icon={<Settings size={18} />} text="Settings" onClick={() => setOpen(false)} />
+            <MenuItem href="/contact" icon={<Mail size={18} />} text="Contact" onClick={() => setOpen(false)} />
+            <MenuItem href="/about" icon={<Info size={18} />} text="About" onClick={() => setOpen(false)} />
+            <hr className="border-stroke my-1.5" />
             <button
               onClick={handleLogout}
-              className="w-full flex items-center gap-2 px-4 py-2 text-red-600 hover:bg-red-100 dark:hover:bg-red-900/30 transition"
+              className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-red-500 hover:bg-red-500/10 transition"
             >
-              <LogOut size={18} /> Logout
+              <LogOut size={18} /> Log out
             </button>
-          </div>
-        </div>
-      )}
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
 
-function MenuItem({ href, icon, text }: { href: string; icon: React.ReactNode; text: string }) {
+function MenuItem({ href, icon, text, onClick }: { href: string; icon: React.ReactNode; text: string; onClick: () => void }) {
   return (
-    <a
+    <Link
       href={href}
-      className="flex items-center gap-2 px-4 py-2 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 transition"
+      onClick={onClick}
+      className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-muted hover:bg-surface-2 hover:text-foreground transition"
     >
       {icon} {text}
-    </a>
+    </Link>
   );
 }

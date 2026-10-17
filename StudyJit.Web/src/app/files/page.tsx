@@ -2,6 +2,7 @@
 import { apiFetch } from "@/lib/api";
 import React, { useEffect, useState } from "react";
 import PageHeader from "@/components/PageHeader";
+import EmptyState, { SkeletonGrid } from "@/components/ui/EmptyState";
 import GenericGrid from "@/components/GenericGrid";
 import FileCard from "@/components/FileCard";
 import FolderCard from "@/components/FolderCard";
@@ -11,7 +12,9 @@ import CreateFolderPopup from "@/components/CreateFolderPopup";
 import GenericActionPopup from "@/components/GenericActionPopup";
 import AlertPopup from "@/components/AlertPopup";
 import { Item } from "@/types/Item";
-import { File as FileIcon, FilePlus, FolderPlus, Folder, Trash2 } from "lucide-react";
+import { File as FileIcon, FilePlus, FolderPlus, Folder, Trash2,
+  UploadCloud,
+} from "lucide-react";
 
 type FolderCrumb = { id: string | null; name: string };
 
@@ -20,6 +23,7 @@ export default function FilesPage() {
   const [files, setFiles] = useState<Item[]>([]);
   const [displayItems, setDisplayItems] = useState<Item[]>([]);
   const [selectedItems, setSelectedItems] = useState<string[]>([]);
+  const [loaded, setLoaded] = useState(false);
   const [activeFolderId, setActiveFolderId] = useState<string | null>(null);
   const [activeFolderName, setActiveFolderName] = useState<string>("Files");
   const [folderStack, setFolderStack] = useState<FolderCrumb[]>([]);
@@ -85,6 +89,7 @@ export default function FilesPage() {
       folderId === null ? f.folder_id === null : f.folder_id === folderId
     );
     setDisplayItems([...folderData, ...visibleFiles]);
+    setLoaded(true);
   };
 
   useEffect(() => {
@@ -338,7 +343,7 @@ const handleYouTubeUpload = async (url: string, onProgress?: (p: number) => void
 
   /* ---------------- Render ---------------- */
   return (
-    <div className="min-h-screen flex flex-col bg-gray-50 dark:bg-gray-900">
+    <div className="page flex flex-col">
       <PageHeader
         title={activeFolderName}
         icon={activeFolderId ? Folder : FileIcon}
@@ -362,13 +367,27 @@ const handleYouTubeUpload = async (url: string, onProgress?: (p: number) => void
         ]}
       />
 
-      <main className="px-6 sm:px-20 pb-20">
+      <main className="mx-auto max-w-7xl w-full px-4 sm:px-6 pb-28">
         <GenericGrid
           items={displayItems}
           selectedItems={selectedItems}
           setSelectedItems={setSelectedItems}
           onDropOnFolder={handleDropOnFolder}
           onDropToParent={handleDropToParent}
+          onOpen={(item) => (item.type === "folder" ? handleDoubleClick(item) : false)}
+          emptyState={
+            !loaded ? (
+              <SkeletonGrid />
+            ) : (
+            <EmptyState
+              icon={UploadCloud}
+              title="Nothing here yet"
+              text="Upload lecture notes, slides, PDFs or images. You can then add them to any study set."
+              action="Upload files"
+              onAction={() => setIsActionChooserOpen(true)}
+            />
+            )
+          }
           renderItem={(item, isSelected, onClick) =>
             item.type === "folder" ? (
               <FolderCard

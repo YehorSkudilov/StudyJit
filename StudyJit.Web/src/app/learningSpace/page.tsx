@@ -18,8 +18,11 @@ import {
   FolderPlus,
   MoveRight,
   Trash2,
-  Folder, // 🟡 Add folder icon
+  Folder,
+  FolderOpen,
+  Sparkles,
 } from "lucide-react";
+import EmptyState, { SkeletonGrid } from "@/components/ui/EmptyState";
 import { useRouter } from "next/navigation";
 
 type FolderCrumb = { id: string | null; name: string };
@@ -29,6 +32,7 @@ export default function LearningSpace() {
   const [quizzes, setQuizzes] = useState<Item[]>([]);
   const [displayItems, setDisplayItems] = useState<Item[]>([]);
   const [selectedItems, setSelectedItems] = useState<string[]>([]);
+  const [loaded, setLoaded] = useState(false);
 
   const [activeFolderId, setActiveFolderId] = useState<string | null>(null);
   const [activeFolderName, setActiveFolderName] = useState<string>("Learning Space");
@@ -89,7 +93,10 @@ export default function LearningSpace() {
       name: q.name,
       type: "quiz",
       folder_id: q.folder_id ? q.folder_id.toString() : null,
+      description: q.description ?? "",
       last_score: q.last_score ?? null,
+      generation_status: q.generation_status ?? null,
+      question_count: q.questions?.length ?? 0,
     }));
     setQuizzes(mapped);
     return mapped;
@@ -102,6 +109,7 @@ export default function LearningSpace() {
       fetchQuizzes(folderId),
     ]);
     setDisplayItems([...folderData, ...quizData]);
+    setLoaded(true);
   };
 
   useEffect(() => {
@@ -289,7 +297,7 @@ const handleCreateQuiz = async (quizName: string, description?: string) => {
 
   /* ---------------- Render ---------------- */
   return (
-    <div className="min-h-screen flex flex-col bg-gray-50 dark:bg-gray-900">
+    <div className="page flex flex-col">
       <PageHeader
         title={activeFolderName}
         icon={activeFolderId ? Folder : BookOpen} // 🟢 Dynamically switch icon
@@ -313,13 +321,27 @@ const handleCreateQuiz = async (quizName: string, description?: string) => {
         ]}
       />
 
-      <main className="px-6 sm:px-20 pb-20">
+      <main className="mx-auto max-w-7xl w-full px-4 sm:px-6 pb-28">
         <GenericGrid
           items={displayItems}
           selectedItems={selectedItems}
           setSelectedItems={setSelectedItems}
           onDropOnFolder={handleDropOnFolder}
           onDropToParent={handleDropToParent}
+          onOpen={handleDoubleClick}
+          emptyState={
+            !loaded ? (
+              <SkeletonGrid />
+            ) : (
+            <EmptyState
+              icon={activeFolderId ? FolderOpen : Sparkles}
+              title={activeFolderId ? "This folder is empty" : "Create your first study set"}
+              text="A study set turns your notes into questions, flashcards, a matching game and a study guide. Give it a name, add your files, and let the AI do the rest."
+              action="New study set"
+              onAction={() => setIsCreateQuizOpen(true)}
+            />
+            )
+          }
           renderItem={(item, isSelected, onClick) =>
             item.type === "folder" ? (
               <FolderCard
@@ -332,7 +354,10 @@ const handleCreateQuiz = async (quizName: string, description?: string) => {
             ) : (
               <QuizCard
                 quizName={item.name}
+                description={item.description}
                 lastScore={item.last_score ?? null}
+                status={item.generation_status}
+                questionCount={item.question_count ?? 0}
                 selected={isSelected}
                 onClick={onClick}
                 onDoubleClick={() => handleDoubleClick(item)}
@@ -347,20 +372,20 @@ const handleCreateQuiz = async (quizName: string, description?: string) => {
       <GenericActionPopup
         isOpen={isActionChooserOpen}
         onClose={() => setIsActionChooserOpen(false)}
-        title="Create New"
+        title="Create"
         actions={[
           {
             key: "quiz",
-            title: "Create Quiz",
-            subtitle: "Add new quiz",
+            title: "New study set",
+            subtitle: "Quizzes, flashcards and more from your notes",
             color: "blue",
             icon: BookPlus,
             onClick: () => setIsCreateQuizOpen(true),
           },
           {
             key: "folder",
-            title: "Create Folder",
-            subtitle: "Organize quizzes",
+            title: "New folder",
+            subtitle: "Keep your study sets organised",
             color: "yellow",
             icon: FolderPlus,
             onClick: () => setIsCreateFolderOpen(true),

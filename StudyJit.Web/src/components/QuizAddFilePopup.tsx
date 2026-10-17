@@ -1,4 +1,6 @@
 "use client";
+
+import Modal from "@/components/ui/Modal";
 import { apiFetch } from "@/lib/api";
 
 import React, { useEffect, useState } from "react";
@@ -10,8 +12,7 @@ import {
   ChevronRight,
   ChevronDown,
   Check,
-  X,
-} from "lucide-react";
+  X, FilePlus2 } from "lucide-react";
 
 interface FileItem {
   id: number;
@@ -230,9 +231,9 @@ export default function QuizAddFilePopup({
               className={`flex items-start py-1 px-2 rounded cursor-pointer transition ${
                 node.type === "file"
                   ? selectedFiles.has(node.id)
-                    ? "bg-blue-100 dark:bg-blue-900 border border-blue-500"
-                    : "hover:bg-gray-100 dark:hover:bg-gray-700"
-                  : "hover:bg-gray-100 dark:hover:bg-gray-700"
+                    ? "bg-brand-soft border border-brand"
+                    : "hover:bg-surface-2"
+                  : "hover:bg-surface-2"
               }`}
               style={{ paddingLeft: `${depth * 14 + 6}px` }}
               onClick={() =>
@@ -268,7 +269,7 @@ export default function QuizAddFilePopup({
                     <div
                       className={`w-4 h-4 mt-[2px] rounded border flex items-center justify-center ${
                         selectedFiles.has(node.id)
-                          ? "bg-blue-500 border-blue-500"
+                          ? "bg-brand border-brand"
                           : "border-gray-300 dark:border-gray-600"
                       }`}
                     >
@@ -276,7 +277,7 @@ export default function QuizAddFilePopup({
                         <Check className="w-3 h-3 text-white" />
                       )}
                     </div>
-                    <File className="w-4 h-4 text-blue-500 mt-[2px]" />
+                    <File className="w-4 h-4 text-brand mt-[2px]" />
                     <span
                       className="text-gray-800 dark:text-gray-100 whitespace-normal break-words leading-snug text-sm max-w-[260px]"
                       style={{
@@ -310,47 +311,23 @@ export default function QuizAddFilePopup({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 px-4 sm:px-0">
-      <div
-        className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl
-                   w-[90vw] sm:w-full sm:max-w-lg
-                   max-h-[85vh] overflow-y-auto
-                   p-5 sm:p-6 flex flex-col gap-4"
-      >
-        {/* Header */}
-        <div className="flex items-center justify-between">
-          <div className="w-12 sm:w-16"></div>
-          <h2 className="text-lg sm:text-xl font-semibold text-center text-gray-900 dark:text-gray-100 flex-1">
-            Add Files to Quiz
-          </h2>
-          <div className="w-12 sm:w-16 flex justify-end">
-            <button
-              onClick={onClose}
-              className="text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 transition"
-            >
-              <X className="w-5 h-5" />
-            </button>
-          </div>
-        </div>
-
+    <Modal isOpen onClose={onClose} title="Add files" icon={<FilePlus2 className="w-5 h-5" />} width="max-w-lg">
         {/* 🔍 Search Bar */}
         <div className="relative">
-          <Search className="absolute left-3 top-2.5 text-gray-400 w-4 h-4" />
+          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted w-4 h-4" />
           <input
             type="text"
             placeholder="Search folders or files..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-9 pr-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 
-                       bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-gray-100 
-                       focus:ring-2 focus:ring-blue-500 text-sm sm:text-base"
+            className="input pl-10"
           />
         </div>
 
         {/* 📁 Tree */}
-        <div className="flex-1 overflow-y-auto border border-gray-200 dark:border-gray-700 rounded-lg p-2">
+        <div className="flex-1 overflow-y-auto border border-stroke rounded-xl p-2 min-h-48">
           {tree.length === 0 ? (
-            <p className="text-gray-500 dark:text-gray-400 text-center py-8 text-sm sm:text-base">
+            <p className="text-muted text-center py-8 text-sm sm:text-base">
               No folders or files found.
             </p>
           ) : (
@@ -369,25 +346,18 @@ export default function QuizAddFilePopup({
         <div className="flex flex-col sm:flex-row sm:justify-end gap-2 mt-3">
           <button
             onClick={onClose}
-            className="px-4 py-2 rounded-lg bg-gray-300 dark:bg-gray-600 
-                       text-gray-800 dark:text-gray-200 hover:bg-gray-400 
-                       dark:hover:bg-gray-500 transition text-sm sm:text-base active:scale-[0.98]"
+            className="btn-secondary"
           >
             Cancel
           </button>
           <button
             onClick={handleAddFiles}
             disabled={selectedFiles.size === 0}
-            className={`px-4 py-2 rounded-lg text-sm sm:text-base transition-all active:scale-[0.98] ${
-              selectedFiles.size > 0
-                ? "bg-blue-600 text-white hover:bg-blue-700 shadow-md"
-                : "bg-gray-200 dark:bg-gray-700 text-gray-400 dark:text-gray-500 cursor-not-allowed"
-            }`}
+            className="btn-primary"
           >
             Add {selectedFiles.size > 0 ? `(${selectedFiles.size})` : ""}
           </button>
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 }

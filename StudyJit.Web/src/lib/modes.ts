@@ -1,0 +1,86 @@
+import { BookOpenText, Brain, ClipboardCheck, Layers, PenLine, Puzzle, Target, Zap, type LucideIcon } from "lucide-react";
+import type { StudyMode, StudyQuiz } from "@/lib/study";
+import { studyPairs, typeable } from "@/lib/study";
+
+export interface ModeInfo {
+  mode: StudyMode;
+  title: string;
+  blurb: string;
+  icon: LucideIcon;
+  gradient: string;
+  /** Why the mode can't run on this set, or null when it can. */
+  unavailable: (quiz: StudyQuiz) => string | null;
+}
+
+const needsQuestions = (q: StudyQuiz) => (q.questions.length ? null : "Generate questions first");
+
+export const modes: ModeInfo[] = [
+  {
+    mode: "learn",
+    title: "Learn",
+    blurb: "Adaptive rounds that repeat what you miss until it's mastered",
+    icon: Brain,
+    gradient: "from-violet-500 to-fuchsia-500",
+    unavailable: needsQuestions,
+  },
+  {
+    mode: "flashcards",
+    title: "Flashcards",
+    blurb: "Flip, swipe and sort into “know it” and “still learning”",
+    icon: Layers,
+    gradient: "from-sky-500 to-cyan-400",
+    unavailable: (q) => (studyPairs(q).length ? null : "Generate questions first"),
+  },
+  {
+    mode: "practice",
+    title: "Practice",
+    blurb: "One question at a time with instant feedback",
+    icon: Target,
+    gradient: "from-emerald-500 to-teal-400",
+    unavailable: needsQuestions,
+  },
+  {
+    mode: "test",
+    title: "Test",
+    blurb: "Mixed question types, optional timer, graded at the end",
+    icon: ClipboardCheck,
+    gradient: "from-blue-600 to-indigo-500",
+    unavailable: needsQuestions,
+  },
+  {
+    mode: "match",
+    title: "Match",
+    blurb: "Pair terms with definitions against the clock",
+    icon: Puzzle,
+    gradient: "from-amber-500 to-orange-500",
+    unavailable: (q) => (studyPairs(q).length >= 2 ? null : "Needs at least 2 terms"),
+  },
+  {
+    mode: "truefalse",
+    title: "True or False",
+    blurb: "A 60-second blitz: build a combo, beat your best",
+    icon: Zap,
+    gradient: "from-rose-500 to-pink-500",
+    unavailable: needsQuestions,
+  },
+  {
+    mode: "write",
+    title: "Write",
+    blurb: "Type answers from memory for the strongest recall",
+    icon: PenLine,
+    gradient: "from-lime-500 to-green-500",
+    unavailable: (q) => (q.terms.length || q.questions.some(typeable) ? null : "Regenerate to get key terms"),
+  },
+  {
+    mode: "guide",
+    title: "Study guide",
+    blurb: "An AI summary and glossary of your material",
+    icon: BookOpenText,
+    gradient: "from-slate-600 to-slate-400",
+    unavailable: (q) => (q.summary || q.terms.length ? null : "Regenerate to get a study guide"),
+  },
+];
+
+export const modeInfo = (mode: string) => modes.find((m) => m.mode === mode);
+
+export const studyHref = (quizId: number, mode: StudyMode) => `/study/${quizId}/${mode}`;

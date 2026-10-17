@@ -1,52 +1,70 @@
-import { CheckCircle } from "lucide-react";
+import { AlertTriangle, BookOpen, Loader2, Sparkles } from "lucide-react";
+import ScoreRing from "@/components/ui/ScoreRing";
 
 interface QuizCardProps {
   quizName: string;
-  lastScore?: number | null; // ✅ new prop for score
+  description?: string | null;
+  lastScore?: number | null;
+  status?: string | null;
+  questionCount?: number;
   selected: boolean;
   onClick: (e: React.MouseEvent) => void;
   onDoubleClick: () => void;
 }
 
+/** A quiz in the learning space: its state at a glance (ready, generating, failed) and the last score. */
 export default function QuizCard({
   quizName,
+  description,
   lastScore,
+  status,
+  questionCount = 0,
   selected,
   onClick,
   onDoubleClick,
 }: QuizCardProps) {
+  const generating = status === "queued" || status === "pending";
   return (
     <div
-      className={`p-6 bg-white dark:bg-gray-800 rounded-xl shadow flex flex-col gap-3 transition-colors hover:bg-blue-50 dark:hover:bg-gray-700 hover:shadow-md cursor-pointer
-        ${selected ? "ring-2 ring-blue-500" : ""}`}
+      className={`card card-hover group relative h-full p-5 flex flex-col gap-3 cursor-pointer overflow-hidden ${
+        selected ? "ring-2 ring-brand border-brand" : ""
+      }`}
       onClick={onClick}
       onDoubleClick={onDoubleClick}
     >
-      <div className="flex items-center gap-2">
-        <CheckCircle className="w-5 h-5 text-green-500" />
-        <h3 className="font-semibold truncate">{quizName}</h3>
+      <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-brand to-brand-2 opacity-0 transition group-hover:opacity-100" />
+      <div className="flex items-start justify-between gap-2">
+        <span className="w-10 h-10 rounded-xl bg-brand-soft text-brand flex items-center justify-center flex-shrink-0">
+          <BookOpen className="w-5 h-5" />
+        </span>
+        {lastScore != null && <ScoreRing percent={Number(lastScore)} size={44} stroke={5} animated={false} />}
       </div>
 
-      {lastScore !== null && lastScore !== undefined ? (
-        <p className="text-gray-700 dark:text-gray-300 text-sm">
-          Last Score:{" "}
-          <span
-            className={`font-semibold ${
-              lastScore >= 80
-                ? "text-green-600"
-                : lastScore >= 50
-                ? "text-yellow-500"
-                : "text-red-500"
-            }`}
-          >
-            {lastScore}%
+      <div className="min-w-0 flex-1">
+        <h3 className="font-bold leading-snug line-clamp-2 break-words">{quizName}</h3>
+        {description && <p className="mt-1 text-xs text-muted line-clamp-2">{description}</p>}
+      </div>
+
+      <div className="flex items-center gap-2 text-xs">
+        {generating ? (
+          <span className="chip bg-amber-500/15 text-amber-600 dark:text-amber-400">
+            <Loader2 className="w-3 h-3 animate-spin" /> Generating
           </span>
-        </p>
-      ) : (
-        <p className="text-gray-500 dark:text-gray-400 text-sm italic">
-          No score available
-        </p>
-      )}
+        ) : status === "failed" ? (
+          <span className="chip bg-red-500/15 text-red-600 dark:text-red-400">
+            <AlertTriangle className="w-3 h-3" /> Failed
+          </span>
+        ) : questionCount > 0 ? (
+          <span className="chip bg-emerald-500/15 text-emerald-600 dark:text-emerald-400">
+            {questionCount} questions
+          </span>
+        ) : (
+          <span className="chip bg-surface-2 text-muted">
+            <Sparkles className="w-3 h-3" /> Set up
+          </span>
+        )}
+        {lastScore == null && questionCount > 0 && !generating && <span className="text-muted">Not studied yet</span>}
+      </div>
     </div>
   );
 }
