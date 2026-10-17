@@ -20,7 +20,7 @@ import {
   X,
 } from "lucide-react";
 import AlertPopup from "@/components/AlertPopup";
-import QuizAddFilePopup from "@/components/QuizAddFilePopup";
+import CourseFilePicker from "@/components/courses/CourseFilePicker";
 import ScoreRing from "@/components/ui/ScoreRing";
 import { loadQuiz, type StudyQuiz } from "@/lib/study";
 import { modes, studyHref } from "@/lib/modes";
@@ -51,6 +51,7 @@ export default function QuizDetailsPage() {
   const [tab, setTab] = useState<"study" | "setup">("study");
   const [course, setCourse] = useState<Course | null>(null);
   const [courseFileList, setCourseFileList] = useState<CourseFile[]>([]);
+  const [courseId, setCourseId] = useState<number | null>(null);
 
   const [originalDocuments, setOriginalDocuments] = useState<DocumentItem[]>([]);
   const [stagedDocuments, setStagedDocuments] = useState<DocumentItem[]>([]);
@@ -75,7 +76,9 @@ export default function QuizDetailsPage() {
     setNumQuestions(data.num_questions || 15);
     setLastScore(data.last_score ?? null);
     setQueueNumber(data.queue_number ?? null);
+    setCourseId(data.course_id ?? null);
     if (data.course_id) {
+      sessionStorage.setItem("currentCourseId", String(data.course_id));
       getCourse(data.course_id).then(setCourse, () => setCourse(null));
       courseFiles(data.course_id).then(setCourseFileList, () => setCourseFileList([]));
     }
@@ -86,7 +89,7 @@ export default function QuizDetailsPage() {
   useEffect(() => {
     const storedId = sessionStorage.getItem("selectedQuizId");
     if (!storedId) {
-      router.push("/learningSpace");
+      router.push("/courses");
       return;
     }
     const id = Number(storedId);
@@ -203,10 +206,10 @@ export default function QuizDetailsPage() {
 
       <div className="mx-auto max-w-6xl px-4 sm:px-6 py-8">
         <button
-          onClick={() => router.push(course ? `/courses/${course.id}` : "/learningSpace")}
+          onClick={() => router.push(course ? `/courses/${course.id}/sets` : "/courses")}
           className="btn-ghost -ml-3 mb-4 px-3 py-1.5 text-sm"
         >
-          <ChevronLeft className="w-4 h-4" /> {course ? courseTitle(course) : "Study sets"}
+          <ChevronLeft className="w-4 h-4" /> {course ? courseTitle(course) : "Courses"}
         </button>
 
         {/* Hero */}
@@ -389,7 +392,7 @@ export default function QuizDetailsPage() {
                       className="w-full rounded-2xl border-2 border-dashed border-stroke py-10 text-muted hover:border-brand/50 hover:text-brand transition flex flex-col items-center gap-2"
                     >
                       <FileText className="w-8 h-8" />
-                      <span className="font-semibold">Add files from your library</span>
+                      <span className="font-semibold">Add files from this course</span>
                     </button>
                   ) : (
                     <ul className="flex flex-col gap-2">
@@ -492,11 +495,15 @@ export default function QuizDetailsPage() {
         </AnimatePresence>
       </div>
 
-      <QuizAddFilePopup
+      <CourseFilePicker
         isOpen={showFilePopup}
-        onClose={() => setShowFilePopup(false)}
+        courseId={courseId}
+        onClose={() => {
+          setShowFilePopup(false);
+          if (courseId) courseFiles(courseId).then(setCourseFileList, () => {});
+        }}
         existingFileIds={stagedDocuments.map((d) => d.id)}
-        onAddFiles={(files: DocumentItem[]) => setStagedDocuments((prev) => [...prev, ...files])}
+        onAddFiles={(files) => setStagedDocuments((prev) => [...prev, ...files])}
       />
     </div>
   );

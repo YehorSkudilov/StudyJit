@@ -8,6 +8,7 @@ public class ApiDbContext(DbContextOptions<ApiDbContext> options) : IdentityDbCo
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
     public DbSet<Folder> Folders => Set<Folder>();
     public DbSet<Course> Courses => Set<Course>();
+    public DbSet<CheatSheet> CheatSheets => Set<CheatSheet>();
     public DbSet<StoredFile> Files => Set<StoredFile>();
     public DbSet<Quiz> Quizzes => Set<Quiz>();
     public DbSet<QuizQuestion> QuizQuestions => Set<QuizQuestion>();
@@ -54,6 +55,13 @@ public class ApiDbContext(DbContextOptions<ApiDbContext> options) : IdentityDbCo
             e.Property(c => c.Color).HasMaxLength(20);
             e.HasIndex(c => c.UserId);
             e.HasOne<AppUser>().WithMany().HasForeignKey(c => c.UserId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        b.Entity<CheatSheet>(e =>
+        {
+            e.Property(s => s.Title).HasMaxLength(255);
+            e.HasIndex(s => s.CourseId);
+            e.HasOne<Course>().WithMany().HasForeignKey(s => s.CourseId).OnDelete(DeleteBehavior.Cascade);
         });
 
         b.Entity<StoredFile>(e =>

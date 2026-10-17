@@ -39,18 +39,3 @@ export default function EmptyState({
     </motion.div>
   );
 }
-
-/** Placeholder cards while a grid loads. */
-export function SkeletonGrid({ count = 10 }: { count?: number }) {
-  return (
-    <div className="grid gap-4 grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
-      {Array.from({ length: count }, (_, i) => (
-        <div key={i} className="card p-5 flex flex-col gap-3 h-36">
-          <div className="skeleton w-10 h-10 rounded-xl" />
-          <div className="skeleton h-4 w-3/4 rounded" />
-          <div className="skeleton h-3 w-1/2 rounded" />
-        </div>
-      ))}
-    </div>
-  );
-}

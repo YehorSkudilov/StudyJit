@@ -59,6 +59,20 @@ public class Course
     public DateTimeOffset CreatedAt { get; set; }
 }
 
+/// <summary>A condensed, printable summary of a course, written by the AI from its study sets.</summary>
+public class CheatSheet
+{
+    public int Id { get; set; }
+    public string UserId { get; set; } = "";
+    public int CourseId { get; set; }
+    public string Title { get; set; } = "";
+    /// <summary>What the user asked it to focus on, if anything.</summary>
+    public string Focus { get; set; } = "";
+    /// <summary>Markdown.</summary>
+    public string Content { get; set; } = "";
+    public DateTimeOffset CreatedAt { get; set; }
+}
+
 public class StoredFile
 {
     public int Id { get; set; }

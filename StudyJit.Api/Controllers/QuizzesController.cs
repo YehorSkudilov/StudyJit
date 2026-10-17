@@ -45,7 +45,14 @@ public record CreateQuizRequest(
 
 public record CreateQuizResponse(bool Success, int QuizId, int? FolderId, string Message);
 
-public record UpdateQuizRequest(int Id, string? Name, string? Description, string? Prompt, int? NumQuestions, decimal? LastScore);
+public record UpdateQuizRequest(
+    int Id,
+    string? Name,
+    string? Description,
+    string? Prompt,
+    int? NumQuestions,
+    decimal? LastScore,
+    [property: JsonPropertyName("course_id")] int? CourseId = null);
 
 public record SuccessMessageResponse(bool Success, string Message);
 
@@ -152,6 +159,12 @@ public class QuizzesController(ApiDbContext db, ICurrentUser me, TimeProvider cl
             quiz.Prompt = request.Prompt;
         if (request.NumQuestions != null)
             quiz.NumQuestions = Math.Clamp(request.NumQuestions.Value, 1, MaxQuestions);
+        if (request.CourseId != null)
+        {
+            if (!await CoursesController.Owns(db, me.Id, request.CourseId.Value))
+                return NotFoundError("Course not found.");
+            quiz.CourseId = request.CourseId;
+        }
         if (request.LastScore != null)
             quiz.LastScore = Math.Clamp(request.LastScore.Value, 0, 999.99m);
 

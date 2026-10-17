@@ -2,6 +2,7 @@
 // pasted course list and plan a course's study sets.
 
 import { apiFetch } from "@/lib/api";
+import type { Question, Term } from "@/lib/study";
 
 export interface Course {
   id: number;
@@ -170,3 +171,43 @@ export function formatBytes(size: number) {
   if (size < 1024 ** 3) return `${(size / 1024 ** 2).toFixed(1)} MB`;
   return `${(size / 1024 ** 3).toFixed(2)} GB`;
 }
+
+// ---------- Course-wide study and cheat sheets ----------
+
+export interface CheatSheet {
+  id: number;
+  title: string;
+  focus: string;
+  content: string;
+  created_at: string;
+}
+
+/** Every generated set's questions and key terms together, for studying the whole course at once. */
+export const courseStudy = async (id: number) =>
+  json<{ id: number; name: string; set_count: number; questions: Question[]; terms: Term[] }>(
+    await apiFetch(`/api/courses/${id}/study`, { cache: "no-store" }),
+    "Couldn't load this course's material."
+  );
+
+export const cheatSheets = async (id: number) =>
+  json<CheatSheet[]>(await apiFetch(`/api/courses/${id}/cheatsheets`, { cache: "no-store" }), "Couldn't load the cheat sheets.");
+
+export const createCheatSheet = async (id: number, focus: string, detailed: boolean) =>
+  json<CheatSheet>(await send(`/api/courses/${id}/cheatsheets`, "POST", { focus, detailed }), "Couldn't write the cheat sheet.");
+
+export const deleteCheatSheet = async (id: number, sheetId: number) =>
+  json(await send(`/api/courses/${id}/cheatsheets/${sheetId}`, "DELETE"), "Couldn't delete the cheat sheet.");
+
+/** The sections of a course page, which the navbar shows as tabs while you're in a course. */
+export const courseSections = [
+  { key: "", label: "Overview" },
+  { key: "sets", label: "Study sets" },
+  { key: "flashcards", label: "Flashcards" },
+  { key: "cheatsheets", label: "Cheat sheets" },
+  { key: "exam", label: "Exam prep" },
+  { key: "files", label: "Files" },
+] as const;
+
+export type CourseSection = (typeof courseSections)[number]["key"];
+
+export const courseHref = (id: number, section: CourseSection = "") => (section ? `/courses/${id}/${section}` : `/courses/${id}`);

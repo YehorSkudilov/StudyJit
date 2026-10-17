@@ -47,25 +47,37 @@ export async function loadQuiz(id: number): Promise<StudyQuiz> {
   };
 }
 
-export function useStudyQuiz(id: number | null) {
+/** A whole course's material as one set to study (a negative id, so no score is saved). */
+export async function loadCourseMaterial(courseId: number): Promise<StudyQuiz> {
+  const res = await apiFetch(`/api/courses/${courseId}/study`);
+  const data = await res.json();
+  if (!res.ok) throw new Error(data?.error || "Couldn't load this course.");
+  return { id: -courseId, name: data.name, description: "", summary: "", questions: data.questions, terms: data.terms, lastScore: null, status: "success" };
+}
+
+/** Loads a study set, or with a "c{courseId}" key a whole course. */
+export function useStudyQuiz(key: string) {
   const [quiz, setQuiz] = useState<StudyQuiz | null>(null);
   const [error, setError] = useState<string | null>(null);
   useEffect(() => {
-    if (id == null || Number.isNaN(id)) return;
+    const course = /^c(\d+)$/.exec(key);
+    const id = Number(key);
+    if (!course && Number.isNaN(id)) return;
     let live = true;
-    loadQuiz(id).then(
+    (course ? loadCourseMaterial(Number(course[1])) : loadQuiz(id)).then(
       (q) => live && setQuiz(q),
       (e) => live && setError((e as Error).message)
     );
     return () => {
       live = false;
     };
-  }, [id]);
+  }, [key]);
   return { quiz, error };
 }
 
 /** Records a percentage as the quiz's last score (what the learning space shows). */
 export async function saveScore(quizId: number, percent: number) {
+  if (quizId <= 0) return;
   try {
     await apiFetch("/api/items/quizzes/update", {
       method: "PATCH",

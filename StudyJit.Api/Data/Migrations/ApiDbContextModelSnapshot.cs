@@ -234,6 +234,44 @@ namespace StudyJit.Api.Data.Migrations
                     b.ToTable("AspNetUsers", (string)null);
                 });
 
+            modelBuilder.Entity("StudyJit.Api.Data.CheatSheet", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Content")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int>("CourseId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Focus")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CourseId");
+
+                    b.ToTable("CheatSheets");
+                });
+
             modelBuilder.Entity("StudyJit.Api.Data.Course", b =>
                 {
                     b.Property<int>("Id")
@@ -617,6 +655,15 @@ namespace StudyJit.Api.Data.Migrations
                     b.HasOne("StudyJit.Api.Data.AppUser", null)
                         .WithMany()
                         .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("StudyJit.Api.Data.CheatSheet", b =>
+                {
+                    b.HasOne("StudyJit.Api.Data.Course", null)
+                        .WithMany()
+                        .HasForeignKey("CourseId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
                 });

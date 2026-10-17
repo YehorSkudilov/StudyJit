@@ -118,5 +118,43 @@ public class CourseAssistant(OpenAiQuizClient openAi)
             .ToList();
     }
 
+    const string CheatSheetInstructions = """
+        You write cheat sheets: the condensed notes a student would bring into an exam or skim the night before. Work
+        from the course material given (study guides, key terms and quiz questions with explanations). If there's
+        none, write from what such a course normally covers.
+
+        Write Markdown only: "## " section headings, short "- " bullet points, **bold** for the terms and facts that
+        matter most, and compact "Term: meaning" lines. Include formulas, rules, steps, comparisons and the common
+        mistakes the questions reveal. No introduction and no closing remarks: every line should be worth its space.
+        Write in the language of the material.
+
+        title: a short title for the sheet, e.g. "Midterm cheat sheet" or "Sorting algorithms at a glance".
+        """;
+
+    /// <summary>Writes a cheat sheet for the course from its study material; returns its title and Markdown.</summary>
+    public async Task<(string Title, string Content)> CheatSheetAsync(string course, string material, string focus, bool detailed, CancellationToken ct)
+    {
+        var input = new StringBuilder();
+        input.AppendLine($"Course: {course}");
+        input.AppendLine(detailed
+            ? "Length: detailed, up to about 1200 words."
+            : "Length: one printed page, about 450 words at most.");
+        if (!string.IsNullOrWhiteSpace(focus))
+            input.AppendLine($"Focus on: {focus}");
+        input.AppendLine();
+        input.AppendLine(string.IsNullOrWhiteSpace(material) ? "No material yet." : material);
+        var text = input.ToString();
+
+        var schema = SchemaObject(new() { ["title"] = SchemaString(), ["content"] = SchemaString() });
+        var answer = await openAi.CompleteJsonAsync(CheatSheetInstructions, text.Length > MaxMaterialChars ? text[..MaxMaterialChars] : text, "cheat_sheet", schema, ct);
+        var content = Text(answer["content"]);
+        if (content.Length == 0)
+            throw new QuizGenerationException("The AI didn't write the cheat sheet. Please try again.");
+        var title = Text(answer["title"]);
+        return (title.Length == 0 ? "Cheat sheet" : title.Length > 255 ? title[..255] : title, content);
+    }
+
+    const int MaxMaterialChars = 120_000;
+
     static string Text(JsonNode? node) => node?.GetValue<string>()?.Trim() ?? "";
 }

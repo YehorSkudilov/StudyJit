@@ -28,21 +28,27 @@ const components = {
 export default function StudyPage() {
   const params = useParams<{ quizId: string; mode: string }>();
   const router = useRouter();
-  const quizId = Number(params.quizId);
-  const { quiz, error } = useStudyQuiz(quizId);
+  const courseId = /^c(\d+)$/.exec(params.quizId)?.[1];
+  const { quiz, error } = useStudyQuiz(params.quizId);
   const info = modeInfo(params.mode);
 
+  // A course-wide session goes back to the course's flashcards or exam prep; a study set back to its page.
   const exit = () => {
-    sessionStorage.setItem("selectedQuizId", String(quizId));
-    router.push(quiz ? `/quizDetails/${encodeURIComponent(quiz.name)}` : "/learningSpace");
+    if (courseId) {
+      const cardModes = ["flashcards", "match", "write"];
+      router.push(`/courses/${courseId}/${cardModes.includes(params.mode) ? "flashcards" : "exam"}`);
+      return;
+    }
+    sessionStorage.setItem("selectedQuizId", params.quizId);
+    router.push(quiz ? `/quizDetails/${encodeURIComponent(quiz.name)}` : "/courses");
   };
 
   if (error || !info) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center gap-4 px-6 text-center">
         <p className="text-xl font-bold">{error ?? "That study mode doesn't exist."}</p>
-        <button className="btn-primary" onClick={() => router.push("/learningSpace")}>
-          Back to my study sets
+        <button className="btn-primary" onClick={() => router.push("/courses")}>
+          Back to my courses
         </button>
       </div>
     );
