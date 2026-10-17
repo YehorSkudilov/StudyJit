@@ -1,0 +1,114 @@
+name: Publish API
+
+on:
+  workflow_dispatch:
+  # Lets Publish.yml call this as a reusable workflow - see that file's deploy-api job.
+  workflow_call:
+
+jobs:
+
+# ==================================================
+# DEPLOY API
+# ==================================================
+  deploy-api:
+    runs-on: ubuntu-latest
+
+    # Only deploy from the main branch
+    if: github.ref == 'refs/heads/main'
+
+    steps:
+      - name: Deploy over SSH
+        uses: appleboy/ssh-action@v1.2.2
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          command_timeout: 20m
+          script: |
+            set -e
+
+            echo "Deploying StudyJit API..."
+
+            # One-time setup on the server: git clone the repo to /opt/StudyJit.
+            cd /opt/StudyJit
+
+            echo "Pulling latest code..."
+            # The lock keeps deploys running side by side (API, website, admin) from resetting it at the same time.
+            flock /tmp/studyjit-deploy-git.lock -c "git fetch origin && git reset --hard origin/main"
+
+            cd StudyJit.Api
+
+            # Every API setting lives here (there are no appsettings files) - see StudyJit.Api/.env.example.
+            # The connection string, migrations, storage folder and trusted proxy network are set by docker-compose.yml.
+            echo "Writing .env..."
+            cat > .env <<'ENVEOF'
+            # Logging
+            Logging__LogLevel__Default=Information
+            Logging__LogLevel__Microsoft.AspNetCore=Warning
+            Logging__LogLevel__Microsoft.EntityFrameworkCore=Warning
+
+            # Database (docker-compose.yml creates it from these)
+            POSTGRES_USER=${{ vars.POSTGRES_USER || 'studyjit' }}
+            POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}
+            POSTGRES_DB=${{ vars.POSTGRES_DB || 'studyjit' }}
+
+            # JWT
+            Jwt__Issuer=studyjit-api
+            Jwt__Audience=studyjit-web
+            Jwt__SigningKey=${{ secrets.JWT_SIGNING_KEY }}
+            Jwt__AccessTokenMinutes=15
+            Jwt__RefreshTokenDays=30
+
+            # Swagger UI basic auth (/swagger)
+            SwaggerAuth__Username=${{ vars.SWAGGER_AUTH_USERNAME || 'admin' }}
+            SwaggerAuth__Password=${{ secrets.SWAGGER_AUTH_PASSWORD }}
+
+            # OpenAI for quiz generation
+            OpenAI__ApiKey=${{ secrets.OPENAI_API_KEY }}
+            OpenAI__Model=${{ vars.OPENAI_MODEL || 'gpt-5-mini' }}
+            OpenAI__ReasoningEffort=${{ vars.OPENAI_REASONING_EFFORT || 'low' }}
+
+            # Admin site: accounts made SuperAdmin at startup (register on the website first)
+            Admin__BootstrapEmails=${{ vars.ADMIN_BOOTSTRAP_EMAILS }}
+
+            # The website and the admin site, the only sites allowed to call the API from a browser
+            Cors__AllowedOrigins=${{ vars.WEB_URL }},${{ vars.ADMIN_WEB_URL }}
+
+            # Rate limits
+            RateLimiting__AuthPerMinute=10
+
+            # Host-side port the reverse proxy forwards to (consumed by docker-compose.yml)
+            API_PORT=${{ vars.API_PORT }}
+
+            # Loopback-only host port of the database (consumed by docker-compose.yml); kept off 5432 and GymBook's
+            # 55432 so it can't clash with another Postgres on the server
+            DB_PORT=${{ vars.DB_PORT || '55433' }}
+            ENVEOF
+
+            echo "Building latest image..."
+            docker compose build --pull
+
+            echo "Restarting containers..."
+            docker compose up -d --remove-orphans
+
+            echo "Waiting for the API to report healthy..."
+            PORT=$(grep '^API_PORT=' .env | cut -d= -f2)
+            for i in $(seq 1 30); do
+              if curl -fsS "http://127.0.0.1:$PORT/health" > /dev/null; then
+                echo "API is up."
+                break
+              fi
+              if [ "$i" = 30 ]; then
+                echo "API did not become healthy; recent logs:"
+                docker compose logs --tail 100 api
+                exit 1
+              fi
+              sleep 2
+            done
+
+            echo "Removing dangling images..."
+            # Deploys running side by side take turns (Docker runs one prune at a time), and a failed cleanup doesn't fail
+            # a deploy that already succeeded. The lock is GymBook's too, since they share the server.
+            flock /tmp/gymbook-docker-prune.lock docker image prune -f || echo "Couldn't remove dangling images; skipped."
+
+            echo "Deployment complete!"

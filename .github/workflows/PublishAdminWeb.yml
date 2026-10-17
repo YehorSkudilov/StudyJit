@@ -1,0 +1,75 @@
+name: Publish Admin Web
+
+on:
+  workflow_dispatch:
+  # Lets Publish.yml call this as a reusable workflow - see that file's deploy-admin-web job.
+  workflow_call:
+
+jobs:
+
+# ==================================================
+# DEPLOY WEB ADMIN
+# ==================================================
+  deploy-admin-web:
+    runs-on: ubuntu-latest
+
+    # Only deploy from the main branch
+    if: github.ref == 'refs/heads/main'
+
+    steps:
+      - name: Deploy over SSH
+        uses: appleboy/ssh-action@v1.2.2
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          command_timeout: 20m
+          script: |
+            set -e
+
+            echo "Deploying StudyJit web admin..."
+
+            # The same checkout the API deploys from (/opt/StudyJit). The lock keeps deploys running side by side
+            # from resetting it at the same time.
+            cd /opt/StudyJit
+
+            echo "Pulling latest code..."
+            flock /tmp/studyjit-deploy-git.lock -c "git fetch origin && git reset --hard origin/main"
+
+            cd StudyJit.AdminWeb
+
+            # See StudyJit.AdminWeb/.env.example. The API's address is baked into the page at build time; the API
+            # only answers this site if ADMIN_WEB_URL is its address (PublishApi turns it into Cors__AllowedOrigins).
+            echo "Writing .env..."
+            cat > .env <<'ENVEOF'
+            ADMIN_WEB_PORT=${{ vars.ADMIN_WEB_PORT }}
+            NEXT_PUBLIC_API_URL=${{ vars.API_BASE_URL }}
+            ENVEOF
+
+            echo "Building latest image..."
+            docker compose build --pull
+
+            echo "Restarting container..."
+            docker compose up -d --remove-orphans
+
+            echo "Waiting for the site to respond..."
+            PORT=$(grep '^ADMIN_WEB_PORT=' .env | cut -d= -f2)
+            for i in $(seq 1 30); do
+              if curl -fsS "http://127.0.0.1:$PORT/health" > /dev/null; then
+                echo "Web admin is up."
+                break
+              fi
+              if [ "$i" = 30 ]; then
+                echo "Web admin did not respond; recent logs:"
+                docker compose logs --tail 100 admin-web
+                exit 1
+              fi
+              sleep 2
+            done
+
+            echo "Removing dangling images..."
+            # Deploys running side by side take turns (Docker runs one prune at a time), and a failed cleanup doesn't fail
+            # a deploy that already succeeded. The lock is GymBook's too, since they share the server.
+            flock /tmp/gymbook-docker-prune.lock docker image prune -f || echo "Couldn't remove dangling images; skipped."
+
+            echo "Deployment complete!"

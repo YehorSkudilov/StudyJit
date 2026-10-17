@@ -1,7 +1,7 @@
 name: Publish
 
-# Thin orchestrator - the actual deploy lives in PublishWeb.yml, called here as a
-# reusable workflow so there's exactly one copy of it to maintain.
+# Thin orchestrator - the actual deploys live in PublishApi.yml, PublishWeb.yml and PublishAdminWeb.yml, called here
+# as reusable workflows so there's exactly one copy of each to maintain.
 permissions:
   contents: read
 
@@ -11,8 +11,22 @@ on:
 jobs:
 
   # ==================================================
+  # DEPLOY API
+  # ==================================================
+  deploy-api:
+    uses: ./.github/workflows/PublishApi.yml
+    secrets: inherit
+
+  # ==================================================
   # DEPLOY WEBSITE
   # ==================================================
   deploy-web:
     uses: ./.github/workflows/PublishWeb.yml
+    secrets: inherit
+
+  # ==================================================
+  # DEPLOY WEB ADMIN
+  # ==================================================
+  deploy-admin-web:
+    uses: ./.github/workflows/PublishAdminWeb.yml
     secrets: inherit

@@ -46,13 +46,13 @@ public class FoldersController(ApiDbContext db, ICurrentUser me, FileStorage sto
         int? parentId = ParseFolder(parent);
         var userId = me.Id;
 
-        var folders = db.Folders.Where(f => f.UserId == userId && f.Context == context && f.ParentId == parentId);
+        var folders = db.Folders.Where(f => f.UserId == userId && f.Context == context && f.ParentId == parentId).OrderBy(f => f.Name);
         var rows = context == FolderContext.Quizzes
             ? folders.Select(f => new FolderRow(f.Id, f.Name, f.ParentId,
                 db.Quizzes.Count(q => q.FolderId == f.Id) + db.Folders.Count(c => c.ParentId == f.Id)))
             : folders.Select(f => new FolderRow(f.Id, f.Name, f.ParentId,
                 db.Files.Count(x => x.FolderId == f.Id) + db.Folders.Count(c => c.ParentId == f.Id)));
-        return Ok(await rows.OrderBy(f => f.Name).ToListAsync());
+        return Ok(await rows.ToListAsync());
     }
 
     [HttpPost]

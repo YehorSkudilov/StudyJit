@@ -3,6 +3,7 @@ using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.ModelBinding;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using StudyJit.Api.Auth;
@@ -99,6 +100,7 @@ public partial class FilesController(ApiDbContext db, ICurrentUser me, FileStora
     /// </summary>
     [HttpPost("upload")]
     [RequestSizeLimit(MaxChunkBytes)]
+    [RawBody]
     [ProducesResponseType<ChunkResponse>(StatusCodes.Status200OK)]
     public async Task<IActionResult> Upload([FromServices] YouTubeDownloader youTube, CancellationToken ct)
     {
@@ -184,4 +186,24 @@ public partial class FilesController(ApiDbContext db, ICurrentUser me, FileStora
 
     [GeneratedRegex(@"^bytes (\d+)-(\d+)/(\d+)$")]
     private static partial Regex ContentRangePattern();
+}
+
+/// <summary>
+/// The action reads the request body itself: keeps MVC from reading it first as a form (a chunk sent with a form
+/// Content-Type would otherwise be consumed, or refused as too many form values).
+/// </summary>
+[AttributeUsage(AttributeTargets.Method)]
+public class RawBodyAttribute : Attribute, Microsoft.AspNetCore.Mvc.Filters.IResourceFilter
+{
+    public void OnResourceExecuting(Microsoft.AspNetCore.Mvc.Filters.ResourceExecutingContext context)
+    {
+        var factories = context.ValueProviderFactories;
+        factories.RemoveType<FormValueProviderFactory>();
+        factories.RemoveType<FormFileValueProviderFactory>();
+        factories.RemoveType<JQueryFormValueProviderFactory>();
+    }
+
+    public void OnResourceExecuted(Microsoft.AspNetCore.Mvc.Filters.ResourceExecutedContext context)
+    {
+    }
 }
