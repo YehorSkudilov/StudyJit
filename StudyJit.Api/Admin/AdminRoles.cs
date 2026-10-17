@@ -8,7 +8,7 @@ namespace StudyJit.Api.Admin;
 /// <list type="bullet">
 ///   <item><see cref="Admin"/>: sees every user, the stats and the generation queue, and can disable accounts, sign them
 ///   out and retry failed quizzes.</item>
-///   <item><see cref="SuperAdmin"/>: all of that, plus changing roles, deleting accounts and clearing the OpenAI account.</item>
+///   <item><see cref="SuperAdmin"/>: all of that, plus changing roles, and deleting accounts.</item>
 /// </list>
 /// The first SuperAdmin comes from Admin__BootstrapEmails (see <see cref="AdminBootstrapper"/>).
 /// </summary>

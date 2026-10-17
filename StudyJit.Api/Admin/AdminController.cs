@@ -65,8 +65,6 @@ public record SetRoleRequest(string? Role);
 
 public record CreateUserRequest(string? Email, string? Name, string? Password, string? Role);
 
-public record OpenAiCleanupResponse(int DeletedFiles, int DeletedVectorStores);
-
 /// <summary>The admin site's endpoints (StudyJit.AdminWeb). Admins and SuperAdmins only; some actions SuperAdmins only.</summary>
 [Route("api/admin")]
 [Authorize(Policy = AuthPolicies.AdminAccess)]
@@ -258,28 +256,6 @@ public class AdminController(ApiDbContext db, Microsoft.AspNetCore.Identity.User
             return NotFoundError("Quiz not found, or it's generating right now.");
         await queue.EnqueueAsync(id, ct);
         return Ok(Success());
-    }
-
-    /// <summary>
-    /// Deletes every file and vector store in the OpenAI account (whatever a crash mid-generation left behind). Don't run
-    /// it while a quiz is generating, or while anything else uses the same OpenAI account.
-    /// </summary>
-    [HttpPost("openai/cleanup")]
-    [Authorize(Policy = AuthPolicies.SuperAdminOnly)]
-    [ProducesResponseType<OpenAiCleanupResponse>(StatusCodes.Status200OK)]
-    public async Task<IActionResult> OpenAiCleanup(CancellationToken ct)
-    {
-        if (queue.Snapshot().Running != null)
-            return ConflictError("A quiz is generating right now. Try again once it's done.");
-        try
-        {
-            var (files, stores) = await openAi.DeleteEverythingAsync(ct);
-            return Ok(new OpenAiCleanupResponse(files, stores));
-        }
-        catch (QuizGenerationException e)
-        {
-            return Error(StatusCodes.Status502BadGateway, e.Message);
-        }
     }
 
     bool IsSuperAdmin => User.IsInRole(AdminRoles.SuperAdmin);

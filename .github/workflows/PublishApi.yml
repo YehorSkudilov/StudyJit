@@ -65,7 +65,7 @@ jobs:
 
             # OpenAI for quiz generation
             OpenAI__ApiKey=${{ secrets.OPENAI_API_KEY }}
-            OpenAI__Model=${{ vars.OPENAI_MODEL || 'gpt-5-mini' }}
+            OpenAI__Model=${{ vars.OPENAI_MODEL || 'gpt-6.1-sol' }}
             OpenAI__ReasoningEffort=${{ vars.OPENAI_REASONING_EFFORT || 'low' }}
 
             # Admin site: accounts made SuperAdmin at startup (register on the website first)

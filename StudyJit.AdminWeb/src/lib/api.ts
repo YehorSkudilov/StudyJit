@@ -227,11 +227,6 @@ export class AdminApi {
 
   generation = () => this.get<GenerationResponse>("api/admin/generation");
   retryQuiz = (id: number) => this.send("POST", `api/admin/quizzes/${id}/retry`);
-  /** SuperAdmin only. Deletes every file and vector store in the OpenAI account. */
-  openAiCleanup = async () => {
-    const response = await this.withToken("POST", "api/admin/openai/cleanup");
-    return (await response.json()) as { deletedFiles: number; deletedVectorStores: number };
-  };
 
   private async get<T>(path: string): Promise<T> {
     const response = await this.withToken("GET", path);

@@ -10,6 +10,7 @@ public class ApiDbContext(DbContextOptions<ApiDbContext> options) : IdentityDbCo
     public DbSet<StoredFile> Files => Set<StoredFile>();
     public DbSet<Quiz> Quizzes => Set<Quiz>();
     public DbSet<QuizQuestion> QuizQuestions => Set<QuizQuestion>();
+    public DbSet<QuizTerm> QuizTerms => Set<QuizTerm>();
     public DbSet<QuizFile> QuizFiles => Set<QuizFile>();
     public DbSet<ServerSetting> Settings => Set<ServerSetting>();
 
@@ -63,6 +64,7 @@ public class ApiDbContext(DbContextOptions<ApiDbContext> options) : IdentityDbCo
             e.HasOne<AppUser>().WithMany().HasForeignKey(q => q.UserId).OnDelete(DeleteBehavior.Cascade);
             e.HasOne<Folder>().WithMany().HasForeignKey(q => q.FolderId).OnDelete(DeleteBehavior.SetNull);
             e.HasMany(q => q.Questions).WithOne().HasForeignKey(q => q.QuizId).OnDelete(DeleteBehavior.Cascade);
+            e.HasMany(q => q.Terms).WithOne().HasForeignKey(t => t.QuizId).OnDelete(DeleteBehavior.Cascade);
         });
 
         b.Entity<QuizFile>(e =>

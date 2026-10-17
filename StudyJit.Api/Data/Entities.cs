@@ -79,9 +79,13 @@ public class Quiz
     /// <summary>Place in the generation queue while queued (1 = next).</summary>
     public int? QueueNumber { get; set; }
     public decimal? LastScore { get; set; }
+    /// <summary>A short study guide of the material, written with the questions.</summary>
+    public string? Summary { get; set; }
     public DateTimeOffset CreatedAt { get; set; }
 
     public List<QuizQuestion> Questions { get; set; } = [];
+    /// <summary>Key terms of the material, for flashcards and matching.</summary>
+    public List<QuizTerm> Terms { get; set; } = [];
 }
 
 public class QuizQuestion
@@ -92,6 +96,16 @@ public class QuizQuestion
     public List<string> Options { get; set; } = [];
     /// <summary>The text of the right option.</summary>
     public string CorrectAnswer { get; set; } = "";
+    /// <summary>Why the right option is right, shown after answering.</summary>
+    public string Explanation { get; set; } = "";
+}
+
+public class QuizTerm
+{
+    public int Id { get; set; }
+    public int QuizId { get; set; }
+    public string Term { get; set; } = "";
+    public string Definition { get; set; } = "";
 }
 
 /// <summary>A file a quiz is generated from.</summary>

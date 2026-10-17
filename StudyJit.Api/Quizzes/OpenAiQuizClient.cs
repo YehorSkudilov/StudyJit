@@ -8,7 +8,7 @@ public class OpenAiOptions
 {
     /// <summary>OpenAI__ApiKey in .env. Unset turns generation off.</summary>
     public string? ApiKey { get; set; }
-    public string Model { get; set; } = "gpt-5-mini";
+    public string Model { get; set; } = "gpt-6.1-sol";
     /// <summary>Sent as reasoning.effort for reasoning models; leave empty for models that don't take it.</summary>
     public string? ReasoningEffort { get; set; } = "low";
     public string BaseUrl { get; set; } = "https://api.openai.com/v1/";
@@ -18,7 +18,12 @@ public class OpenAiOptions
 /// <summary>The AI couldn't produce a usable quiz; <see cref="Exception.Message"/> is safe to show.</summary>
 public class QuizGenerationException(string message, Exception? inner = null) : Exception(message, inner);
 
-public record GeneratedQuestion(string Question, List<string> Options, string Correct);
+public record GeneratedQuestion(string Question, List<string> Options, string Correct, string Explanation);
+
+public record GeneratedTerm(string Term, string Definition);
+
+/// <summary>What one generation writes: the questions, plus a study guide and key terms for the other study modes.</summary>
+public record GeneratedQuiz(List<GeneratedQuestion> Questions, string Summary, List<GeneratedTerm> Terms);
 
 /// <summary>What a quiz is generated from: the topic, plus text, images and documents from the linked files.</summary>
 public class QuizSource
@@ -36,22 +41,34 @@ public class QuizSource
 }
 
 /// <summary>
-/// Writes multiple-choice questions with OpenAI's Responses API. Documents go into a vector store made for this one quiz
-/// (file_search), deleted again with their uploads once the questions are back. The answer is a strict JSON schema, and
-/// every question is checked before it's kept.
+/// Writes multiple-choice questions, a study guide and key terms with OpenAI's Responses API. Documents go into a vector
+/// store made for this one quiz (file_search), deleted again with their uploads once the questions are back; both are also
+/// set to expire on their own, so a crash mid-generation leaves nothing behind for long. The answer is a strict JSON
+/// schema, and every question is checked before it's kept.
 /// </summary>
 public class OpenAiQuizClient(HttpClient http, OpenAiOptions options, ILogger<OpenAiQuizClient> log)
 {
     public bool IsConfigured => !string.IsNullOrWhiteSpace(options.ApiKey);
 
     const string Instructions = """
-        You write multiple-choice quiz questions for a student revising. Base the questions on the attached material when
-        there is any (search it with file_search), otherwise on the topic. Each question has exactly four distinct options,
-        one of them right; "correct" is the exact text of the right option. Cover the material broadly, avoid trick
-        questions and "all of the above", and write in the language of the material.
+        You are an expert teacher preparing study material for a student revising. Base everything on the attached
+        material when there is any (search it with file_search), otherwise on the topic, and write in the language of the
+        material.
+
+        questions: multiple-choice questions. Each has exactly four distinct, plausible options of similar length, one of
+        them right; "correct" is the exact text of the right option. Test understanding and application, not just
+        recall; cover the material broadly; avoid trick questions, "all of the above" and "none of the above".
+        "explanation" says in one or two sentences why the right option is right (and, when useful, why a tempting
+        wrong one isn't).
+
+        summary: a concise study guide of the material in Markdown: a few "## " sections of short paragraphs and "- "
+        bullet points, with key ideas in **bold**. No more than about 400 words.
+
+        terms: the 8 to 20 most important terms, names or concepts, each with a short definition (one sentence) that
+        doesn't repeat the term itself.
         """;
 
-    public async Task<List<GeneratedQuestion>> GenerateAsync(QuizSource source, CancellationToken ct)
+    public async Task<GeneratedQuiz> GenerateAsync(QuizSource source, CancellationToken ct)
     {
         if (!IsConfigured)
             throw new QuizGenerationException("Quiz generation isn't set up on this server.");
@@ -129,39 +146,39 @@ public class OpenAiQuizClient(HttpClient http, OpenAiOptions options, ILogger<Op
         return text.ToString();
     }
 
-    static JsonObject Schema() => new()
+    static JsonObject Schema() => SchemaObject(new()
+    {
+        ["questions"] = SchemaArray(SchemaObject(new()
+        {
+            ["question"] = SchemaString(),
+            ["options"] = SchemaArray(SchemaString()),
+            ["correct"] = SchemaString(),
+            ["explanation"] = SchemaString(),
+        })),
+        ["summary"] = SchemaString(),
+        ["terms"] = SchemaArray(SchemaObject(new() { ["term"] = SchemaString(), ["definition"] = SchemaString() })),
+    });
+
+    /// <summary>A strict schema object: every property required, nothing else allowed.</summary>
+    static JsonObject SchemaObject(Dictionary<string, JsonNode> properties) => new()
     {
         ["type"] = "object",
         ["additionalProperties"] = false,
-        ["required"] = new JsonArray("questions"),
-        ["properties"] = new JsonObject
-        {
-            ["questions"] = new JsonObject
-            {
-                ["type"] = "array",
-                ["items"] = new JsonObject
-                {
-                    ["type"] = "object",
-                    ["additionalProperties"] = false,
-                    ["required"] = new JsonArray("question", "options", "correct"),
-                    ["properties"] = new JsonObject
-                    {
-                        ["question"] = new JsonObject { ["type"] = "string" },
-                        ["options"] = new JsonObject { ["type"] = "array", ["items"] = new JsonObject { ["type"] = "string" } },
-                        ["correct"] = new JsonObject { ["type"] = "string" },
-                    },
-                },
-            },
-        },
+        ["required"] = new JsonArray(properties.Keys.Select(k => (JsonNode)k).ToArray()),
+        ["properties"] = new JsonObject(properties.Select(p => KeyValuePair.Create(p.Key, (JsonNode?)p.Value))),
     };
 
-    /// <summary>Keeps the questions with four distinct options and a right answer among them.</summary>
-    static List<GeneratedQuestion> Check(string text, int wanted)
+    static JsonObject SchemaArray(JsonNode items) => new() { ["type"] = "array", ["items"] = items };
+
+    static JsonObject SchemaString() => new() { ["type"] = "string" };
+
+    /// <summary>Keeps the questions with four distinct options and a right answer among them, and the complete terms.</summary>
+    static GeneratedQuiz Check(string text, int wanted)
     {
-        List<GeneratedQuestion>? questions;
+        QuizJson? quiz;
         try
         {
-            questions = JsonSerializer.Deserialize<QuizJson>(text, JsonSerializerOptions.Web)?.Questions;
+            quiz = JsonSerializer.Deserialize<QuizJson>(text, JsonSerializerOptions.Web);
         }
         catch (JsonException e)
         {
@@ -169,20 +186,31 @@ public class OpenAiQuizClient(HttpClient http, OpenAiOptions options, ILogger<Op
         }
 
         var kept = new List<GeneratedQuestion>();
-        foreach (var q in questions ?? [])
+        foreach (var q in quiz?.Questions ?? [])
         {
             var opts = q.Options.Select(o => o.Trim()).Where(o => o.Length > 0).Distinct(StringComparer.OrdinalIgnoreCase).Take(4).ToList();
             var correct = opts.FirstOrDefault(o => string.Equals(o, q.Correct?.Trim(), StringComparison.OrdinalIgnoreCase));
             if (string.IsNullOrWhiteSpace(q.Question) || opts.Count != 4 || correct == null)
                 continue;
-            kept.Add(new GeneratedQuestion(q.Question.Trim(), opts, correct));
+            kept.Add(new GeneratedQuestion(q.Question.Trim(), opts, correct, q.Explanation?.Trim() ?? ""));
         }
         if (kept.Count == 0)
             throw new QuizGenerationException("The AI didn't write any usable questions. Please try again.");
-        return kept.Take(wanted).ToList();
+
+        var terms = (quiz?.Terms ?? [])
+            .Where(x => !string.IsNullOrWhiteSpace(x.Term) && !string.IsNullOrWhiteSpace(x.Definition))
+            .Select(x => new GeneratedTerm(x.Term.Trim(), x.Definition.Trim()))
+            .DistinctBy(x => x.Term, StringComparer.OrdinalIgnoreCase)
+            .Take(MaxTerms).ToList();
+        return new GeneratedQuiz(kept.Take(wanted).ToList(), quiz?.Summary?.Trim() ?? "", terms);
     }
 
-    record QuizJson(List<GeneratedQuestion> Questions);
+    const int MaxTerms = 30;
+
+    record QuizJson(List<GeneratedQuestion>? Questions, string? Summary, List<GeneratedTerm>? Terms);
+
+    /// <summary>How long an upload lives if it isn't deleted (OpenAI's shortest is an hour).</summary>
+    const int UploadLifetimeSeconds = 6 * 3600;
 
     async Task<string> UploadAsync(string path, CancellationToken ct)
     {
@@ -190,6 +218,9 @@ public class OpenAiQuizClient(HttpClient http, OpenAiOptions options, ILogger<Op
         using var form = new MultipartFormDataContent
         {
             { new StringContent("assistants"), "purpose" },
+            // Deleted once the quiz is generated; this is in case the server stops before it gets to.
+            { new StringContent("created_at"), "expires_after[anchor]" },
+            { new StringContent(UploadLifetimeSeconds.ToString()), "expires_after[seconds]" },
             { new StreamContent(stream), "file", Path.GetFileName(path) },
         };
         var response = await SendAsync(HttpMethod.Post, "files", form, ct);
@@ -200,7 +231,13 @@ public class OpenAiQuizClient(HttpClient http, OpenAiOptions options, ILogger<Op
     async Task<string> CreateVectorStoreAsync(List<string> fileIds, CancellationToken ct)
     {
         var store = await SendAsync(HttpMethod.Post, "vector_stores",
-            JsonContent(new JsonObject { ["name"] = "studyjit-quiz", ["file_ids"] = new JsonArray(fileIds.Select(id => (JsonNode)id).ToArray()) }), ct);
+            JsonContent(new JsonObject
+            {
+                ["name"] = "studyjit-quiz",
+                ["file_ids"] = new JsonArray(fileIds.Select(id => (JsonNode)id).ToArray()),
+                // Like the uploads: deleted after generating, and gone a day after its last use if that never happens.
+                ["expires_after"] = new JsonObject { ["anchor"] = "last_active_at", ["days"] = 1 },
+            }), ct);
         var id = store["id"]!.GetValue<string>();
         for (var waited = 0; store["status"]?.GetValue<string>() == "in_progress"; waited++)
         {
@@ -243,34 +280,4 @@ public class OpenAiQuizClient(HttpClient http, OpenAiOptions options, ILogger<Op
     }
 
     static StringContent JsonContent(JsonNode body) => new(body.ToJsonString(), System.Text.Encoding.UTF8, "application/json");
-
-    /// <summary>
-    /// Deletes every uploaded file and vector store in the OpenAI account, for anything left behind by a crash mid-generation.
-    /// Returns how many of each were deleted.
-    /// </summary>
-    public async Task<(int Files, int VectorStores)> DeleteEverythingAsync(CancellationToken ct)
-    {
-        if (!IsConfigured)
-            throw new QuizGenerationException("OpenAI isn't set up on this server.");
-        var files = await DeleteAllAsync("files", ct);
-        var stores = await DeleteAllAsync("vector_stores", ct);
-        return (files, stores);
-    }
-
-    async Task<int> DeleteAllAsync(string kind, CancellationToken ct)
-    {
-        var deleted = 0;
-        while (true)
-        {
-            var page = await SendAsync(HttpMethod.Get, $"{kind}?limit=100", null, ct);
-            var ids = (page["data"]?.AsArray() ?? []).Select(x => x?["id"]?.GetValue<string>()).OfType<string>().ToList();
-            if (ids.Count == 0)
-                return deleted;
-            foreach (var id in ids)
-            {
-                await SendAsync(HttpMethod.Delete, $"{kind}/{id}", null, ct);
-                deleted++;
-            }
-        }
-    }
 }

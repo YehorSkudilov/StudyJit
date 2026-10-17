@@ -3,7 +3,7 @@ using StudyJit.Api.Data;
 
 namespace StudyJit.Api.Quizzes;
 
-/// <summary>Generates one quiz's questions from its topic and linked files, replacing any it had.</summary>
+/// <summary>Generates one quiz's questions, study guide and key terms from its topic and linked files, replacing any it had.</summary>
 public class QuizGenerator(ApiDbContext db, OpenAiQuizClient openAi, ILogger<QuizGenerator> log)
 {
     static readonly string[] TextExtensions = [".txt", ".md", ".csv", ".json", ".html", ".htm", ".xml", ".rtf"];
@@ -54,12 +54,18 @@ public class QuizGenerator(ApiDbContext db, OpenAiQuizClient openAi, ILogger<Qui
                 // Audio and video aren't read (yet).
             }
 
-            var questions = await openAi.GenerateAsync(source, ct);
+            var generated = await openAi.GenerateAsync(source, ct);
             await db.QuizQuestions.Where(q => q.QuizId == quizId).ExecuteDeleteAsync(ct);
-            db.QuizQuestions.AddRange(questions.Select(q => new QuizQuestion { QuizId = quizId, Question = q.Question, Options = q.Options, CorrectAnswer = q.Correct }));
+            await db.QuizTerms.Where(t => t.QuizId == quizId).ExecuteDeleteAsync(ct);
+            db.QuizQuestions.AddRange(generated.Questions.Select(q => new QuizQuestion
+            {
+                QuizId = quizId, Question = q.Question, Options = q.Options, CorrectAnswer = q.Correct, Explanation = q.Explanation,
+            }));
+            db.QuizTerms.AddRange(generated.Terms.Select(t => new QuizTerm { QuizId = quizId, Term = t.Term, Definition = t.Definition }));
+            quiz.Summary = generated.Summary;
             quiz.GenerationStatus = GenerationStatus.Success;
             await db.SaveChangesAsync(ct);
-            log.LogInformation("Quiz {QuizId} generated with {Count} questions.", quizId, questions.Count);
+            log.LogInformation("Quiz {QuizId} generated with {Count} questions and {Terms} terms.", quizId, generated.Questions.Count, generated.Terms.Count);
         }
         catch (Exception e) when (e is not OperationCanceledException)
         {

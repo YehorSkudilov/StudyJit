@@ -170,7 +170,7 @@ public static class AuthPolicies
     /// <summary>The admin site's endpoints: an Admin or SuperAdmin.</summary>
     public const string AdminAccess = "admin-access";
 
-    /// <summary>What only a SuperAdmin may do: change roles, delete accounts, clear the OpenAI account.</summary>
+    /// <summary>What only a SuperAdmin may do: change roles, delete accounts.</summary>
     public const string SuperAdminOnly = "super-admin-only";
 
     /// <summary>Shortest password allowed (length over composition rules, NIST SP 800-63B).</summary>

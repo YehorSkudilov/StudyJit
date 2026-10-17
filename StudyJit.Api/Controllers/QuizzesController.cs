@@ -6,7 +6,9 @@ using StudyJit.Api.Data;
 
 namespace StudyJit.Api.Controllers;
 
-public record QuestionDto(int Id, string Question, List<string> Options, string Correct);
+public record QuestionDto(int Id, string Question, List<string> Options, string Correct, string Explanation);
+
+public record TermDto(string Term, string Definition);
 
 public record QuizSummary(
     int Id,
@@ -27,7 +29,9 @@ public record QuizDetail(
     [property: JsonPropertyName("generation_status")] string GenerationStatus,
     [property: JsonPropertyName("last_score")] decimal? LastScore,
     [property: JsonPropertyName("queue_number")] int? QueueNumber,
-    List<QuestionDto> Questions);
+    string? Summary,
+    List<QuestionDto> Questions,
+    List<TermDto> Terms);
 
 public record CreateQuizRequest(
     string? Name,
@@ -77,10 +81,12 @@ public class QuizzesController(ApiDbContext db, ICurrentUser me, TimeProvider cl
     public async Task<IActionResult> Get(int id)
     {
         var userId = me.Id;
-        var q = await db.Quizzes.AsNoTracking().Include(x => x.Questions).FirstOrDefaultAsync(x => x.Id == id && x.UserId == userId);
+        var q = await db.Quizzes.AsNoTracking().Include(x => x.Questions).Include(x => x.Terms).AsSplitQuery()
+            .FirstOrDefaultAsync(x => x.Id == id && x.UserId == userId);
         if (q == null)
             return NotFoundError("Quiz not found.");
-        return Ok(new QuizDetail(q.Id, q.Name, q.Description, q.Prompt, q.NumQuestions, q.GenerationStatus, q.LastScore, q.QueueNumber, Questions(q)));
+        return Ok(new QuizDetail(q.Id, q.Name, q.Description, q.Prompt, q.NumQuestions, q.GenerationStatus, q.LastScore, q.QueueNumber,
+            q.Summary, Questions(q), q.Terms.OrderBy(x => x.Id).Select(x => new TermDto(x.Term, x.Definition)).ToList()));
     }
 
     [HttpPost("create")]
@@ -207,7 +213,7 @@ public class QuizzesController(ApiDbContext db, ICurrentUser me, TimeProvider cl
     }
 
     static List<QuestionDto> Questions(Quiz quiz) =>
-        quiz.Questions.OrderBy(x => x.Id).Select(x => new QuestionDto(x.Id, x.Question, x.Options, x.CorrectAnswer)).ToList();
+        quiz.Questions.OrderBy(x => x.Id).Select(x => new QuestionDto(x.Id, x.Question, x.Options, x.CorrectAnswer, x.Explanation)).ToList();
 
     Task<Quiz?> FindQuiz(int id)
     {

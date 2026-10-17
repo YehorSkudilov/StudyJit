@@ -6,9 +6,9 @@ import * as f from "@/lib/format";
 import { ActionRow, Head, Status, StatusBadge, useAct, useAdmin, useLoad } from "./ui";
 import s from "./admin.module.css";
 
-/** Quiz generation: what's running, the queue in order, recent failures to retry, and clearing the OpenAI account. */
+/** Quiz generation: what's running, the queue in order, recent failures to retry. */
 export function Generation() {
-  const { api, toast } = useAdmin();
+  const { api } = useAdmin();
   const { data: d, error, busy, reload } = useLoad(() => api.generation(), "generation");
   const { act, working } = useAct(reload);
 
@@ -17,21 +17,6 @@ export function Generation() {
     const timer = setInterval(reload, 5000);
     return () => clearInterval(timer);
   }, [reload]);
-
-  async function cleanup() {
-    if (
-      !window.confirm(
-        "Deletes every uploaded file and vector store in the OpenAI account, including any another app keeps there. Quizzes and questions here stay. Continue?",
-      )
-    )
-      return;
-    try {
-      const result = await api.openAiCleanup();
-      toast(`Deleted ${result.deletedFiles} files and ${result.deletedVectorStores} vector stores`);
-    } catch (e) {
-      window.alert(`Couldn't clean up: ${(e as Error).message}`);
-    }
-  }
 
   return (
     <div className={s.stack}>
@@ -64,21 +49,6 @@ export function Generation() {
               />
             ))}
           </div>
-
-          {api.isSuperAdmin && (
-            <>
-              <h2 className={s.section}>OpenAI account</h2>
-              <div className={s.cardFlush}>
-                <ActionRow
-                  title="Delete leftover OpenAI files"
-                  detail="Removes uploads and vector stores a crash mid-generation left behind"
-                  danger
-                  disabled={working || d.running.length > 0}
-                  onClick={cleanup}
-                />
-              </div>
-            </>
-          )}
         </>
       )}
     </div>

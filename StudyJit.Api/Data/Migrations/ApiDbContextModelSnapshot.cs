@@ -311,6 +311,9 @@ namespace StudyJit.Api.Data.Migrations
                     b.Property<int?>("QueueNumber")
                         .HasColumnType("integer");
 
+                    b.Property<string>("Summary")
+                        .HasColumnType("text");
+
                     b.Property<string>("UserId")
                         .IsRequired()
                         .HasColumnType("text");
@@ -365,6 +368,10 @@ namespace StudyJit.Api.Data.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<string>("Explanation")
+                        .IsRequired()
+                        .HasColumnType("text");
+
                     b.PrimitiveCollection<List<string>>("Options")
                         .IsRequired()
                         .HasColumnType("text[]");
@@ -381,6 +388,32 @@ namespace StudyJit.Api.Data.Migrations
                     b.HasIndex("QuizId");
 
                     b.ToTable("QuizQuestions");
+                });
+
+            modelBuilder.Entity("StudyJit.Api.Data.QuizTerm", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Definition")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int>("QuizId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Term")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("QuizId");
+
+                    b.ToTable("QuizTerms");
                 });
 
             modelBuilder.Entity("StudyJit.Api.Data.RefreshToken", b =>
@@ -588,6 +621,15 @@ namespace StudyJit.Api.Data.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("StudyJit.Api.Data.QuizTerm", b =>
+                {
+                    b.HasOne("StudyJit.Api.Data.Quiz", null)
+                        .WithMany("Terms")
+                        .HasForeignKey("QuizId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("StudyJit.Api.Data.RefreshToken", b =>
                 {
                     b.HasOne("StudyJit.Api.Data.AppUser", null)
@@ -614,6 +656,8 @@ namespace StudyJit.Api.Data.Migrations
             modelBuilder.Entity("StudyJit.Api.Data.Quiz", b =>
                 {
                     b.Navigation("Questions");
+
+                    b.Navigation("Terms");
                 });
 #pragma warning restore 612, 618
         }

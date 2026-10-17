@@ -202,3 +202,16 @@ export function ActionRow({ title, detail, danger, disabled, onClick }: { title:
     </button>
   );
 }
+
+/** A row with an on/off switch. */
+export function Toggle({ title, detail, on, disabled, onChange }: { title: string; detail: string; on: boolean; disabled?: boolean; onChange: (on: boolean) => void }) {
+  return (
+    <button className={s.row} role="switch" aria-checked={on} onClick={() => onChange(!on)} disabled={disabled}>
+      <span className={s.rowMain}>
+        <span className={s.rowTitle}>{title}</span>
+        <span className={s.small}>{detail}</span>
+      </span>
+      <span className={on ? s.switchOn : s.switch} />
+    </button>
+  );
+}
