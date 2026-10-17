@@ -24,7 +24,6 @@ public record OrganizeResponse(List<FolderPlan> Folders);
 public record CreateExamRequest(
     string? Name,
     [property: JsonPropertyName("set_ids")] int[] SetIds,
-    int? Questions,
     string? Focus);
 
 [Route("api/ai")]
@@ -139,9 +138,9 @@ public class AiController(ApiDbContext db, ICurrentUser me, QuizGenerationQueue 
             Name = name.Length > 255 ? name[..255] : name,
             Description = $"Covers {string.Join(", ", sets.Select(s => s.Name))}",
             Prompt = $"This is a cumulative exam ({name}) covering: {string.Join("; ", sets.Select(s => s.Name))}. "
-                + "Spread the questions evenly across those topics, mix recall with application, and make it exam-style."
+                + "Cover every one of those topics in proportion to how much material it has, mix recall with application, "
+                + "and make it exam-style."
                 + (focus.Length > 0 ? $" {focus}" : ""),
-            NumQuestions = Math.Clamp(request.Questions ?? 30, 1, QuizzesController.MaxQuestions),
             GenerationStatus = GenerationStatus.Queued,
             CreatedAt = clock.GetUtcNow(),
         };

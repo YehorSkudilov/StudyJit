@@ -29,7 +29,7 @@ public class QuizGenerator(ApiDbContext db, OpenAiQuizClient openAi, ILogger<Qui
 
         try
         {
-            var source = new QuizSource { Name = quiz.Name, Description = quiz.Description, Prompt = quiz.Prompt, Questions = quiz.NumQuestions };
+            var source = new QuizSource { Name = quiz.Name, Description = quiz.Description, Prompt = quiz.Prompt };
             // The quiz's own files; a study set's folder's files; and an exam's study sets' files and guides.
             var sources = quiz.Kind == QuizKind.Exam && quiz.SourceQuizIds.Count > 0
                 ? await db.Quizzes.AsNoTracking().Where(q => quiz.SourceQuizIds.Contains(q.Id) && q.UserId == quiz.UserId).ToListAsync(ct)

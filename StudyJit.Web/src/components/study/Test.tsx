@@ -7,7 +7,8 @@ import {
   formatTime,
   isRight,
   mcqItem,
-  sample,
+  pickQuestions,
+  recordAnswer,
   saveScore,
   shuffle,
   trueFalseItem,
@@ -32,7 +33,8 @@ const kinds: { kind: Kind; title: string; icon: typeof ListChecks }[] = [
 
 /** Builds a test of the chosen size, spreading the questions across the chosen types. */
 function buildTest(quiz: StudyQuiz, count: number, chosen: Kind[]): Item[] {
-  const questions = sample(quiz.questions, count);
+  // A fresh mix from the bank each time, favouring what's new or was missed.
+  const questions = pickQuestions(quiz.id, quiz.questions, count);
   const writable = quiz.terms.length > 0 ? quiz.terms : [];
   return shuffle(
     questions.map((q, i) => {
@@ -84,6 +86,7 @@ export default function Test({ quiz, onExit }: { quiz: StudyQuiz; onExit: () => 
   useEffect(() => {
     if (!submitted || !items) return;
     saveScore(quiz.id, (score / items.length) * 100);
+    for (const it of items) if (it.qid != null) recordAnswer(quiz.id, it.qid, isRight(it, answers[it.key]));
     window.scrollTo({ top: 0, behavior: "smooth" });
   }, [submitted]); // eslint-disable-line react-hooks/exhaustive-deps
 

@@ -3,15 +3,19 @@
 import { AnimatePresence, motion } from "framer-motion";
 import { Flame } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
-import { mcqItem, saveScore, shuffle, isRight, type Question, type StudyQuiz } from "@/lib/study";
+import { mcqItem, pickQuestions, recordAnswer, saveScore, shuffle, isRight, SESSION_SIZE, type Question, type StudyQuiz } from "@/lib/study";
 import Feedback from "./Feedback";
 import ItemView from "./ItemView";
 import Results, { type ReviewRow } from "./Results";
 import StudyShell, { ShellStat } from "./StudyShell";
 
-/** One question at a time, with the answer and its explanation straight after, and a streak to keep alive. */
+/**
+ * A session of questions from the set's bank, one at a time, with the answer and its explanation straight after and a
+ * streak to keep alive. Each session draws a fresh mix, favouring questions not seen yet or missed before.
+ */
 export default function Practice({ quiz, onExit }: { quiz: StudyQuiz; onExit: () => void }) {
-  const [pool, setPool] = useState<Question[]>(() => shuffle(quiz.questions));
+  const [pool, setPool] = useState<Question[]>(() => pickQuestions(quiz.id, quiz.questions, SESSION_SIZE));
+  const [retryingMissed, setRetryingMissed] = useState(false);
   const [round, setRound] = useState(0);
   const items = useMemo(() => pool.map(mcqItem), [pool, round]); // eslint-disable-line react-hooks/exhaustive-deps
   const [index, setIndex] = useState(0);
@@ -32,6 +36,7 @@ export default function Practice({ quiz, onExit }: { quiz: StudyQuiz; onExit: ()
       const v = String(value);
       const right = isRight(item, v);
       setGiven(v);
+      recordAnswer(quiz.id, pool[index].id, right);
       setStreak((s) => {
         const next = right ? s + 1 : 0;
         setBestStreak((b) => Math.max(b, next));
@@ -42,7 +47,7 @@ export default function Practice({ quiz, onExit }: { quiz: StudyQuiz; onExit: ()
         { prompt: item.prompt, answer: item.kind === "mcq" ? item.answer : "", given: v, correct: right, explanation: item.explanation },
       ]);
     },
-    [given, item]
+    [given, item, index, pool, quiz.id]
   );
 
   const next = useCallback(() => {
@@ -51,13 +56,14 @@ export default function Practice({ quiz, onExit }: { quiz: StudyQuiz; onExit: ()
       setGiven(undefined);
     } else {
       setDone(true);
-      // Only a full run counts as the set's score.
-      if (pool.length === quiz.questions.length) saveScore(quiz.id, (score / items.length) * 100);
+      // A session counts as the set's score; going over what was just missed doesn't.
+      if (!retryingMissed) saveScore(quiz.id, (score / items.length) * 100);
     }
-  }, [index, items.length, pool.length, quiz.id, quiz.questions.length, score]);
+  }, [index, items.length, quiz.id, retryingMissed, score]);
 
-  const restart = (questions: Question[]) => {
-    setPool(shuffle(questions));
+  const restart = (questions: Question[], missedOnly = false) => {
+    setPool(missedOnly ? shuffle(questions) : pickQuestions(quiz.id, questions, SESSION_SIZE));
+    setRetryingMissed(missedOnly);
     setRound((r) => r + 1);
     setIndex(0);
     setGiven(undefined);
@@ -80,7 +86,7 @@ export default function Practice({ quiz, onExit }: { quiz: StudyQuiz; onExit: ()
           ]}
           review={review}
           onRetry={() => restart(quiz.questions)}
-          onRetryMissed={() => restart(quiz.questions.filter((q) => missed.has(q.question)))}
+          onRetryMissed={() => restart(quiz.questions.filter((q) => missed.has(q.question)), true)}
           onDone={onExit}
         />
       </StudyShell>
@@ -106,6 +112,7 @@ export default function Practice({ quiz, onExit }: { quiz: StudyQuiz; onExit: ()
           </AnimatePresence>
           <ShellStat>
             {index + 1}/{items.length}
+            {quiz.questions.length > items.length && <span className="hidden sm:inline font-normal text-muted"> · bank of {quiz.questions.length}</span>}
           </ShellStat>
         </>
       }

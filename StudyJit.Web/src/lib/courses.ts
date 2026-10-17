@@ -152,7 +152,7 @@ export const applyFolders = async (courseId: number, folders: FolderPlan[]) =>
   json<CourseFolder[]>(await send(`/api/courses/${courseId}/folders/apply`, "POST", { folders }), "Couldn't apply the folders.");
 
 /** An exam combining the chosen study sets, generated from their files and guides. */
-export const createExam = async (courseId: number, exam: { name: string; set_ids: number[]; questions: number; focus: string }) =>
+export const createExam = async (courseId: number, exam: { name: string; set_ids: number[]; focus: string }) =>
   (await json<{ created: QuizSummary[] }>(await send(`/api/ai/courses/${courseId}/exams`, "POST", exam), "Couldn't create the exam.")).created[0];
 
 /** Uploads a file in 5 MB chunks, into a course (and/or a files folder). */

@@ -30,7 +30,6 @@ interface Detail {
   name: string;
   description: string;
   status: GenerationStatus;
-  numQuestions: number;
   lastScore: number | null;
   queueNumber: number | null;
   courseId: number | null;
@@ -52,7 +51,6 @@ export default function QuizDetailsPage() {
   const [folder, setFolder] = useState<CourseFolder | null>(null);
   const [files, setFiles] = useState<CourseFile[]>([]);
   const [sources, setSources] = useState<QuizSummary[]>([]);
-  const [questions, setQuestions] = useState(20);
   const [busy, setBusy] = useState(false);
   const [alert, setAlert] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -67,7 +65,6 @@ export default function QuizDetailsPage() {
       name: data.name,
       description: data.description ?? "",
       status: data.generation_status ?? null,
-      numQuestions: data.num_questions ?? 20,
       lastScore: data.last_score ?? null,
       queueNumber: data.queue_number ?? null,
       courseId: data.course_id ?? null,
@@ -76,7 +73,6 @@ export default function QuizDetailsPage() {
       sourceIds: data.source_ids ?? [],
     };
     setDetail(d);
-    setQuestions(d.numQuestions);
     setQuiz(await loadQuiz(id));
     if (d.courseId) {
       sessionStorage.setItem("currentCourseId", String(d.courseId));
@@ -112,13 +108,6 @@ export default function QuizDetailsPage() {
     if (!quizId) return;
     setBusy(true);
     try {
-      if (questions !== detail?.numQuestions) {
-        await apiFetch("/api/items/quizzes/update", {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ id: quizId, numQuestions: questions }),
-        });
-      }
       await regenerate(quizId);
       await refresh(quizId);
     } catch (e) {
@@ -263,20 +252,12 @@ export default function QuizDetailsPage() {
           </div>
 
           <div className="card p-6 lg:sticky lg:top-24">
-            <h2 className="font-bold text-lg">Questions</h2>
-            <p className="text-sm text-muted mt-1">How many to write next time it&apos;s generated.</p>
-            <div className="mt-3 flex items-center gap-4">
-              <input
-                type="range"
-                min={5}
-                max={50}
-                value={questions}
-                onChange={(e) => setQuestions(Number(e.target.value))}
-                className="flex-1 accent-[var(--brand)]"
-                disabled={generating}
-              />
-              <span className="w-10 text-center text-2xl font-extrabold text-brand tabular-nums">{questions}</span>
-            </div>
+            <h2 className="font-bold text-lg">Kept up to date</h2>
+            <p className="text-sm text-muted mt-1">
+              {detail?.kind === "exam"
+                ? "It's rebuilt whenever a study set it covers changes. The AI decides how many questions it needs to cover them fully."
+                : "It's rebuilt whenever the folder's files change. The AI writes as many questions as the material needs, and each session draws a different mix."}
+            </p>
             <button onClick={regenerateNow} disabled={generating || busy} className="btn-secondary w-full mt-5">
               {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />} Regenerate now
             </button>

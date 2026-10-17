@@ -6,6 +6,8 @@ import { useCallback, useMemo, useState } from "react";
 import {
   isRight,
   mcqItem,
+  pickQuestions,
+  recordAnswer,
   sample,
   shuffle,
   trueFalseItem,
@@ -29,8 +31,12 @@ interface Learnable {
   hard: () => Item;
 }
 
+/** Questions and key terms Learn works through in one sitting (a big bank is learnt over several). */
+const LEARN_QUESTIONS = 20;
+const LEARN_TERMS = 12;
+
 function learnables(quiz: StudyQuiz): Learnable[] {
-  const fromQuestions: Learnable[] = quiz.questions.map((q) => ({
+  const fromQuestions: Learnable[] = pickQuestions(quiz.id, quiz.questions, LEARN_QUESTIONS).map((q) => ({
     id: `q${q.id}`,
     easy: () => mcqItem(q),
     hard: () => (typeable(q) ? writtenFromQuestion(q) : trueFalseItem(q)),
@@ -38,7 +44,7 @@ function learnables(quiz: StudyQuiz): Learnable[] {
   const terms = quiz.terms;
   const fromTerms: Learnable[] =
     terms.length >= 4
-      ? terms.map((t, i) => ({
+      ? sample(terms, LEARN_TERMS).map((t, i) => ({
           id: `t${i}`,
           easy: () => ({
             kind: "mcq",
@@ -81,13 +87,14 @@ export default function Learn({ quiz, onExit }: { quiz: StudyQuiz; onExit: () =>
       if (given !== undefined) return;
       setGiven(g);
       const right = isRight(current.item, g);
+      if (current.item.qid != null) recordAnswer(quiz.id, current.item.qid, right);
       setLevel((lv) => {
         const now = lv[current.l.id] ?? 0;
         return { ...lv, [current.l.id]: right ? Math.min(2, now + 1) : Math.max(0, now - 1) };
       });
       if (right) setRoundCorrect((c) => c + 1);
     },
-    [current, given]
+    [current, given, quiz.id]
   );
 
   const markRight = () => {
@@ -148,7 +155,7 @@ export default function Learn({ quiz, onExit }: { quiz: StudyQuiz; onExit: () =>
         <h2 className="text-3xl font-extrabold">{finished ? "Everything mastered!" : "Round complete"}</h2>
         <p className="mt-2 text-muted">
           {finished
-            ? `You've mastered all ${all.length} items. Try a Test to prove it.`
+            ? `You've mastered all ${all.length} items in this batch. Learn another batch from the set, or try a Test to prove it.`
             : `${roundCorrect} of ${round.length} right this round. Keep going: misses come back until you've got them.`}
         </p>
         <div className="mt-6 grid grid-cols-3 gap-3 text-left">
@@ -168,7 +175,7 @@ export default function Learn({ quiz, onExit }: { quiz: StudyQuiz; onExit: () =>
           {finished ? (
             <>
               <button onClick={restart} className="btn-primary">
-                Learn it again
+                Learn another batch
               </button>
               <button onClick={onExit} className="btn-secondary">
                 Back to study modes

@@ -323,7 +323,6 @@ function NewExamModal({
 }) {
   const [name, setName] = useState("Midterm");
   const [picked, setPicked] = useState<Set<number>>(new Set());
-  const [questions, setQuestions] = useState(30);
   const [focus, setFocus] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -347,7 +346,7 @@ function NewExamModal({
     setBusy(true);
     setError("");
     try {
-      await createExam(course.id, { name: name.trim(), set_ids: [...picked], questions, focus });
+      await createExam(course.id, { name: name.trim(), set_ids: [...picked], focus });
       onCreated();
     } catch (e) {
       setError((e as Error).message);
@@ -404,14 +403,6 @@ function NewExamModal({
               );
             })}
           </ul>
-        </div>
-
-        <div>
-          <label className="label">Questions</label>
-          <div className="flex items-center gap-4">
-            <input type="range" min={5} max={50} value={questions} onChange={(e) => setQuestions(Number(e.target.value))} className="flex-1 accent-[var(--brand)]" />
-            <span className="w-10 text-center text-2xl font-extrabold text-brand tabular-nums">{questions}</span>
-          </div>
         </div>
 
         <div>

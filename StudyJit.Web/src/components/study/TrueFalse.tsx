@@ -3,7 +3,7 @@
 import { AnimatePresence, motion } from "framer-motion";
 import { Check, Flame, Play, Timer, Trophy, X, Zap } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { readBest, recordBest, shuffle, trueFalseItem, type Item, type StudyQuiz } from "@/lib/study";
+import { readBest, recordAnswer, recordBest, shuffle, trueFalseItem, type Item, type StudyQuiz } from "@/lib/study";
 import Confetti from "@/components/ui/Confetti";
 import Results from "./Results";
 import StudyShell, { ShellStat } from "./StudyShell";
@@ -65,6 +65,7 @@ export default function TrueFalse({ quiz, onExit }: { quiz: StudyQuiz; onExit: (
     (value: boolean) => {
       if (phase !== "playing" || !current) return;
       const right = value === current.answer;
+      if (current.qid != null) recordAnswer(quiz.id, current.qid, right);
       setLog((l) => [...l, { item: current, given: value }]);
       if (right) {
         const nextCombo = combo + 1;
@@ -76,7 +77,7 @@ export default function TrueFalse({ quiz, onExit }: { quiz: StudyQuiz; onExit: (
       setTimeout(() => setFlash(null), 250);
       draw();
     },
-    [phase, current, combo, draw]
+    [phase, current, combo, draw, quiz.id]
   );
 
   useEffect(() => {

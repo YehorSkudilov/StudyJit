@@ -22,7 +22,7 @@ export default function StudyShell({
 }) {
   return (
     <div className="min-h-screen flex flex-col">
-      <header className="sticky top-0 z-30 border-b border-stroke/70 bg-surface/80 backdrop-blur-xl">
+      <header className="print:hidden sticky top-0 z-30 border-b border-stroke/70 bg-surface/80 backdrop-blur-xl">
         <div className="mx-auto max-w-5xl h-16 px-4 flex items-center gap-3">
           <button onClick={onExit} className="icon-btn" aria-label="Exit">
             <X className="w-5 h-5" />

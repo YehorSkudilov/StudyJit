@@ -31,7 +31,6 @@ public class QuizSource
     public string Name { get; init; } = "";
     public string? Description { get; init; }
     public string? Prompt { get; init; }
-    public int Questions { get; init; }
     /// <summary>Plain-text files, inlined into the request.</summary>
     public List<(string Name, string Text)> Texts { get; } = [];
     /// <summary>Images, sent for the model to look at.</summary>
@@ -55,21 +54,34 @@ public class OpenAiQuizClient(HttpClient http, OpenAiOptions options, ILogger<Op
         material when there is any (search it with file_search), otherwise on the topic, and write in the language of the
         material.
 
-        questions: multiple-choice questions. Each has exactly four distinct, plausible options of similar length, one of
-        them right; "correct" is the exact text of the right option. Test understanding and application, not just
-        recall; cover the material broadly; avoid trick questions, "all of the above" and "none of the above".
-        "explanation" says in one or two sentences why the right option is right (and, when useful, why a tempting
-        wrong one isn't).
+        questions: a question bank the student is drilled from many times, a different mix each session, so it has to
+        cover the material completely and vary:
+        - Decide how many the material needs: go through every concept, fact, process, formula and example in it and
+          write at least two questions on each important one, asked differently (e.g. one recall, one applied). Short
+          material might need 15; a full lecture usually 30 to 60; never more than 80.
+        - Mix the styles: definitions, "which example shows…", scenarios and applications, cause and effect,
+          comparisons, ordering steps, spotting the mistake, and calculations or worked problems where the material has
+          them. Vary the wording and the order things come up in; don't repeat a question in other words.
+        - Each has exactly four distinct, plausible options of similar length, one of them right; "correct" is the
+          exact text of the right option. Wrong options should be real misconceptions, not obviously silly. Avoid trick
+          questions, "all of the above" and "none of the above".
+        - "explanation" says in one or two sentences why the right option is right (and, when useful, why a tempting
+          wrong one isn't).
 
         summary: a concise study guide of the material in Markdown: a few "## " sections of short paragraphs and "- "
         bullet points, with key ideas in **bold**. No more than about 400 words.
 
-        terms: the 8 to 20 most important terms, names or concepts, each with a short definition (one sentence) that
-        doesn't repeat the term itself.
+        terms: every important term, name, concept and formula in the material (as many as it has, up to 40), each with
+        a short definition (one sentence) that doesn't repeat the term itself.
 
-        cheat_sheet: the condensed notes a student would bring into an exam, in Markdown: "## " headings, short "- "
-        bullets, **bold** for what matters most, compact "Term: meaning" lines, and any formulas, rules, steps and common
-        mistakes. No introduction; every line worth its space; about one printed page (350 words at most).
+        cheat_sheet: the condensed notes a student would bring into an exam, in Markdown, about one printed page (350
+        words at most), no introduction, every line worth its space. Use 4 to 8 "## " sections by topic (e.g. "Key
+        terms", "Formulas", "Process", one per main idea), and inside them:
+        - "- **Term**: meaning" lines for definitions;
+        - formulas, equations, code and units in `backticks`;
+        - "1. " numbered lines for steps or sequences;
+        - "- " bullets for facts, with **bold** on the words that matter most.
+        Finish with a "## Common mistakes" section when the material has pitfalls worth flagging.
         """;
 
     public async Task<GeneratedQuiz> GenerateAsync(QuizSource source, CancellationToken ct)
@@ -117,7 +129,7 @@ public class OpenAiQuizClient(HttpClient http, OpenAiOptions options, ILogger<Op
             var response = await SendAsync(HttpMethod.Post, "responses", JsonContent(body), ct);
             if (response["status"]?.GetValue<string>() is { } status && status != "completed")
                 throw new QuizGenerationException("The AI didn't finish the quiz. Try fewer questions or smaller files.");
-            return Check(OutputText(response), source.Questions);
+            return Check(OutputText(response));
         }
         finally
         {
@@ -184,7 +196,7 @@ public class OpenAiQuizClient(HttpClient http, OpenAiOptions options, ILogger<Op
     static string Request(QuizSource source, bool hasDocuments)
     {
         var text = new System.Text.StringBuilder();
-        text.AppendLine($"Write {source.Questions} questions for the quiz \"{source.Name}\".");
+        text.AppendLine($"Write the study material for \"{source.Name}\".");
         if (!string.IsNullOrWhiteSpace(source.Description))
             text.AppendLine($"About the quiz: {source.Description}");
         if (!string.IsNullOrWhiteSpace(source.Prompt))
@@ -212,7 +224,7 @@ public class OpenAiQuizClient(HttpClient http, OpenAiOptions options, ILogger<Op
 
 
     /// <summary>Keeps the questions with four distinct options and a right answer among them, and the complete terms.</summary>
-    static GeneratedQuiz Check(string text, int wanted)
+    static GeneratedQuiz Check(string text)
     {
         QuizJson? quiz;
         try
@@ -241,10 +253,13 @@ public class OpenAiQuizClient(HttpClient http, OpenAiOptions options, ILogger<Op
             .Select(x => new GeneratedTerm(x.Term.Trim(), x.Definition.Trim()))
             .DistinctBy(x => x.Term, StringComparer.OrdinalIgnoreCase)
             .Take(MaxTerms).ToList();
-        return new GeneratedQuiz(kept.Take(wanted).ToList(), quiz?.Summary?.Trim() ?? "", terms, quiz?.CheatSheet?.Trim() ?? "");
+        return new GeneratedQuiz(kept.Take(MaxQuestions).ToList(), quiz?.Summary?.Trim() ?? "", terms, quiz?.CheatSheet?.Trim() ?? "");
     }
 
-    const int MaxTerms = 30;
+    const int MaxTerms = 40;
+
+    /// <summary>The most questions kept from one generation; the AI decides how many the material needs, up to this.</summary>
+    public const int MaxQuestions = 80;
 
     record QuizJson(List<GeneratedQuestion>? Questions, string? Summary, List<GeneratedTerm>? Terms,
         [property: System.Text.Json.Serialization.JsonPropertyName("cheat_sheet")] string? CheatSheet);

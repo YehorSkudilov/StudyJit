@@ -11,7 +11,8 @@ import StudyShell, { ShellStat } from "./StudyShell";
 function buildItems(quiz: StudyQuiz): Item[] {
   const fromTerms = quiz.terms.map(writtenFromTerm);
   const fromQuestions = quiz.questions.filter(typeable).map(writtenFromQuestion);
-  return shuffle(fromTerms.length >= 4 ? fromTerms : [...fromTerms, ...fromQuestions]);
+  // Every key term each time (they're the whole vocabulary), questions only when there are few terms.
+  return shuffle(fromTerms.length >= 4 ? fromTerms : [...fromTerms, ...fromQuestions]).slice(0, 25);
 }
 
 /** Recall without options: read the definition (or question) and type the answer. */
