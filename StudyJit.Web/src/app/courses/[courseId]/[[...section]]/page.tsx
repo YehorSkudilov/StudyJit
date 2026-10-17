@@ -7,6 +7,9 @@ import { AnimatePresence, motion } from "framer-motion";
 import {
   BookOpen,
   Check,
+  CheckCheck,
+  ListChecks,
+  RefreshCw,
   ClipboardCheck,
   Folder,
   FolderOpen,
@@ -43,6 +46,7 @@ import {
   listFolders,
   moveFiles,
   organizeFiles,
+  regenerateMany,
   renameFolder,
   updateCourse,
   uploadFile,
@@ -155,7 +159,7 @@ export default function CoursePage() {
 
         <AnimatePresence mode="wait">
           <motion.div key={section} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} transition={{ duration: 0.2 }} className="mt-8">
-            {section === "" && <SetsSection course={course} sets={sets} folders={folders ?? []} files={files ?? []} onOpen={openQuiz} />}
+            {section === "" && <SetsSection course={course} sets={sets} folders={folders ?? []} files={files ?? []} onOpen={openQuiz} onRegenerated={load} />}
             {section === "exams" && <ExamsSection course={course} sets={sets} exams={exams} onOpen={openQuiz} onCreated={load} />}
             {section === "files" && <FilesSection course={course} files={files ?? []} folders={folders ?? []} sets={sets} reload={load} />}
           </motion.div>
@@ -175,14 +179,43 @@ function SetsSection({
   folders,
   files,
   onOpen,
+  onRegenerated,
 }: {
   course: Course;
   sets: QuizSummary[];
   folders: CourseFolder[];
   files: CourseFile[];
   onOpen: (q: QuizSummary) => void;
+  onRegenerated: () => Promise<void>;
 }) {
+  const [selecting, setSelecting] = useState(false);
+  const [picked, setPicked] = useState<Set<number>>(new Set());
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
   const folderName = (id: number | null) => folders.find((f) => f.id === id)?.name;
+  const toggle = (id: number) =>
+    setPicked((p) => {
+      const next = new Set(p);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  const stopSelecting = () => {
+    setSelecting(false);
+    setPicked(new Set());
+  };
+  const regenerateSelected = async () => {
+    setBusy(true);
+    try {
+      await regenerateMany([...picked]);
+      stopSelecting();
+      await onRegenerated();
+    } catch (e) {
+      setMessage((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
   // In folder order, so the weeks read in sequence; sets from before folders come last.
   const ordered = [...sets].sort((a, b) => {
     const fa = folders.findIndex((f) => f.id === a.folder_id);
@@ -196,7 +229,42 @@ function SetsSection({
       <SectionHead
         title="Study sets"
         text="One for each folder of files, made and kept up to date automatically: quizzes, flashcards, games, a study guide and a cheat sheet."
-      />
+      >
+        {sets.length > 0 &&
+          (selecting ? (
+            <>
+              <button
+                onClick={() => setPicked(picked.size === sets.length ? new Set() : new Set(sets.map((s) => s.id)))}
+                className="btn-secondary"
+              >
+                <CheckCheck className="w-4 h-4" /> {picked.size === sets.length ? "Select none" : "Select all"}
+              </button>
+              <button onClick={regenerateSelected} className="btn-primary" disabled={picked.size === 0 || busy}>
+                {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+                Regenerate{picked.size ? ` ${picked.size}` : ""}
+              </button>
+              <button onClick={stopSelecting} className="btn-ghost">
+                Cancel
+              </button>
+            </>
+          ) : (
+            <button onClick={() => setSelecting(true)} className="btn-secondary">
+              <ListChecks className="w-4 h-4" /> Select
+            </button>
+          ))}
+      </SectionHead>
+      <AnimatePresence>
+        {selecting && (
+          <motion.p
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            exit={{ opacity: 0, height: 0 }}
+            className="mb-4 text-sm text-muted"
+          >
+            Tap study sets to pick them, then regenerate. Exams that cover them are rebuilt afterwards.
+          </motion.p>
+        )}
+      </AnimatePresence>
       {unsorted > 0 && (
         <Link
           href={courseHref(course.id, "files")}
@@ -218,7 +286,27 @@ function SetsSection({
       ) : (
         <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
           {ordered.map((q, i) => (
-            <motion.div key={q.id} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: Math.min(i, 12) * 0.03 }}>
+            <motion.div
+              key={q.id}
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: Math.min(i, 12) * 0.03 }}
+              className="relative"
+            >
+              <AnimatePresence>
+                {selecting && (
+                  <motion.span
+                    initial={{ scale: 0 }}
+                    animate={{ scale: 1 }}
+                    exit={{ scale: 0 }}
+                    className={`pointer-events-none absolute -top-2 -left-2 z-10 w-7 h-7 rounded-full border-2 flex items-center justify-center shadow-md ${
+                      picked.has(q.id) ? "bg-brand border-brand text-white" : "bg-surface border-stroke"
+                    }`}
+                  >
+                    {picked.has(q.id) && <Check className="w-4 h-4" />}
+                  </motion.span>
+                )}
+              </AnimatePresence>
               <QuizCard
                 quizName={q.name}
                 description={
@@ -229,14 +317,15 @@ function SetsSection({
                 lastScore={q.last_score}
                 status={q.generation_status}
                 questionCount={q.questions.length}
-                selected={false}
-                onClick={() => onOpen(q)}
+                selected={selecting && picked.has(q.id)}
+                onClick={() => (selecting ? toggle(q.id) : onOpen(q))}
                 onDoubleClick={() => {}}
               />
             </motion.div>
           ))}
         </div>
       )}
+      {message && <AlertPopup message={message} onClose={() => setMessage(null)} />}
     </>
   );
 }

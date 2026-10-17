@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using StudyJit.Api.Auth;
 using StudyJit.Api.Data;
+using StudyJit.Api.Files;
 using StudyJit.Api.Quizzes;
 
 namespace StudyJit.Api.Controllers;
@@ -18,6 +19,10 @@ public record ParseCoursesRequest(string? Text);
 public record ParseCoursesResponse(List<ParsedCourse> Courses);
 
 public record CreatedQuizzesResponse(List<QuizSummary> Created);
+
+public record RegenerateRequest([property: JsonPropertyName("quiz_ids")] int[] QuizIds);
+
+public record RegenerateResponse(int Queued);
 
 public record OrganizeResponse(List<FolderPlan> Folders);
 
@@ -57,9 +62,33 @@ public class AiController(ApiDbContext db, ICurrentUser me, QuizGenerationQueue 
         return Ok(new GenerateQuizResponse(true, place == 0 ? GenerationStatus.Pending : GenerationStatus.Queued, quiz.Id, place));
     }
 
+    /// <summary>
+    /// Queues several study sets or exams to be generated again (e.g. the ones ticked on a course's Study sets tab).
+    /// Counts as one request against the generation limit; ones already generating are left alone.
+    /// </summary>
+    [HttpPost("regenerate")]
+    [EnableRateLimiting(RateLimits.Generate)]
+    [ProducesResponseType<RegenerateResponse>(StatusCodes.Status200OK)]
+    public async Task<IActionResult> Regenerate(RegenerateRequest request, CancellationToken ct)
+    {
+        if (!openAi.IsConfigured)
+            return Error(StatusCodes.Status503ServiceUnavailable, "Quiz generation isn't set up on this server.");
+        if (request.QuizIds is not { Length: > 0 })
+            return BadRequestError("Pick at least one study set.");
+        var userId = me.Id;
+        var quizzes = await db.Quizzes.Where(q => q.UserId == userId && request.QuizIds.Contains(q.Id) && q.GenerationStatus != GenerationStatus.Pending)
+            .OrderBy(q => q.Id).ToListAsync(ct);
+        foreach (var quiz in quizzes)
+            quiz.GenerationStatus = GenerationStatus.Queued;
+        await db.SaveChangesAsync(ct);
+        foreach (var quiz in quizzes)
+            await queue.EnqueueAsync(quiz.Id, ct);
+        return Ok(new RegenerateResponse(quizzes.Count));
+    }
+
     /// <summary>Reads the courses out of text pasted from a school's learning system, for the user to confirm and create.</summary>
     [HttpPost("courses/parse")]
-    [EnableRateLimiting(RateLimits.Generate)]
+    [EnableRateLimiting(RateLimits.Assist)]
     [ProducesResponseType<ParseCoursesResponse>(StatusCodes.Status200OK)]
     public async Task<IActionResult> ParseCourses(ParseCoursesRequest request, CancellationToken ct)
     {
@@ -79,7 +108,7 @@ public class AiController(ApiDbContext db, ICurrentUser me, QuizGenerationQueue 
 
     /// <summary>The AI's suggested folders for the course's files (e.g. one per week); apply it with POST api/courses/{id}/folders/apply.</summary>
     [HttpPost("courses/{id:int}/organize")]
-    [EnableRateLimiting(RateLimits.Generate)]
+    [EnableRateLimiting(RateLimits.Assist)]
     [ProducesResponseType<OrganizeResponse>(StatusCodes.Status200OK)]
     public async Task<IActionResult> Organize(int id, CancellationToken ct)
     {
@@ -92,13 +121,15 @@ public class AiController(ApiDbContext db, ICurrentUser me, QuizGenerationQueue 
         var files = await db.Files.Where(f => f.UserId == userId && f.CourseId == id).OrderBy(f => f.Name).ToListAsync(ct);
         if (files.Count == 0)
             return BadRequestError("Upload some files first.");
+        // What's inside each file (its title and opening words) says more than a name like "Lecture_03_final.pdf".
         var planFiles = new List<PlanFile>();
         foreach (var f in files)
-            planFiles.Add(new PlanFile(f.Id, f.Name, f.Size, await ExcerptAsync(f, ct)));
+            planFiles.Add(new PlanFile(f.Id, f.Name, f.Size, await FilePeek.PeekAsync(f.Path, f.Name, ct)));
+        var existing = await db.Folders.Where(f => f.UserId == userId && f.CourseId == id).Select(f => f.Name).ToListAsync(ct);
         try
         {
             var title = string.Join(" ", new[] { course.Code, course.Name }.Where(s => s.Length > 0));
-            return Ok(new OrganizeResponse(await assistant.OrganizeAsync(title, planFiles, ct)));
+            return Ok(new OrganizeResponse(await assistant.OrganizeAsync(title, planFiles, existing, ct)));
         }
         catch (QuizGenerationException e)
         {
@@ -154,18 +185,5 @@ public class AiController(ApiDbContext db, ICurrentUser me, QuizGenerationQueue 
         foreach (var quiz in quizzes)
             await queue.EnqueueAsync(quiz.Id, ct);
         return quizzes.Select(QuizzesController.Summary).ToList();
-    }
-
-    static readonly string[] TextExtensions = [".txt", ".md", ".csv", ".html", ".htm"];
-
-    /// <summary>The start of a plain-text file, to help the planner tell what it covers.</summary>
-    static async Task<string?> ExcerptAsync(StoredFile file, CancellationToken ct)
-    {
-        if (!TextExtensions.Contains(Path.GetExtension(file.Name).ToLowerInvariant()) || !System.IO.File.Exists(file.Path))
-            return null;
-        using var reader = new StreamReader(file.Path);
-        var buffer = new char[400];
-        var read = await reader.ReadBlockAsync(buffer.AsMemory(), ct);
-        return new string(buffer, 0, read);
     }
 }

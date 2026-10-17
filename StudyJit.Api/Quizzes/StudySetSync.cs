@@ -79,24 +79,26 @@ public class StudySetSync(ApiDbContext db, QuizGenerationQueue queue, OpenAiQuiz
             exam.SourceQuizIds = exam.SourceQuizIds.Where(id => id != set.Id).ToList();
         db.Quizzes.Remove(set);
         await db.SaveChangesAsync(ct);
-        await QueueAsync(exams.Where(e => e.SourceQuizIds.Count > 0).ToList(), ct, withExams: false);
+        await QueueAsync(exams.Where(e => e.SourceQuizIds.Count > 0).ToList(), ct);
     }
 
-    /// <summary>Queues the quizzes for (re)generation, then the exams built on any of them.</summary>
-    async Task QueueAsync(List<Quiz> quizzes, CancellationToken ct, bool withExams = true)
+    /// <summary>
+    /// Queues the quizzes for (re)generation. The exams built on a study set follow once it's done (see
+    /// <see cref="SetGeneratedAsync"/>), so they're written from its new material.
+    /// </summary>
+    async Task QueueAsync(List<Quiz> quizzes, CancellationToken ct)
     {
         if (!openAi.IsConfigured || quizzes.Count == 0)
             return;
-        var all = quizzes.ToList();
-        if (withExams)
-            foreach (var quiz in quizzes)
-                all.AddRange((await ExamsOn(quiz.Id, ct)).Where(e => all.All(q => q.Id != e.Id)));
-        foreach (var quiz in all.Where(q => q.GenerationStatus != GenerationStatus.Pending))
+        foreach (var quiz in quizzes.Where(q => q.GenerationStatus != GenerationStatus.Pending))
             quiz.GenerationStatus = GenerationStatus.Queued;
         await db.SaveChangesAsync(ct);
-        foreach (var quiz in all)
+        foreach (var quiz in quizzes)
             await queue.EnqueueAsync(quiz.Id, ct);
     }
+
+    /// <summary>After a study set is (re)generated, however that started: the exams that cover it are rebuilt.</summary>
+    public async Task SetGeneratedAsync(int setId, CancellationToken ct) => await QueueAsync(await ExamsOn(setId, ct), ct);
 
     Task<Quiz?> SetOf(int folderId, CancellationToken ct) =>
         db.Quizzes.FirstOrDefaultAsync(q => q.FolderId == folderId && q.Kind == QuizKind.Set, ct);

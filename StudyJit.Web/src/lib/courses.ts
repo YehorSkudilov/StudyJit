@@ -77,6 +77,7 @@ export const courseTitle = (c: { code: string; name: string }) => (c.code ? `${c
 
 async function json<T>(res: Response, fallback: string): Promise<T> {
   const body = await res.json().catch(() => null);
+  if (res.status === 429) throw new Error("You've reached the hourly limit for AI requests. Please try again a little later.");
   if (!res.ok) throw new Error(body?.error || fallback);
   return body as T;
 }
@@ -119,6 +120,10 @@ export const parseCourses = async (text: string) =>
 
 export const deleteQuizzes = async (ids: number[]) =>
   json(await send("/api/items/quizzes/delete", "POST", { ids }), "Couldn't delete it.");
+
+/** Queues several study sets (or exams) to be generated again, as one request. */
+export const regenerateMany = async (quizIds: number[]) =>
+  json<{ queued: number }>(await send("/api/ai/regenerate", "POST", { quiz_ids: quizIds }), "Couldn't start regenerating.");
 
 /** Queues a study set or exam to be generated again. */
 export async function regenerate(quizId: number) {

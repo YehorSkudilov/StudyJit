@@ -53,24 +53,32 @@ public class CourseAssistant(OpenAiQuizClient openAi)
     }
 
     const string OrganizeInstructions = """
-        Sort a course's files into folders the way a tidy student would: usually by week, lecture, unit or chapter (from
-        the file names and excerpts), with assessments, syllabus or admin material in their own folders when there are
-        any. Name folders short and consistent, like "Week 1", "Week 2", "Lab work", "Syllabus". Keep the order the
-        course runs in. Put every file id in exactly one folder; don't make a folder for a single stray file unless it
-        really stands alone.
+        Sort a course's files into folders the way a tidy student would: usually by week, lecture, unit or chapter.
+        Work it out from each file's name AND what's inside it (its title and opening words, given as "inside:"), since
+        names are often unhelpful ("Lecture_03_final.pdf", "slides (2).pptx"); numbers in names or titles usually give
+        the order. Keep assessments, labs, syllabus or admin material in their own folders when there are any.
+
+        Name folders short and consistent, like "Week 1", "Week 2", "Lab work", "Syllabus"; when the course already has
+        folders, reuse their exact names for files that belong in them. Keep the order the course runs in. Put every
+        file id in exactly one folder; don't make a folder for a single stray file unless it really stands alone.
         """;
 
-    /// <summary>The AI's folder layout for the course's files; nothing is moved until it's applied.</summary>
-    public async Task<List<Controllers.FolderPlan>> OrganizeAsync(string course, List<PlanFile> files, CancellationToken ct)
+    /// <summary>
+    /// The AI's folder layout for the course's files; nothing is moved until it's applied. Files the AI leaves out go in
+    /// an "Other" folder, so applying it always sorts everything.
+    /// </summary>
+    public async Task<List<Controllers.FolderPlan>> OrganizeAsync(string course, List<PlanFile> files, List<string> existingFolders, CancellationToken ct)
     {
         var input = new StringBuilder();
         input.AppendLine($"Course: {course}");
+        if (existingFolders.Count > 0)
+            input.AppendLine($"Folders it already has: {string.Join(", ", existingFolders.Select(f => $"\"{f}\""))}");
         input.AppendLine("Files:");
         foreach (var f in files)
         {
             input.AppendLine($"- id {f.Id}: {f.Name}");
             if (!string.IsNullOrWhiteSpace(f.Excerpt))
-                input.AppendLine($"  starts: {f.Excerpt.ReplaceLineEndings(" ")}");
+                input.AppendLine($"  inside: {f.Excerpt.ReplaceLineEndings(" ")}");
         }
         var schema = SchemaObject(new()
         {
@@ -89,6 +97,17 @@ public class CourseAssistant(OpenAiQuizClient openAi)
             if (name.Length > 0 && ids.Count > 0)
                 plans.Add(new Controllers.FolderPlan(name.Length > 255 ? name[..255] : name, ids));
         }
+        var left = files.Select(f => f.Id).Where(id => !placed.Contains(id)).ToList();
+        if (left.Count > 0)
+        {
+            var other = plans.FindIndex(p => p.Name == "Other");
+            if (other >= 0)
+                plans[other] = plans[other] with { FileIds = [.. plans[other].FileIds, .. left] };
+            else
+                plans.Add(new Controllers.FolderPlan("Other", left));
+        }
+        if (plans.Count == 0)
+            throw new QuizGenerationException("The AI couldn't sort the files. Please try again.");
         return plans;
     }
 

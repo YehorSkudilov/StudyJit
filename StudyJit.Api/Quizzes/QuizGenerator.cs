@@ -4,7 +4,7 @@ using StudyJit.Api.Data;
 namespace StudyJit.Api.Quizzes;
 
 /// <summary>Generates one quiz's questions, study guide and key terms from its topic and linked files, replacing any it had.</summary>
-public class QuizGenerator(ApiDbContext db, OpenAiQuizClient openAi, ILogger<QuizGenerator> log)
+public class QuizGenerator(ApiDbContext db, OpenAiQuizClient openAi, StudySetSync studySets, ILogger<QuizGenerator> log)
 {
     static readonly string[] TextExtensions = [".txt", ".md", ".csv", ".json", ".html", ".htm", ".xml", ".rtf"];
     static readonly string[] DocumentExtensions = [".pdf", ".doc", ".docx", ".pptx"];
@@ -75,6 +75,8 @@ public class QuizGenerator(ApiDbContext db, OpenAiQuizClient openAi, ILogger<Qui
             quiz.GenerationStatus = GenerationStatus.Success;
             await db.SaveChangesAsync(ct);
             log.LogInformation("Quiz {QuizId} generated with {Count} questions and {Terms} terms.", quizId, generated.Questions.Count, generated.Terms.Count);
+            if (quiz.Kind == QuizKind.Set)
+                await studySets.SetGeneratedAsync(quizId, ct);
         }
         catch (Exception e) when (e is not OperationCanceledException)
         {

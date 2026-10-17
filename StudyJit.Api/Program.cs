@@ -87,10 +87,14 @@ builder.Services.AddRateLimiter(o =>
     o.AddPolicy(RateLimits.Auth, ctx => RateLimitPartition.GetFixedWindowLimiter(
         ctx.Connection.RemoteIpAddress?.ToString() ?? "unknown",
         _ => new FixedWindowRateLimiterOptions { PermitLimit = authPerMinute, Window = TimeSpan.FromMinutes(1) }));
-    // Each generation is a paid OpenAI call.
+    // Each generation is a paid OpenAI call (a bulk regenerate counts once).
     o.AddPolicy(RateLimits.Generate, ctx => RateLimitPartition.GetTokenBucketLimiter(
         ctx.User.FindFirst("sub")?.Value ?? ctx.Connection.RemoteIpAddress?.ToString() ?? "unknown",
-        _ => new TokenBucketRateLimiterOptions { TokenLimit = 10, TokensPerPeriod = 10, ReplenishmentPeriod = TimeSpan.FromHours(1) }));
+        _ => new TokenBucketRateLimiterOptions { TokenLimit = 30, TokensPerPeriod = 30, ReplenishmentPeriod = TimeSpan.FromHours(1) }));
+    // The small AI helpers (reading a course list, sorting files) are cheap; they get their own, larger allowance.
+    o.AddPolicy(RateLimits.Assist, ctx => RateLimitPartition.GetTokenBucketLimiter(
+        ctx.User.FindFirst("sub")?.Value ?? ctx.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+        _ => new TokenBucketRateLimiterOptions { TokenLimit = 60, TokensPerPeriod = 60, ReplenishmentPeriod = TimeSpan.FromHours(1) }));
 });
 
 builder.Services.AddScoped<TokenService>();
@@ -176,6 +180,7 @@ namespace StudyJit.Api
     {
         public const string Auth = "auth";
         public const string Generate = "generate";
+        public const string Assist = "assist";
     }
 
     /// <summary>Reads an int? from a number, a numeric string, or null; any other string ("root", "") reads as null.</summary>

@@ -13,8 +13,9 @@
   --brand-soft: #e3effd;
 }
 
+/* Dark follows the system unless a theme is picked in Settings (data-theme on <html>, see lib/theme.ts). */
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme="light"]) {
     --background: #0a0f1c;
     --foreground: #e8edf6;
     --surface: #121a2b;
@@ -24,6 +25,36 @@
     --brand: #4c95f5;
     --brand-2: #2fd4e6;
     --brand-soft: #16284a;
+    color-scheme: dark;
+  }
+}
+
+:root[data-theme="dark"] {
+  --background: #0a0f1c;
+  --foreground: #e8edf6;
+  --surface: #121a2b;
+  --surface-2: #1a2438;
+  --stroke: #233049;
+  --muted: #8b98b0;
+  --brand: #4c95f5;
+  --brand-2: #2fd4e6;
+  --brand-soft: #16284a;
+  color-scheme: dark;
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+}
+
+/* Tailwind's dark: styles follow the same rule. */
+@custom-variant dark {
+  @media (prefers-color-scheme: dark) {
+    &:where(:root:not([data-theme="light"]), :root:not([data-theme="light"]) *) {
+      @slot;
+    }
+  }
+  &:where([data-theme="dark"], [data-theme="dark"] *) {
+    @slot;
   }
 }
 

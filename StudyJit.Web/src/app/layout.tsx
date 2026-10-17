@@ -4,6 +4,7 @@ import { usePathname } from "next/navigation";
 import "./globals.css";
 import Navbar from "@/components/Navbar";
 import AuthGuard from "@/components/AuthGuard";
+import { themeScript } from "@/lib/theme";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -30,8 +31,9 @@ export default function RootLayout({
     !NAVBAR_EXCLUDED_PAGES.some((excludedPath) => pathname === excludedPath || pathname?.startsWith(`${excludedPath}/`));
 
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <head>
+        <script dangerouslySetInnerHTML={{ __html: themeScript }} />
         <title>StudyJit · Learn smarter with AI</title>
         <meta
           name="description"
