@@ -424,6 +424,24 @@ namespace StudyJit.Api.Data.Migrations
                     b.ToTable("RefreshTokens");
                 });
 
+            modelBuilder.Entity("StudyJit.Api.Data.ServerSetting", b =>
+                {
+                    b.Property<string>("Key")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Value")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Key");
+
+                    b.ToTable("Settings");
+                });
+
             modelBuilder.Entity("StudyJit.Api.Data.StoredFile", b =>
                 {
                     b.Property<int>("Id")

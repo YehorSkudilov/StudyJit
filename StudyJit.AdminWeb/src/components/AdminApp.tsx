@@ -4,22 +4,26 @@ import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react
 import { AdminApi, apiUrl } from "@/lib/api";
 import { Dashboard } from "./Dashboard";
 import { Generation } from "./Generation";
+import { Settings } from "./Settings";
 import { UserDetailScreen } from "./UserDetail";
 import { Users } from "./Users";
 import { AdminContext, type Admin } from "./ui";
 import s from "./admin.module.css";
 
 // The whole admin site is this one page (a static export can't have a page per user), so screens are picked by the
-// part after # in the address: #/users?filter=new, #/user/<id>, #/generation; anything else is the dashboard.
+// part after # in the address: #/users?filter=new, #/user/<id>, #/generation, #/settings; anything else is the dashboard.
 
-type Route = { screen: "dashboard" | "users" | "user" | "generation"; id?: string; filter?: string | null };
+type Route = { screen: "dashboard" | "users" | "user" | "generation" | "settings"; id?: string; filter?: string | null; create?: boolean };
 
 function parse(hash: string): Route {
   const [path, query] = hash.replace(/^#\/?/, "").split("?");
   const [screen, id] = path.split("/");
-  if (screen === "users") return { screen, filter: new URLSearchParams(query).get("filter") };
+  if (screen === "users") {
+    const params = new URLSearchParams(query);
+    return { screen, filter: params.get("filter"), create: params.get("new") === "1" };
+  }
   if (screen === "user" && id) return { screen, id: decodeURIComponent(id) };
-  if (screen === "generation") return { screen };
+  if (screen === "generation" || screen === "settings") return { screen };
   return { screen: "dashboard" };
 }
 
@@ -27,6 +31,7 @@ const nav: [Route["screen"], string, string][] = [
   ["dashboard", "Dashboard", "#/"],
   ["users", "Users", "#/users"],
   ["generation", "Generation", "#/generation"],
+  ["settings", "Settings", "#/settings"],
 ];
 
 export function AdminApp() {
@@ -111,9 +116,10 @@ export function AdminApp() {
         </nav>
         <main className={s.main}>
           {route.screen === "dashboard" && <Dashboard />}
-          {route.screen === "users" && <Users filter={route.filter ?? null} />}
+          {route.screen === "users" && <Users filter={route.filter ?? null} create={route.create ?? false} key={String(route.create)} />}
           {route.screen === "user" && <UserDetailScreen id={route.id!} key={route.id} />}
           {route.screen === "generation" && <Generation />}
+          {route.screen === "settings" && <Settings />}
         </main>
       </div>
       {toastText && <div className={s.toast}>{toastText}</div>}

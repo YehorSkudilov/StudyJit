@@ -102,3 +102,11 @@ public class QuizFile
     public int FileId { get; set; }
     public DateTimeOffset LinkedAt { get; set; }
 }
+
+/// <summary>A setting admins change while the server runs (see Admin/ServerSettings.cs).</summary>
+public class ServerSetting
+{
+    public string Key { get; set; } = "";
+    public string Value { get; set; } = "";
+    public DateTimeOffset UpdatedAt { get; set; }
+}

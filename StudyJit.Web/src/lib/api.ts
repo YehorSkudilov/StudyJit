@@ -86,6 +86,16 @@ async function errorOf(response: Response, fallback: string) {
   }
 }
 
+/** Whether anyone may register; an admin can turn sign-up off. Assumes open if the API can't be reached. */
+export async function signUpEnabled(): Promise<boolean> {
+  try {
+    const response = await fetch(`${apiUrl}/api/auth/options`);
+    return response.ok ? ((await response.json()) as { signUpEnabled: boolean }).signUpEnabled : true;
+  } catch {
+    return true;
+  }
+}
+
 export async function signIn(email: string, password: string) {
   const response = await post("/api/auth/login", { email, password });
   if (!response.ok) throw new Error(await errorOf(response, "Invalid email or password"));

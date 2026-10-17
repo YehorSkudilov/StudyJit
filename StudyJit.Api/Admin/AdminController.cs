@@ -63,12 +63,14 @@ public record SetDisabledRequest(bool Disabled);
 
 public record SetRoleRequest(string? Role);
 
+public record CreateUserRequest(string? Email, string? Name, string? Password, string? Role);
+
 public record OpenAiCleanupResponse(int DeletedFiles, int DeletedVectorStores);
 
 /// <summary>The admin site's endpoints (StudyJit.AdminWeb). Admins and SuperAdmins only; some actions SuperAdmins only.</summary>
 [Route("api/admin")]
 [Authorize(Policy = AuthPolicies.AdminAccess)]
-public class AdminController(ApiDbContext db, ICurrentUser me, TokenService tokens, FileStorage storage, QuizGenerationQueue queue,
+public class AdminController(ApiDbContext db, Microsoft.AspNetCore.Identity.UserManager<AppUser> userManager, ICurrentUser me, TokenService tokens, FileStorage storage, QuizGenerationQueue queue,
     OpenAiQuizClient openAi, TimeProvider clock) : ApiControllerBase
 {
     [HttpGet("dashboard")]
@@ -138,6 +140,33 @@ public class AdminController(ApiDbContext db, ICurrentUser me, TokenService toke
             await QuizRows(db.Quizzes.Where(q => q.UserId == id).OrderByDescending(q => q.Id).Take(200), ct),
             await db.Files.Where(f => f.UserId == id).OrderByDescending(f => f.UploadedAt).Take(200)
                 .Select(f => new AdminFileRow(f.Id, f.Name, f.Size, f.MimeType, f.UploadedAt)).ToListAsync(ct)));
+    }
+
+    /// <summary>
+    /// Creates an account with the password given (the admin passes it on), e.g. while sign-up is off. Only a SuperAdmin
+    /// can give it an admin role.
+    /// </summary>
+    [HttpPost("users")]
+    [ProducesResponseType<AdminUserRow>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ErrorResponse>(StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> CreateUser(CreateUserRequest request, CancellationToken ct)
+    {
+        var email = request.Email?.Trim() ?? "";
+        var name = request.Name?.Trim() ?? "";
+        if (email.Length == 0 || name.Length == 0 || string.IsNullOrEmpty(request.Password))
+            return BadRequestError("Email, name, and password are required.");
+        if (request.Role != null && !AdminRoles.IsValid(request.Role))
+            return BadRequestError("Unknown role.");
+        if (request.Role != null && !IsSuperAdmin)
+            return Error(StatusCodes.Status403Forbidden, "Only a SuperAdmin can give an account an admin role.");
+        if (await userManager.FindByEmailAsync(email) != null)
+            return ConflictError("An account with this email already exists.");
+
+        var user = new AppUser { UserName = email, Email = email, Name = name, AdminRole = request.Role, CreatedAt = clock.GetUtcNow() };
+        var result = await userManager.CreateAsync(user, request.Password);
+        if (!result.Succeeded)
+            return BadRequestError(result.Errors.First().Description);
+        return Ok((await UserRows(db.Users.Where(u => u.Id == user.Id), ct)).Single());
     }
 
     /// <summary>Disables (locks out for good and signs out everywhere) or re-enables an account.</summary>

@@ -71,6 +71,10 @@ export type GenerationResponse = {
   recentFailed: QuizRow[];
 };
 
+export type AdminSettings = { signUpEnabled: boolean };
+
+export type NewUser = { email: string; name: string; password: string; role: string | null };
+
 type AuthResponse = {
   userId: string;
   email: string;
@@ -204,6 +208,11 @@ export class AdminApi {
     return this.get<UserRow[]>("api/admin/users" + (qs ? `?${qs}` : ""));
   }
 
+  /** Makes an account with the password given; only a SuperAdmin can give it a role. */
+  createUser = async (user: NewUser) => {
+    const response = await this.withToken("POST", "api/admin/users", user);
+    return (await response.json()) as UserRow;
+  };
   user = (id: string) => this.get<UserDetail>(`api/admin/users/${encodeURIComponent(id)}`);
   setDisabled = (id: string, disabled: boolean) => this.send("POST", userPath(id, "disabled"), { disabled });
   signOutEverywhere = (id: string) => this.send("POST", userPath(id, "sign-out"));
@@ -211,6 +220,10 @@ export class AdminApi {
   setRole = (id: string, role: string | null) => this.send("POST", userPath(id, "role"), { role });
   /** SuperAdmin only. Deletes the account, all its quizzes and its files. */
   deleteUser = (id: string) => this.send("DELETE", `api/admin/users/${encodeURIComponent(id)}`);
+
+  settings = () => this.get<AdminSettings>("api/admin/settings");
+  /** SuperAdmin only. */
+  setSettings = (settings: AdminSettings) => this.send("PUT", "api/admin/settings", settings);
 
   generation = () => this.get<GenerationResponse>("api/admin/generation");
   retryQuiz = (id: number) => this.send("POST", `api/admin/quizzes/${id}/retry`);

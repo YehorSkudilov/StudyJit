@@ -11,17 +11,28 @@ public record RegisterRequest(string Email, string Password, string Name);
 public record LoginRequest(string Email, string Password);
 public record RefreshRequest(string RefreshToken);
 
+/// <summary>What the sign-in page offers.</summary>
+public record AuthOptionsResponse(bool SignUpEnabled);
+
 [Route("api/auth")]
 [AllowAnonymous]
 [EnableRateLimiting(RateLimits.Auth)]
-public class AuthController(UserManager<AppUser> users, SignInManager<AppUser> signIn, TokenService tokens, TimeProvider clock) : ApiControllerBase
+public class AuthController(UserManager<AppUser> users, SignInManager<AppUser> signIn, TokenService tokens, Admin.ServerSettings settings, TimeProvider clock) : ApiControllerBase
 {
-    /// <summary>Creates an account and signs it in.</summary>
+    /// <summary>Whether anyone may register (an admin can turn it off and create accounts instead).</summary>
+    [HttpGet("options")]
+    [DisableRateLimiting]
+    [ProducesResponseType<AuthOptionsResponse>(StatusCodes.Status200OK)]
+    public async Task<AuthOptionsResponse> Options(CancellationToken ct) => new(await settings.SignUpEnabledAsync(ct));
+
+    /// <summary>Creates an account and signs it in, unless an admin has turned sign-up off.</summary>
     [HttpPost("register")]
     [ProducesResponseType<AuthResponse>(StatusCodes.Status200OK)]
     [ProducesResponseType<ErrorResponse>(StatusCodes.Status409Conflict)]
     public async Task<IActionResult> Register(RegisterRequest request, CancellationToken ct)
     {
+        if (!await settings.SignUpEnabledAsync(ct))
+            return Error(StatusCodes.Status403Forbidden, "Sign-up is closed. Ask an admin for an account.");
         var email = request.Email?.Trim() ?? "";
         var name = request.Name?.Trim() ?? "";
         if (email.Length == 0 || name.Length == 0 || string.IsNullOrEmpty(request.Password))

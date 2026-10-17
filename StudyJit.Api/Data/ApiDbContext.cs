@@ -11,6 +11,7 @@ public class ApiDbContext(DbContextOptions<ApiDbContext> options) : IdentityDbCo
     public DbSet<Quiz> Quizzes => Set<Quiz>();
     public DbSet<QuizQuestion> QuizQuestions => Set<QuizQuestion>();
     public DbSet<QuizFile> QuizFiles => Set<QuizFile>();
+    public DbSet<ServerSetting> Settings => Set<ServerSetting>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -69,6 +70,12 @@ public class ApiDbContext(DbContextOptions<ApiDbContext> options) : IdentityDbCo
             e.HasIndex(l => new { l.QuizId, l.FileId }).IsUnique();
             e.HasOne<Quiz>().WithMany().HasForeignKey(l => l.QuizId).OnDelete(DeleteBehavior.Cascade);
             e.HasOne<StoredFile>().WithMany().HasForeignKey(l => l.FileId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        b.Entity<ServerSetting>(e =>
+        {
+            e.HasKey(x => x.Key);
+            e.Property(x => x.Key).HasMaxLength(100);
         });
     }
 }

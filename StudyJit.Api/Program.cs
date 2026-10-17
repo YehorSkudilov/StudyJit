@@ -94,6 +94,8 @@ builder.Services.AddRateLimiter(o =>
 });
 
 builder.Services.AddScoped<TokenService>();
+// Settings admins change while the server runs (whether anyone may sign up).
+builder.Services.AddScoped<ServerSettings>();
 
 // Uploaded files on disk (see Files/).
 builder.Services.AddSingleton(builder.Configuration.GetSection("Storage").Get<StorageOptions>() ?? new StorageOptions());

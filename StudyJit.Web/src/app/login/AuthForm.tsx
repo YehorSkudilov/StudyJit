@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { register, signIn } from "@/lib/api";
+import { register, signIn, signUpEnabled } from "@/lib/api";
 import Image from "next/image";
 
 export default function AuthForm() {
@@ -12,7 +12,16 @@ export default function AuthForm() {
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [canRegister, setCanRegister] = useState(true);
   const router = useRouter();
+
+  // An admin can close sign-up; then accounts are only made from the admin site.
+  useEffect(() => {
+    signUpEnabled().then((enabled) => {
+      setCanRegister(enabled);
+      if (!enabled) setIsRegister(false);
+    });
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -110,29 +119,35 @@ export default function AuthForm() {
           </button>
         </form>
 
-        <p className="mt-4 text-center text-gray-600 dark:text-gray-300">
-          {isRegister ? (
-            <>
-              Already have an account?{" "}
-              <button
-                onClick={() => setIsRegister(false)}
-                className="text-blue-600 dark:text-blue-400 hover:underline font-semibold"
-              >
-                Log In
-              </button>
-            </>
-          ) : (
-            <>
-              Don’t have an account?{" "}
-              <button
-                onClick={() => setIsRegister(true)}
-                className="text-blue-600 dark:text-blue-400 hover:underline font-semibold"
-              >
-                Register
-              </button>
-            </>
-          )}
-        </p>
+        {canRegister ? (
+          <p className="mt-4 text-center text-gray-600 dark:text-gray-300">
+            {isRegister ? (
+              <>
+                Already have an account?{" "}
+                <button
+                  onClick={() => setIsRegister(false)}
+                  className="text-blue-600 dark:text-blue-400 hover:underline font-semibold"
+                >
+                  Log In
+                </button>
+              </>
+            ) : (
+              <>
+                Don’t have an account?{" "}
+                <button
+                  onClick={() => setIsRegister(true)}
+                  className="text-blue-600 dark:text-blue-400 hover:underline font-semibold"
+                >
+                  Register
+                </button>
+              </>
+            )}
+          </p>
+        ) : (
+          <p className="mt-4 text-center text-gray-600 dark:text-gray-300">
+            Sign-up is closed. Ask an admin for an account.
+          </p>
+        )}
       </div>
     </div>
   );
