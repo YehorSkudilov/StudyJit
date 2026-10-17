@@ -1,8 +1,7 @@
-// Courses: what study sets and files are organised by (StudyJit.Api's /api/courses), plus the AI helpers that read a
-// pasted course list and plan a course's study sets.
+// Courses (StudyJit.Api's /api/courses): each holds folders of files, a study set made automatically for each folder,
+// and exams combining study sets; plus the AI helpers that read a pasted course list and sort files into folders.
 
 import { apiFetch } from "@/lib/api";
-import type { Question, Term } from "@/lib/study";
 
 export interface Course {
   id: number;
@@ -31,14 +30,30 @@ export interface QuizSummary {
   generation_status: string;
   num_questions: number;
   course_id: number | null;
+  folder_id: number | null;
   last_score: number | null;
   questions: unknown[];
+  /** "set": a folder's study set; "exam": built from chosen study sets. */
+  kind: "set" | "exam";
+  source_ids: number[];
+}
+
+export interface CourseFolder {
+  id: number;
+  name: string;
+  file_count: number;
+}
+
+export interface FolderPlan {
+  name: string;
+  file_ids: number[];
 }
 
 export interface CourseFile {
   id: number;
   name: string;
   course_id: number | null;
+  folder_id: number | null;
   size: number;
   mime_type: string | null;
   uploaded_at: string;
@@ -96,26 +111,49 @@ export const courseFiles = async (id: number) =>
 
 export const allFiles = async () => json<CourseFile[]>(await apiFetch(`/api/items/files`, { cache: "no-store" }), "Couldn't load the files.");
 
-export const attachFiles = async (courseId: number, fileIds: number[]) =>
-  json(await send(`/api/courses/${courseId}/files`, "POST", { file_ids: fileIds }), "Couldn't add the files.");
-
 export const deleteFiles = async (ids: number[]) => json(await send(`/api/items/files/delete`, "POST", { ids }), "Couldn't delete the files.");
-
-export async function createQuiz(name: string, description: string, courseId: number | null) {
-  return json<{ quizId: number }>(
-    await send("/api/items/quizzes/create", "POST", { name, description, course_id: courseId }),
-    "Couldn't create the study set."
-  );
-}
 
 /** The AI reads the courses out of pasted text; nothing is saved until they're created. */
 export const parseCourses = async (text: string) =>
   (await json<{ courses: CourseDraft[] }>(await send("/api/ai/courses/parse", "POST", { text }), "The AI couldn't read that.")).courses;
 
-/** Course autopilot: the AI plans the course's study sets and queues them all for generation. */
-export const autopilot = async (courseId: number, sets: number) =>
-  (await json<{ created: QuizSummary[] }>(await send(`/api/ai/courses/${courseId}/autopilot`, "POST", { sets }), "Autopilot couldn't start."))
-    .created;
+export const deleteQuizzes = async (ids: number[]) =>
+  json(await send("/api/items/quizzes/delete", "POST", { ids }), "Couldn't delete it.");
+
+/** Queues a study set or exam to be generated again. */
+export async function regenerate(quizId: number) {
+  const form = new FormData();
+  form.append("quizId", String(quizId));
+  return json<{ status: string; queueNumber: number }>(await apiFetch("/api/ai/generateQuiz", { method: "POST", body: form }), "Couldn't start generating.");
+}
+
+// ---------- Folders (each folder with files is a study set) ----------
+
+export const listFolders = async (courseId: number) =>
+  json<CourseFolder[]>(await apiFetch(`/api/courses/${courseId}/folders`, { cache: "no-store" }), "Couldn't load the folders.");
+
+export const createFolder = async (courseId: number, name: string) =>
+  json<CourseFolder>(await send(`/api/courses/${courseId}/folders`, "POST", { name }), "Couldn't create the folder.");
+
+export const renameFolder = async (courseId: number, folderId: number, name: string) =>
+  json(await send(`/api/courses/${courseId}/folders/${folderId}`, "PATCH", { name }), "Couldn't rename the folder.");
+
+export const deleteFolder = async (courseId: number, folderId: number) =>
+  json(await send(`/api/courses/${courseId}/folders/${folderId}`, "DELETE"), "Couldn't delete the folder.");
+
+export const moveFiles = async (courseId: number, fileIds: number[], folderId: number | null) =>
+  json(await send(`/api/courses/${courseId}/files/move`, "POST", { file_ids: fileIds, folder_id: folderId }), "Couldn't move the files.");
+
+/** The AI's suggested folders for the course's files; nothing moves until they're applied. */
+export const organizeFiles = async (courseId: number) =>
+  (await json<{ folders: FolderPlan[] }>(await send(`/api/ai/courses/${courseId}/organize`, "POST"), "The AI couldn't sort the files.")).folders;
+
+export const applyFolders = async (courseId: number, folders: FolderPlan[]) =>
+  json<CourseFolder[]>(await send(`/api/courses/${courseId}/folders/apply`, "POST", { folders }), "Couldn't apply the folders.");
+
+/** An exam combining the chosen study sets, generated from their files and guides. */
+export const createExam = async (courseId: number, exam: { name: string; set_ids: number[]; questions: number; focus: string }) =>
+  (await json<{ created: QuizSummary[] }>(await send(`/api/ai/courses/${courseId}/exams`, "POST", exam), "Couldn't create the exam.")).created[0];
 
 /** Uploads a file in 5 MB chunks, into a course (and/or a files folder). */
 export async function uploadFile(file: File, target: { courseId?: number | null; folderId?: string | null }, onProgress?: (p: number) => void) {
@@ -137,12 +175,12 @@ export async function uploadFile(file: File, target: { courseId?: number | null;
   } while (start < file.size);
 }
 
-/** Downloads a YouTube video into the course, reporting progress from the server's events. */
-export async function uploadYouTube(url: string, courseId: number | null, onProgress?: (p: number) => void) {
+/** Downloads a YouTube video into the course (and folder), reporting progress from the server's events. */
+export async function uploadYouTube(url: string, target: { courseId: number | null; folderId?: string | null }, onProgress?: (p: number) => void) {
   const res = await apiFetch("/api/items/files/upload", {
     method: "POST",
     headers: { "Content-Type": "application/json", Accept: "text/event-stream" },
-    body: JSON.stringify({ url: url.trim(), folder: "root", course: courseId }),
+    body: JSON.stringify({ url: url.trim(), folder: target.folderId ?? "root", course: target.courseId }),
   });
   if (!res.ok) throw new Error((await res.json().catch(() => null))?.error || "YouTube download failed.");
   const reader = res.body?.getReader();
@@ -172,39 +210,10 @@ export function formatBytes(size: number) {
   return `${(size / 1024 ** 3).toFixed(2)} GB`;
 }
 
-// ---------- Course-wide study and cheat sheets ----------
-
-export interface CheatSheet {
-  id: number;
-  title: string;
-  focus: string;
-  content: string;
-  created_at: string;
-}
-
-/** Every generated set's questions and key terms together, for studying the whole course at once. */
-export const courseStudy = async (id: number) =>
-  json<{ id: number; name: string; set_count: number; questions: Question[]; terms: Term[] }>(
-    await apiFetch(`/api/courses/${id}/study`, { cache: "no-store" }),
-    "Couldn't load this course's material."
-  );
-
-export const cheatSheets = async (id: number) =>
-  json<CheatSheet[]>(await apiFetch(`/api/courses/${id}/cheatsheets`, { cache: "no-store" }), "Couldn't load the cheat sheets.");
-
-export const createCheatSheet = async (id: number, focus: string, detailed: boolean) =>
-  json<CheatSheet>(await send(`/api/courses/${id}/cheatsheets`, "POST", { focus, detailed }), "Couldn't write the cheat sheet.");
-
-export const deleteCheatSheet = async (id: number, sheetId: number) =>
-  json(await send(`/api/courses/${id}/cheatsheets/${sheetId}`, "DELETE"), "Couldn't delete the cheat sheet.");
-
 /** The sections of a course page, which the navbar shows as tabs while you're in a course. */
 export const courseSections = [
-  { key: "", label: "Overview" },
-  { key: "sets", label: "Study sets" },
-  { key: "flashcards", label: "Flashcards" },
-  { key: "cheatsheets", label: "Cheat sheets" },
-  { key: "exam", label: "Exam prep" },
+  { key: "", label: "Study sets" },
+  { key: "exams", label: "Exams" },
   { key: "files", label: "Files" },
 ] as const;
 

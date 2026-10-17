@@ -1,19 +1,10 @@
 "use client";
 
 import { AnimatePresence, motion } from "framer-motion";
-import { AlertCircle, Check, ClipboardPaste, GraduationCap, Loader2, Minus, Plus, Rocket, Sparkles, Trash2, Wand2 } from "lucide-react";
+import { AlertCircle, Check, ClipboardPaste, GraduationCap, Loader2, Plus, Sparkles, Trash2, Wand2 } from "lucide-react";
 import { useState } from "react";
 import Modal from "@/components/ui/Modal";
-import {
-  autopilot,
-  courseColors,
-  createCourse,
-  createCourses,
-  parseCourses,
-  type Course,
-  type CourseDraft,
-  type QuizSummary,
-} from "@/lib/courses";
+import { courseColors, createCourse, createCourses, parseCourses, type Course, type CourseDraft } from "@/lib/courses";
 
 /* ------------------------------ New course ------------------------------ */
 
@@ -261,137 +252,6 @@ export function ImportCoursesModal({
           </motion.div>
         )}
       </AnimatePresence>
-    </Modal>
-  );
-}
-
-/* ------------------------------ Autopilot ------------------------------ */
-
-const steps = ["Reading your files", "Splitting the course into topics", "Writing study set briefs", "Queuing generation"];
-
-/** Course autopilot: pick how many sets, and the AI plans and queues the whole course. */
-export function AutopilotModal({
-  isOpen,
-  onClose,
-  course,
-  onDone,
-}: {
-  isOpen: boolean;
-  onClose: () => void;
-  course: Course;
-  onDone: (created: QuizSummary[]) => void;
-}) {
-  const [sets, setSets] = useState(6);
-  const [busy, setBusy] = useState(false);
-  const [step, setStep] = useState(0);
-  const [created, setCreated] = useState<QuizSummary[] | null>(null);
-  const [error, setError] = useState("");
-
-  const run = async () => {
-    setBusy(true);
-    setError("");
-    setStep(0);
-    const timer = setInterval(() => setStep((s) => Math.min(s + 1, steps.length - 2)), 2200);
-    try {
-      const result = await autopilot(course.id, sets);
-      setStep(steps.length - 1);
-      setCreated(result);
-      onDone(result);
-    } catch (err) {
-      setError((err as Error).message);
-    } finally {
-      clearInterval(timer);
-      setBusy(false);
-    }
-  };
-
-  const close = () => {
-    setCreated(null);
-    setError("");
-    onClose();
-  };
-
-  return (
-    <Modal isOpen={isOpen} onClose={close} locked={busy} title="Course autopilot" icon={<Rocket className="w-5 h-5" />} width="max-w-lg">
-      {created ? (
-        <div className="flex flex-col gap-4">
-          <div className="flex items-center gap-3 rounded-2xl bg-emerald-500/10 p-4">
-            <span className="w-10 h-10 rounded-full bg-emerald-500 text-white flex items-center justify-center">
-              <Check className="w-5 h-5" />
-            </span>
-            <div>
-              <p className="font-bold">{created.length} study sets on their way</p>
-              <p className="text-sm text-muted">They&apos;re generating one after another; each unlocks when it&apos;s ready.</p>
-            </div>
-          </div>
-          <ul className="flex flex-col gap-2 max-h-72 overflow-y-auto">
-            {created.map((q, i) => (
-              <motion.li
-                key={q.id}
-                initial={{ opacity: 0, x: -10 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: i * 0.08 }}
-                className="rounded-xl border border-stroke p-3"
-              >
-                <p className="font-semibold">{q.name}</p>
-                {q.description && <p className="text-sm text-muted">{q.description}</p>}
-              </motion.li>
-            ))}
-          </ul>
-          <button onClick={close} className="btn-primary">
-            Done
-          </button>
-        </div>
-      ) : busy ? (
-        <div className="flex flex-col gap-3 py-2">
-          {steps.map((s, i) => (
-            <motion.div key={s} initial={{ opacity: 0.4 }} animate={{ opacity: i <= step ? 1 : 0.4 }} className="flex items-center gap-3">
-              <span
-                className={`w-7 h-7 rounded-full flex items-center justify-center ${
-                  i < step ? "bg-emerald-500 text-white" : i === step ? "bg-brand-soft text-brand" : "bg-surface-2 text-muted"
-                }`}
-              >
-                {i < step ? <Check className="w-4 h-4" /> : i === step ? <Loader2 className="w-4 h-4 animate-spin" /> : i + 1}
-              </span>
-              <span className={i === step ? "font-semibold" : ""}>{s}</span>
-            </motion.div>
-          ))}
-        </div>
-      ) : (
-        <div className="flex flex-col gap-5">
-          <p className="text-muted">
-            The AI looks at {course.file_count ? `the ${course.file_count} file${course.file_count === 1 ? "" : "s"} in this course` : "what this course usually covers"},
-            splits it into topics and builds a study set for each, plus a final review, with quizzes, flashcards and study guides.
-          </p>
-          {course.file_count === 0 && (
-            <p className="flex gap-2 rounded-xl bg-amber-400/10 p-3 text-sm text-amber-700 dark:text-amber-300">
-              <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" /> No files yet: the sets will be based on the course name alone. Upload lecture
-              notes first for sets that match your class.
-            </p>
-          )}
-          <div>
-            <label className="label">Study sets</label>
-            <div className="flex items-center gap-4">
-              <button className="icon-btn border border-stroke" onClick={() => setSets(Math.max(1, sets - 1))}>
-                <Minus className="w-4 h-4" />
-              </button>
-              <span className="w-12 text-center text-3xl font-extrabold text-brand tabular-nums">{sets}</span>
-              <button className="icon-btn border border-stroke" onClick={() => setSets(Math.min(12, sets + 1))}>
-                <Plus className="w-4 h-4" />
-              </button>
-              <span className="text-sm text-muted">at most</span>
-            </div>
-          </div>
-          {error && (
-            <p className="flex items-center gap-2 text-sm text-red-500">
-              <AlertCircle className="w-4 h-4" /> {error}
-            </p>
-          )}
-          <button onClick={run} className="btn-primary py-3">
-            <Rocket className="w-5 h-5" /> Build my course
-          </button>
-        </div>
-      )}
     </Modal>
   );
 }

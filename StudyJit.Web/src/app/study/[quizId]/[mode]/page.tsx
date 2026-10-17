@@ -12,6 +12,7 @@ import Practice from "@/components/study/Practice";
 import Test from "@/components/study/Test";
 import TrueFalse from "@/components/study/TrueFalse";
 import Write from "@/components/study/Write";
+import CheatSheet from "@/components/study/CheatSheet";
 
 const components = {
   learn: Learn,
@@ -22,23 +23,17 @@ const components = {
   truefalse: TrueFalse,
   write: Write,
   guide: Guide,
+  cheatsheet: CheatSheet,
 };
 
 /** /study/{quizId}/{mode}: one study session, full screen. */
 export default function StudyPage() {
   const params = useParams<{ quizId: string; mode: string }>();
   const router = useRouter();
-  const courseId = /^c(\d+)$/.exec(params.quizId)?.[1];
   const { quiz, error } = useStudyQuiz(params.quizId);
   const info = modeInfo(params.mode);
 
-  // A course-wide session goes back to the course's flashcards or exam prep; a study set back to its page.
   const exit = () => {
-    if (courseId) {
-      const cardModes = ["flashcards", "match", "write"];
-      router.push(`/courses/${courseId}/${cardModes.includes(params.mode) ? "flashcards" : "exam"}`);
-      return;
-    }
     sessionStorage.setItem("selectedQuizId", params.quizId);
     router.push(quiz ? `/quizDetails/${encodeURIComponent(quiz.name)}` : "/courses");
   };

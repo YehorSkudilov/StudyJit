@@ -1,4 +1,4 @@
-import { BookOpenText, Brain, ClipboardCheck, Layers, PenLine, Puzzle, Target, Zap, type LucideIcon } from "lucide-react";
+import { BookOpenText, Brain, ClipboardCheck, Layers, PenLine, Puzzle, ScrollText, Target, Zap, type LucideIcon } from "lucide-react";
 import type { StudyMode, StudyQuiz } from "@/lib/study";
 import { studyPairs, typeable } from "@/lib/study";
 
@@ -78,6 +78,14 @@ export const modes: ModeInfo[] = [
     icon: BookOpenText,
     gradient: "from-slate-600 to-slate-400",
     unavailable: (q) => (q.summary || q.terms.length ? null : "Regenerate to get a study guide"),
+  },
+  {
+    mode: "cheatsheet",
+    title: "Cheat sheet",
+    blurb: "One printable page of the essentials",
+    icon: ScrollText,
+    gradient: "from-amber-500 to-yellow-400",
+    unavailable: (q) => (q.cheatSheet ? null : "Regenerate to get a cheat sheet"),
   },
 ];
 

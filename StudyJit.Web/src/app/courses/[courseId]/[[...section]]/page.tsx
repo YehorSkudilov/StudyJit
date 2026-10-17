@@ -1,70 +1,64 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   BookOpen,
-  Brain,
+  Check,
   ClipboardCheck,
-  Copy,
-  FileText,
-  Layers,
+  Folder,
+  FolderOpen,
+  FolderPlus,
+  Inbox,
   Loader2,
-  PenLine,
+  MoreHorizontal,
   Pencil,
   Plus,
-  Printer,
-  Puzzle,
-  Rocket,
-  ScrollText,
   Sparkles,
-  Target,
   Trash2,
   UploadCloud,
   Wand2,
-  Zap,
 } from "lucide-react";
 import QuizCard from "@/components/QuizCard";
-import CreateQuizPopup from "@/components/CreateQuizPopup";
 import FileUploadPopup from "@/components/FileUploadPopup";
 import AlertPopup from "@/components/AlertPopup";
 import Modal from "@/components/ui/Modal";
-import Markdown from "@/components/ui/Markdown";
 import EmptyState from "@/components/ui/EmptyState";
-import ScoreRing from "@/components/ui/ScoreRing";
-import { AutopilotModal } from "@/components/courses/CourseModals";
 import {
-  cheatSheets,
+  applyFolders,
   colorOf,
   courseColors,
   courseFiles,
   courseHref,
   courseQuizzes,
-  courseStudy,
-  createCheatSheet,
-  createQuiz,
-  deleteCheatSheet,
+  createExam,
+  createFolder,
   deleteCourse,
   deleteFiles,
+  deleteFolder,
   formatBytes,
   getCourse,
+  listFolders,
+  moveFiles,
+  organizeFiles,
+  renameFolder,
   updateCourse,
   uploadFile,
   uploadYouTube,
-  type CheatSheet,
   type Course,
   type CourseFile,
+  type CourseFolder,
   type CourseSection,
+  type FolderPlan,
   type QuizSummary,
 } from "@/lib/courses";
-import type { StudyMode, Term } from "@/lib/study";
 
-/** Course-wide study sessions run at /study/c{courseId}/{mode}. */
-const courseStudyHref = (courseId: number, mode: StudyMode) => `/study/c${courseId}/${mode}`;
+/** Sorts "Week 2" before "Week 10". */
+const byName = <T extends { name: string }>(a: T, b: T) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: "base" });
 
-/** /courses/{id}/{section}: one course. The navbar shows its sections as tabs. */
+/** /courses/{id}/{section}: one course. The navbar shows its sections (Study sets, Exams, Files) as tabs. */
 export default function CoursePage() {
   const params = useParams<{ courseId: string; section?: string[] }>();
   const id = Number(params.courseId);
@@ -74,20 +68,17 @@ export default function CoursePage() {
   const [course, setCourse] = useState<Course | null>(null);
   const [quizzes, setQuizzes] = useState<QuizSummary[] | null>(null);
   const [files, setFiles] = useState<CourseFile[] | null>(null);
+  const [folders, setFolders] = useState<CourseFolder[] | null>(null);
   const [error, setError] = useState("");
-  const [alert, setAlert] = useState<string | null>(null);
-
-  const [autopilotOpen, setAutopilotOpen] = useState(false);
-  const [newSetOpen, setNewSetOpen] = useState(false);
-  const [uploadOpen, setUploadOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
 
   const load = useCallback(async () => {
     try {
-      const [c, q, f] = await Promise.all([getCourse(id), courseQuizzes(id), courseFiles(id)]);
+      const [c, q, f, d] = await Promise.all([getCourse(id), courseQuizzes(id), courseFiles(id), listFolders(id)]);
       setCourse(c);
       setQuizzes(q);
       setFiles(f);
+      setFolders([...d].sort(byName));
     } catch (e) {
       setError((e as Error).message);
     }
@@ -97,7 +88,7 @@ export default function CoursePage() {
     load();
   }, [load]);
 
-  // While sets are generating, keep their status fresh.
+  // Sets regenerate on their own when files change: keep their status fresh while any are working.
   const generating = (quizzes ?? []).some((q) => q.generation_status === "queued" || q.generation_status === "pending");
   useEffect(() => {
     if (!generating) return;
@@ -105,9 +96,10 @@ export default function CoursePage() {
     return () => clearInterval(timer);
   }, [generating, load]);
 
-  const openQuiz = (q: { id: number; name: string }) => {
+  const openQuiz = (q: QuizSummary) => {
     sessionStorage.setItem("selectedQuizId", String(q.id));
     sessionStorage.setItem("currentCourseId", String(id));
+    sessionStorage.setItem("currentCourseSection", q.kind === "exam" ? "exams" : "");
     router.push(`/quizDetails/${encodeURIComponent(q.name)}`);
   };
 
@@ -124,282 +116,53 @@ export default function CoursePage() {
   if (!course)
     return (
       <div className="page mx-auto max-w-7xl px-4 sm:px-6 py-8">
-        <div className="skeleton h-40 rounded-3xl" />
+        <div className="skeleton h-28 rounded-3xl" />
       </div>
     );
 
-  const color = colorOf(course);
-  const ready = (quizzes ?? []).filter((q) => q.generation_status === "success");
+  const sets = (quizzes ?? []).filter((q) => q.kind !== "exam");
+  const exams = (quizzes ?? []).filter((q) => q.kind === "exam");
 
   return (
     <div className="page">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 py-8">
         {/* Banner */}
         <motion.section
-          layout
           initial={{ opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: 0 }}
-          className={`print:hidden relative overflow-hidden rounded-3xl bg-gradient-to-br ${color.gradient} text-white shadow-xl ${
-            section ? "px-6 py-5" : "p-6 sm:p-8"
-          }`}
+          className={`print:hidden relative overflow-hidden rounded-3xl bg-gradient-to-br ${colorOf(course).gradient} px-6 py-6 text-white shadow-xl`}
         >
           <div className="animate-drift absolute -right-16 -top-16 h-64 w-64 rounded-full bg-white/15 blur-sm" />
           <div className="absolute right-24 -bottom-20 h-48 w-48 rounded-full bg-white/10" />
-          <div className="relative flex flex-col sm:flex-row sm:items-center gap-4">
+          <div className="relative flex items-center gap-4">
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 mb-1.5">
                 {course.code && <span className="chip bg-white/20 backdrop-blur text-white">{course.code}</span>}
                 {course.term && <span className="chip bg-white/20 backdrop-blur text-white">{course.term}</span>}
+                {generating && (
+                  <span className="chip bg-white/20 backdrop-blur text-white">
+                    <Loader2 className="w-3 h-3 animate-spin" /> Updating study sets
+                  </span>
+                )}
               </div>
-              <h1 className={`${section ? "text-2xl" : "text-3xl sm:text-4xl"} font-extrabold tracking-tight truncate`}>{course.name}</h1>
-              {!section && (
-                <p className="mt-2 text-white/80">
-                  {course.quiz_count} study set{course.quiz_count === 1 ? "" : "s"} · {course.file_count} file{course.file_count === 1 ? "" : "s"}
-                  {course.generating_count > 0 && ` · ${course.generating_count} generating`}
-                </p>
-              )}
+              <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight truncate">{course.name}</h1>
             </div>
-            <div className="flex gap-2">
-              <button
-                onClick={() => setAutopilotOpen(true)}
-                className="inline-flex items-center gap-2 rounded-xl bg-white px-5 py-2.5 font-bold text-slate-900 shadow-lg transition hover:scale-105 active:scale-95"
-              >
-                <Rocket className="w-4 h-4" /> Autopilot
-              </button>
-              <button onClick={() => setEditOpen(true)} className="w-11 h-11 rounded-xl bg-white/20 backdrop-blur flex items-center justify-center hover:bg-white/30 transition" title="Edit course">
-                <Pencil className="w-4 h-4" />
-              </button>
-            </div>
+            <button onClick={() => setEditOpen(true)} className="w-11 h-11 rounded-xl bg-white/20 backdrop-blur flex items-center justify-center hover:bg-white/30 transition" title="Edit course">
+              <Pencil className="w-4 h-4" />
+            </button>
           </div>
         </motion.section>
 
         <AnimatePresence mode="wait">
-          <motion.div
-            key={section}
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            transition={{ duration: 0.2 }}
-            className="mt-8"
-          >
-            {section === "" && (
-              <Overview
-                course={course}
-                quizzes={quizzes ?? []}
-                files={files ?? []}
-                onAutopilot={() => setAutopilotOpen(true)}
-                onUpload={() => setUploadOpen(true)}
-                onNewSet={() => setNewSetOpen(true)}
-                onOpen={openQuiz}
-              />
-            )}
-            {section === "sets" && (
-              <SetsSection
-                quizzes={quizzes}
-                onNew={() => setNewSetOpen(true)}
-                onAutopilot={() => setAutopilotOpen(true)}
-                onOpen={openQuiz}
-              />
-            )}
-            {section === "flashcards" && <FlashcardsSection course={course} readySets={ready.length} />}
-            {section === "cheatsheets" && <CheatSheetsSection course={course} readySets={ready.length} />}
-            {section === "exam" && <ExamSection course={course} quizzes={quizzes ?? []} onOpen={openQuiz} />}
-            {section === "files" && (
-              <FilesSection
-                files={files ?? []}
-                onUpload={() => setUploadOpen(true)}
-                onDelete={async (fileIds) => {
-                  await deleteFiles(fileIds).catch((e) => setAlert(e.message));
-                  load();
-                }}
-              />
-            )}
+          <motion.div key={section} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} transition={{ duration: 0.2 }} className="mt-8">
+            {section === "" && <SetsSection course={course} sets={sets} folders={folders ?? []} files={files ?? []} onOpen={openQuiz} />}
+            {section === "exams" && <ExamsSection course={course} sets={sets} exams={exams} onOpen={openQuiz} onCreated={load} />}
+            {section === "files" && <FilesSection course={course} files={files ?? []} folders={folders ?? []} sets={sets} reload={load} />}
           </motion.div>
         </AnimatePresence>
       </div>
 
-      <AutopilotModal
-        isOpen={autopilotOpen}
-        onClose={() => setAutopilotOpen(false)}
-        course={course}
-        onDone={() => {
-          load();
-          router.push(courseHref(id, "sets"));
-        }}
-      />
-
-      <CreateQuizPopup
-        isOpen={newSetOpen}
-        onClose={() => setNewSetOpen(false)}
-        onCreateQuiz={async (name, description) => {
-          const { quizId } = await createQuiz(name, description ?? "", id);
-          openQuiz({ id: quizId, name });
-        }}
-      />
-
-      {uploadOpen && (
-        <FileUploadPopup
-          isOpen
-          onClose={() => {
-            setUploadOpen(false);
-            load();
-          }}
-          onFileUpload={(file, onProgress) => uploadFile(file, { courseId: id }, onProgress)}
-          onYouTubeUpload={(url, onProgress) => uploadYouTube(url, id, onProgress)}
-        />
-      )}
-
-      <EditCourseModal
-        isOpen={editOpen}
-        course={course}
-        onClose={() => setEditOpen(false)}
-        onSaved={setCourse}
-        onDeleted={() => router.push("/courses")}
-      />
-
-      {alert && <AlertPopup message={alert} onClose={() => setAlert(null)} />}
-    </div>
-  );
-}
-
-/* ------------------------------ Overview ------------------------------ */
-
-function Overview({
-  course,
-  quizzes,
-  files,
-  onAutopilot,
-  onUpload,
-  onNewSet,
-  onOpen,
-}: {
-  course: Course;
-  quizzes: QuizSummary[];
-  files: CourseFile[];
-  onAutopilot: () => void;
-  onUpload: () => void;
-  onNewSet: () => void;
-  onOpen: (q: QuizSummary) => void;
-}) {
-  const ready = quizzes.filter((q) => q.generation_status === "success");
-  const scored = ready.filter((q) => q.last_score != null);
-  const average = scored.length ? scored.reduce((s, q) => s + Number(q.last_score), 0) / scored.length : null;
-
-  const shortcuts = [
-    { section: "flashcards" as const, title: "Flashcards", text: "Every key term in the course", icon: Layers, tone: "from-sky-500 to-cyan-400" },
-    { section: "cheatsheets" as const, title: "Cheat sheets", text: "AI-condensed, printable notes", icon: ScrollText, tone: "from-slate-600 to-slate-400" },
-    { section: "exam" as const, title: "Exam prep", text: "Mock exams across all topics", icon: ClipboardCheck, tone: "from-blue-600 to-indigo-500" },
-  ];
-
-  return (
-    <div className="grid lg:grid-cols-[1fr_20rem] gap-6 items-start">
-      <div className="flex flex-col gap-6">
-        {quizzes.length === 0 && (
-          <div className="card relative overflow-hidden p-6 sm:p-8">
-            <div className="absolute -right-10 -top-10 h-48 w-48 rounded-full bg-gradient-to-br from-brand/20 to-brand-2/20 blur-2xl" />
-            <div className="relative flex flex-col sm:flex-row gap-5 sm:items-center">
-              <span className="w-14 h-14 rounded-2xl bg-gradient-to-br from-brand to-brand-2 text-white flex items-center justify-center shadow-lg animate-float">
-                <Sparkles className="w-7 h-7" />
-              </span>
-              <div className="flex-1">
-                <h2 className="text-xl font-bold">Let the AI build this course for you</h2>
-                <p className="text-muted mt-1">
-                  {course.file_count
-                    ? "Autopilot reads your files, splits them into topics and makes a study set for each, plus a final review."
-                    : "Upload your lecture notes, then let Autopilot turn them into study sets, one per topic, plus a final review."}
-                </p>
-              </div>
-              <div className="flex flex-col gap-2">
-                {!course.file_count && (
-                  <button onClick={onUpload} className="btn-secondary">
-                    <UploadCloud className="w-4 h-4" /> Upload files
-                  </button>
-                )}
-                <button onClick={onAutopilot} className="btn-primary">
-                  <Rocket className="w-4 h-4" /> Run autopilot
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        <div className="grid sm:grid-cols-3 gap-4">
-          {shortcuts.map((s, i) => (
-            <motion.div key={s.section} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.06 }}>
-              <Link href={courseHref(course.id, s.section)} className="group card card-hover p-5 flex flex-col gap-3 h-full">
-                <span className={`w-11 h-11 rounded-2xl bg-gradient-to-br ${s.tone} text-white flex items-center justify-center shadow-md transition group-hover:scale-110 group-hover:-rotate-3`}>
-                  <s.icon className="w-5 h-5" />
-                </span>
-                <div>
-                  <p className="font-bold">{s.title}</p>
-                  <p className="text-sm text-muted">{s.text}</p>
-                </div>
-              </Link>
-            </motion.div>
-          ))}
-        </div>
-
-        <div>
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="font-bold text-lg">Study sets</h2>
-            {quizzes.length > 0 && (
-              <Link href={courseHref(course.id, "sets")} className="text-sm font-semibold text-brand hover:underline">
-                See all {quizzes.length}
-              </Link>
-            )}
-          </div>
-          {quizzes.length === 0 ? (
-            <button
-              onClick={onNewSet}
-              className="w-full rounded-2xl border-2 border-dashed border-stroke py-10 text-muted hover:border-brand/50 hover:text-brand transition flex flex-col items-center gap-2"
-            >
-              <Plus className="w-7 h-7" />
-              <span className="font-semibold">Make a study set yourself</span>
-            </button>
-          ) : (
-            <div className="grid gap-4 sm:grid-cols-2">
-              {quizzes.slice(0, 4).map((q) => (
-                <QuizCard
-                  key={q.id}
-                  quizName={q.name}
-                  description={q.description}
-                  lastScore={q.last_score}
-                  status={q.generation_status}
-                  questionCount={q.questions.length}
-                  selected={false}
-                  onClick={() => onOpen(q)}
-                  onDoubleClick={() => {}}
-                />
-              ))}
-            </div>
-          )}
-        </div>
-      </div>
-
-      <div className="card p-6 flex flex-col items-center text-center lg:sticky lg:top-24">
-        <h2 className="font-bold text-lg self-start">Progress</h2>
-        <div className="my-4">
-          {average != null ? (
-            <ScoreRing percent={average} size={140} label="average" />
-          ) : (
-            <div className="w-[140px] h-[140px] rounded-full border-[12px] border-surface-2 flex items-center justify-center text-sm text-muted">
-              No scores yet
-            </div>
-          )}
-        </div>
-        <div className="w-full grid grid-cols-3 gap-2 text-center">
-          {[
-            { label: "Ready", value: ready.length },
-            { label: "Studied", value: scored.length },
-            { label: "Files", value: files.length },
-          ].map((s) => (
-            <div key={s.label} className="rounded-xl bg-surface-2 p-2.5">
-              <p className="text-xl font-extrabold tabular-nums">{s.value}</p>
-              <p className="text-xs text-muted">{s.label}</p>
-            </div>
-          ))}
-        </div>
-      </div>
+      <EditCourseModal isOpen={editOpen} course={course} onClose={() => setEditOpen(false)} onSaved={setCourse} onDeleted={() => router.push("/courses")} />
     </div>
   );
 }
@@ -407,41 +170,62 @@ function Overview({
 /* ------------------------------ Study sets ------------------------------ */
 
 function SetsSection({
-  quizzes,
-  onNew,
-  onAutopilot,
+  course,
+  sets,
+  folders,
+  files,
   onOpen,
 }: {
-  quizzes: QuizSummary[] | null;
-  onNew: () => void;
-  onAutopilot: () => void;
+  course: Course;
+  sets: QuizSummary[];
+  folders: CourseFolder[];
+  files: CourseFile[];
   onOpen: (q: QuizSummary) => void;
 }) {
+  const folderName = (id: number | null) => folders.find((f) => f.id === id)?.name;
+  // In folder order, so the weeks read in sequence; sets from before folders come last.
+  const ordered = [...sets].sort((a, b) => {
+    const fa = folders.findIndex((f) => f.id === a.folder_id);
+    const fb = folders.findIndex((f) => f.id === b.folder_id);
+    return (fa < 0 ? 1e6 : fa) - (fb < 0 ? 1e6 : fb) || byName(a, b);
+  });
+  const unsorted = files.filter((f) => f.folder_id == null || !folders.some((d) => d.id === f.folder_id)).length;
+
   return (
     <>
-      <SectionHead title="Study sets" text="Quizzes with flashcards, games and a study guide for each topic.">
-        <button onClick={onNew} className="btn-primary">
-          <Plus className="w-4 h-4" /> New study set
-        </button>
-        <button onClick={onAutopilot} className="btn-secondary">
-          <Rocket className="w-4 h-4" /> Autopilot
-        </button>
-      </SectionHead>
-      {quizzes && quizzes.length === 0 ? (
+      <SectionHead
+        title="Study sets"
+        text="One for each folder of files, made and kept up to date automatically: quizzes, flashcards, games, a study guide and a cheat sheet."
+      />
+      {unsorted > 0 && (
+        <Link
+          href={courseHref(course.id, "files")}
+          className="mb-6 flex items-center gap-3 rounded-2xl border border-brand/30 bg-brand-soft px-5 py-4 text-sm hover:brightness-95 transition"
+        >
+          <Inbox className="w-5 h-5 text-brand flex-shrink-0" />
+          <span className="flex-1">
+            <b>{unsorted} file{unsorted === 1 ? " isn't" : "s aren't"} in a folder yet,</b> so {unsorted === 1 ? "it isn't" : "they aren't"} in any study set.
+          </span>
+          <span className="font-semibold text-brand">Sort them →</span>
+        </Link>
+      )}
+      {sets.length === 0 ? (
         <EmptyState
-          icon={BookOpen}
-          title="No study sets yet"
-          text="Make one yourself, or run Autopilot to have the AI build the whole course from your files."
-          action="New study set"
-          onAction={onNew}
+          icon={FolderOpen}
+          title="Study sets appear here on their own"
+          text="Put your files into folders (one per week, chapter or topic) in the Files tab. Each folder becomes a study set, generated automatically."
         />
       ) : (
         <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
-          {(quizzes ?? []).map((q, i) => (
+          {ordered.map((q, i) => (
             <motion.div key={q.id} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: Math.min(i, 12) * 0.03 }}>
               <QuizCard
                 quizName={q.name}
-                description={q.description}
+                description={
+                  folderName(q.folder_id)
+                    ? `${folders.find((f) => f.id === q.folder_id)!.file_count} file${folders.find((f) => f.id === q.folder_id)!.file_count === 1 ? "" : "s"} in ${folderName(q.folder_id)}`
+                    : q.description
+                }
                 lastScore={q.last_score}
                 status={q.generation_status}
                 questionCount={q.questions.length}
@@ -457,130 +241,114 @@ function SetsSection({
   );
 }
 
-/* ------------------------------ Flashcards ------------------------------ */
+/* ------------------------------ Exams ------------------------------ */
 
-function FlashcardsSection({ course, readySets }: { course: Course; readySets: number }) {
-  const router = useRouter();
-  const [terms, setTerms] = useState<Term[] | null>(null);
-  const [flipped, setFlipped] = useState<Set<number>>(new Set());
-  const [filter, setFilter] = useState("");
-
-  useEffect(() => {
-    courseStudy(course.id).then(
-      (m) => setTerms(m.terms.length >= 4 ? m.terms : m.questions.map((q) => ({ term: q.correct, definition: q.question }))),
-      () => setTerms([])
-    );
-  }, [course.id]);
-
-  const shown = (terms ?? []).filter((t) => !filter || `${t.term} ${t.definition}`.toLowerCase().includes(filter.toLowerCase()));
-  const modes = [
-    { mode: "flashcards" as const, label: "Flashcards", icon: Layers },
-    { mode: "learn" as const, label: "Learn", icon: Brain },
-    { mode: "match" as const, label: "Match", icon: Puzzle },
-    { mode: "write" as const, label: "Write", icon: PenLine },
-  ];
-
+function ExamsSection({
+  course,
+  sets,
+  exams,
+  onOpen,
+  onCreated,
+}: {
+  course: Course;
+  sets: QuizSummary[];
+  exams: QuizSummary[];
+  onOpen: (q: QuizSummary) => void;
+  onCreated: () => void;
+}) {
+  const [creating, setCreating] = useState(false);
   return (
     <>
-      <SectionHead
-        title="Flashcards"
-        text={terms ? `${terms.length} cards from ${readySets} study set${readySets === 1 ? "" : "s"}. Tap a card to flip it.` : "Loading…"}
-      >
-        {terms && terms.length > 0 &&
-          modes.map((m, i) => (
-            <button key={m.mode} onClick={() => router.push(courseStudyHref(course.id, m.mode))} className={i === 0 ? "btn-primary" : "btn-secondary"}>
-              <m.icon className="w-4 h-4" /> {m.label}
-            </button>
-          ))}
+      <SectionHead title="Exams" text="Practice exams that combine the study sets you choose, like everything a midterm covers.">
+        <button onClick={() => setCreating(true)} className="btn-primary" disabled={sets.length === 0}>
+          <Plus className="w-4 h-4" /> New exam
+        </button>
       </SectionHead>
-
-      {terms === null ? (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {Array.from({ length: 6 }, (_, i) => (
-            <div key={i} className="skeleton h-36 rounded-2xl" />
-          ))}
-        </div>
-      ) : terms.length === 0 ? (
+      {exams.length === 0 ? (
         <EmptyState
-          icon={Layers}
-          title="No cards yet"
-          text="Flashcards come from your study sets' key terms. Generate a study set (or run Autopilot) and they'll show up here."
+          icon={ClipboardCheck}
+          title={sets.length ? "No exams yet" : "Make study sets first"}
+          text={
+            sets.length
+              ? "Pick the study sets your midterm or final covers and the AI writes a full practice exam from them."
+              : "Exams are built from study sets. Put your files into folders in the Files tab and the sets will follow."
+          }
+          action={sets.length ? "New exam" : undefined}
+          onAction={sets.length ? () => setCreating(true) : undefined}
         />
       ) : (
-        <>
-          <input className="input mb-5 max-w-sm" placeholder="Search cards" value={filter} onChange={(e) => setFilter(e.target.value)} />
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {shown.map((t, i) => {
-              const isFlipped = flipped.has(i);
-              return (
-                <motion.button
-                  key={`${t.term}-${i}`}
-                  initial={{ opacity: 0, y: 12 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: Math.min(i, 15) * 0.02 }}
-                  onClick={() => setFlipped((f) => {
-                    const next = new Set(f);
-                    if (next.has(i)) next.delete(i);
-                    else next.add(i);
-                    return next;
-                  })}
-                  className="perspective h-36 text-left"
-                >
-                  <motion.div
-                    className="relative w-full h-full preserve-3d"
-                    animate={{ rotateY: isFlipped ? 180 : 0 }}
-                    transition={{ type: "spring", stiffness: 260, damping: 24 }}
-                  >
-                    <div className="absolute inset-0 backface-hidden card p-5 flex items-center justify-center text-center">
-                      <p className="font-bold text-lg leading-snug line-clamp-4">{t.term}</p>
-                    </div>
-                    <div className="absolute inset-0 backface-hidden card p-5 flex items-center justify-center text-center [transform:rotateY(180deg)] bg-gradient-to-br from-brand-soft to-surface">
-                      <p className="text-sm leading-snug line-clamp-5">{t.definition}</p>
-                    </div>
-                  </motion.div>
-                </motion.button>
-              );
-            })}
-          </div>
-        </>
+        <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
+          {exams.map((q, i) => (
+            <motion.div key={q.id} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.04 }}>
+              <QuizCard
+                quizName={q.name}
+                description={q.description}
+                lastScore={q.last_score}
+                status={q.generation_status}
+                questionCount={q.questions.length}
+                selected={false}
+                onClick={() => onOpen(q)}
+                onDoubleClick={() => {}}
+              />
+            </motion.div>
+          ))}
+        </div>
       )}
+      <NewExamModal
+        isOpen={creating}
+        course={course}
+        sets={sets}
+        onClose={() => setCreating(false)}
+        onCreated={() => {
+          setCreating(false);
+          onCreated();
+        }}
+      />
     </>
   );
 }
 
-/* ------------------------------ Cheat sheets ------------------------------ */
-
-function CheatSheetsSection({ course, readySets }: { course: Course; readySets: number }) {
-  const [sheets, setSheets] = useState<CheatSheet[] | null>(null);
-  const [selected, setSelected] = useState<number | null>(null);
-  const [creating, setCreating] = useState(false);
+function NewExamModal({
+  isOpen,
+  course,
+  sets,
+  onClose,
+  onCreated,
+}: {
+  isOpen: boolean;
+  course: Course;
+  sets: QuizSummary[];
+  onClose: () => void;
+  onCreated: () => void;
+}) {
+  const [name, setName] = useState("Midterm");
+  const [picked, setPicked] = useState<Set<number>>(new Set());
+  const [questions, setQuestions] = useState(30);
   const [focus, setFocus] = useState("");
-  const [detailed, setDetailed] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
-    cheatSheets(course.id).then(
-      (s) => {
-        setSheets(s);
-        setSelected(s[0]?.id ?? null);
-      },
-      () => setSheets([])
-    );
-  }, [course.id]);
+    if (isOpen) {
+      setPicked(new Set(sets.map((s) => s.id)));
+      setError("");
+    }
+  }, [isOpen, sets]);
 
-  const sheet = sheets?.find((s) => s.id === selected);
+  const toggle = (id: number) =>
+    setPicked((p) => {
+      const next = new Set(p);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
 
-  const write = async () => {
+  const create = async () => {
     setBusy(true);
     setError("");
     try {
-      const made = await createCheatSheet(course.id, focus, detailed);
-      setSheets((s) => [made, ...(s ?? [])]);
-      setSelected(made.id);
-      setCreating(false);
-      setFocus("");
+      await createExam(course.id, { name: name.trim(), set_ids: [...picked], questions, focus });
+      onCreated();
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -588,286 +356,579 @@ function CheatSheetsSection({ course, readySets }: { course: Course; readySets: 
     }
   };
 
-  const remove = async (s: CheatSheet) => {
-    await deleteCheatSheet(course.id, s.id).catch(() => {});
-    const rest = (sheets ?? []).filter((x) => x.id !== s.id);
-    setSheets(rest);
-    setSelected(rest[0]?.id ?? null);
-  };
-
   return (
-    <>
-      <SectionHead title="Cheat sheets" text="Condensed notes the AI writes from everything in this course, ready to skim or print.">
-        <button onClick={() => setCreating(true)} className="btn-primary">
-          <Wand2 className="w-4 h-4" /> New cheat sheet
-        </button>
-      </SectionHead>
-
-      {sheets === null ? (
-        <div className="skeleton h-96 rounded-2xl" />
-      ) : sheets.length === 0 ? (
-        <EmptyState
-          icon={ScrollText}
-          title="No cheat sheets yet"
-          text={
-            readySets
-              ? `The AI can condense your ${readySets} study set${readySets === 1 ? "" : "s"} into one page of the essentials: key terms, formulas, rules and common mistakes.`
-              : "Generate a study set first for a cheat sheet that matches your class, or write one now from the course name alone."
-          }
-          action="Write a cheat sheet"
-          onAction={() => setCreating(true)}
-        />
-      ) : (
-        <div className="grid lg:grid-cols-[16rem_1fr] gap-6 items-start">
-          <div className="flex flex-col gap-2 print:hidden">
-            {sheets.map((s) => (
+    <Modal isOpen={isOpen} onClose={onClose} locked={busy} title="New exam" icon={<ClipboardCheck className="w-5 h-5" />} width="max-w-xl">
+      <div className="flex flex-col gap-5">
+        <div>
+          <label className="label">Name</label>
+          <input className="input" value={name} onChange={(e) => setName(e.target.value)} />
+          <div className="mt-2 flex flex-wrap gap-2">
+            {["Midterm", "Final", "Quiz 1", "Unit test"].map((n) => (
               <button
-                key={s.id}
-                onClick={() => setSelected(s.id)}
-                className={`text-left rounded-xl px-4 py-3 border transition ${
-                  s.id === selected ? "border-brand bg-brand-soft" : "border-stroke bg-surface hover:bg-surface-2"
-                }`}
+                key={n}
+                onClick={() => setName(n)}
+                className={`chip transition ${name === n ? "bg-brand text-white" : "bg-surface-2 text-muted hover:text-foreground"}`}
               >
-                <p className={`font-semibold leading-snug ${s.id === selected ? "text-brand" : ""}`}>{s.title}</p>
-                <p className="text-xs text-muted mt-0.5">{new Date(s.created_at).toLocaleDateString()}</p>
+                {n}
               </button>
             ))}
           </div>
-          {sheet && (
-            <motion.article key={sheet.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="card p-6 sm:p-10 print:shadow-none print:border-0">
-              <div className="flex items-start justify-between gap-4 mb-6">
-                <div>
-                  <p className={`text-xs font-extrabold tracking-wider ${colorOf(course).text}`}>{course.code || course.name}</p>
-                  <h2 className="text-2xl font-extrabold">{sheet.title}</h2>
-                  {sheet.focus && <p className="text-sm text-muted mt-1">Focus: {sheet.focus}</p>}
-                </div>
-                <div className="flex gap-1 print:hidden">
+        </div>
+
+        <div>
+          <div className="flex items-center justify-between mb-2">
+            <label className="label mb-0">Covers</label>
+            <button
+              className="text-sm font-semibold text-brand hover:underline"
+              onClick={() => setPicked(picked.size === sets.length ? new Set() : new Set(sets.map((s) => s.id)))}
+            >
+              {picked.size === sets.length ? "Select none" : "Select all"}
+            </button>
+          </div>
+          <ul className="flex flex-col gap-1.5 max-h-64 overflow-y-auto pr-1">
+            {sets.map((s) => {
+              const on = picked.has(s.id);
+              return (
+                <li key={s.id}>
                   <button
-                    onClick={async () => {
-                      await navigator.clipboard.writeText(sheet.content).catch(() => {});
-                      setCopied(true);
-                      setTimeout(() => setCopied(false), 1500);
-                    }}
-                    className="icon-btn"
-                    title="Copy"
+                    onClick={() => toggle(s.id)}
+                    className={`w-full flex items-center gap-3 rounded-xl border px-3 py-2.5 text-left transition ${on ? "border-brand bg-brand-soft" : "border-stroke hover:bg-surface-2"}`}
                   >
-                    {copied ? <Sparkles className="w-4 h-4 text-emerald-500" /> : <Copy className="w-4 h-4" />}
+                    <span className={`w-5 h-5 rounded-md border-2 flex items-center justify-center flex-shrink-0 ${on ? "bg-brand border-brand text-white" : "border-stroke"}`}>
+                      {on && <Check className="w-3.5 h-3.5" />}
+                    </span>
+                    <span className="flex-1 font-medium truncate">{s.name}</span>
+                    {s.generation_status !== "success" && <span className="text-xs text-muted">generating</span>}
                   </button>
-                  <button onClick={() => window.print()} className="icon-btn" title="Print">
-                    <Printer className="w-4 h-4" />
-                  </button>
-                  <button onClick={() => remove(sheet)} className="icon-btn hover:text-red-500 hover:bg-red-500/10" title="Delete">
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                </div>
-              </div>
-              <div className="columns-1 xl:columns-2 gap-10 [&_h2]:break-after-avoid">
-                <Markdown text={sheet.content} />
-              </div>
-            </motion.article>
-          )}
+                </li>
+              );
+            })}
+          </ul>
         </div>
-      )}
 
-      <Modal isOpen={creating} onClose={() => setCreating(false)} locked={busy} title="New cheat sheet" icon={<ScrollText className="w-5 h-5" />}>
-        <div className="flex flex-col gap-4">
-          <div>
-            <label className="label">Focus (optional)</label>
-            <textarea
-              className="input"
-              rows={3}
-              placeholder="e.g. Only what's on the midterm: weeks 1–6. Include all formulas."
-              value={focus}
-              onChange={(e) => setFocus(e.target.value)}
-              disabled={busy}
-            />
+        <div>
+          <label className="label">Questions</label>
+          <div className="flex items-center gap-4">
+            <input type="range" min={5} max={50} value={questions} onChange={(e) => setQuestions(Number(e.target.value))} className="flex-1 accent-[var(--brand)]" />
+            <span className="w-10 text-center text-2xl font-extrabold text-brand tabular-nums">{questions}</span>
           </div>
-          <div className="grid grid-cols-2 gap-2">
-            {[
-              { value: false, title: "One page", text: "The essentials" },
-              { value: true, title: "Detailed", text: "More depth" },
-            ].map((o) => (
-              <button
-                key={String(o.value)}
-                type="button"
-                onClick={() => setDetailed(o.value)}
-                className={`rounded-xl border-2 p-3 text-left transition ${detailed === o.value ? "border-brand bg-brand-soft" : "border-stroke hover:border-brand/40"}`}
-              >
-                <p className={`font-semibold ${detailed === o.value ? "text-brand" : ""}`}>{o.title}</p>
-                <p className="text-xs text-muted">{o.text}</p>
-              </button>
-            ))}
-          </div>
-          {error && <p className="text-sm text-red-500">{error}</p>}
-          <button onClick={write} className="btn-primary py-3" disabled={busy}>
-            {busy ? <Loader2 className="w-5 h-5 animate-spin" /> : <Wand2 className="w-5 h-5" />}
-            {busy ? "Writing your cheat sheet…" : "Write it"}
-          </button>
         </div>
-      </Modal>
-    </>
-  );
-}
 
-/* ------------------------------ Exam prep ------------------------------ */
+        <div>
+          <label className="label">Focus (optional)</label>
+          <input className="input" placeholder="e.g. Harder questions, include calculations" value={focus} onChange={(e) => setFocus(e.target.value)} />
+        </div>
 
-function ExamSection({ course, quizzes, onOpen }: { course: Course; quizzes: QuizSummary[]; onOpen: (q: QuizSummary) => void }) {
-  const router = useRouter();
-  const ready = quizzes.filter((q) => q.generation_status === "success" && q.questions.length > 0);
-  const total = ready.reduce((n, q) => n + q.questions.length, 0);
-  const weakest = [...ready]
-    .sort((a, b) => (a.last_score == null ? -1 : b.last_score == null ? 1 : Number(a.last_score) - Number(b.last_score)))
-    .slice(0, 5);
-
-  if (ready.length === 0)
-    return (
-      <EmptyState
-        icon={ClipboardCheck}
-        title="Nothing to practise yet"
-        text="Exam prep mixes questions from all your study sets. Generate at least one study set first."
-      />
-    );
-
-  const activities = [
-    {
-      mode: "test" as const,
-      title: "Mock exam",
-      text: `A timed test mixing multiple choice, true/false and written questions from all ${total} questions in the course.`,
-      icon: ClipboardCheck,
-      tone: "from-blue-600 to-indigo-500",
-    },
-    { mode: "practice" as const, title: "Practice everything", text: "Every question in the course, one at a time, with explanations.", icon: Target, tone: "from-emerald-500 to-teal-400" },
-    { mode: "truefalse" as const, title: "True or False blitz", text: "60 seconds of rapid-fire questions from across the course.", icon: Zap, tone: "from-rose-500 to-pink-500" },
-    { mode: "learn" as const, title: "Learn it all", text: "Adaptive rounds over the whole course until it's mastered.", icon: Brain, tone: "from-violet-500 to-fuchsia-500" },
-  ];
-
-  return (
-    <>
-      <SectionHead title="Exam prep" text={`Study the whole of ${course.code || course.name} at once: ${ready.length} study sets, ${total} questions.`} />
-      <div className="grid sm:grid-cols-2 gap-4 mb-10">
-        {activities.map((a, i) => (
-          <motion.button
-            key={a.mode}
-            initial={{ opacity: 0, y: 12 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: i * 0.06 }}
-            onClick={() => router.push(courseStudyHref(course.id, a.mode))}
-            className={`group card card-hover text-left p-6 flex gap-4 items-start ${i === 0 ? "sm:col-span-2" : ""}`}
-          >
-            <span className={`w-12 h-12 flex-shrink-0 rounded-2xl bg-gradient-to-br ${a.tone} text-white flex items-center justify-center shadow-md transition group-hover:scale-110 group-hover:-rotate-3`}>
-              <a.icon className="w-6 h-6" />
-            </span>
-            <div>
-              <p className="font-bold text-lg">{a.title}</p>
-              <p className="text-sm text-muted mt-0.5">{a.text}</p>
-            </div>
-          </motion.button>
-        ))}
+        {error && <p className="text-sm text-red-500">{error}</p>}
+        <button onClick={create} className="btn-primary py-3" disabled={busy || !name.trim() || picked.size === 0}>
+          {busy ? <Loader2 className="w-5 h-5 animate-spin" /> : <Wand2 className="w-5 h-5" />}
+          Create exam from {picked.size} study set{picked.size === 1 ? "" : "s"}
+        </button>
       </div>
-
-      <h3 className="font-bold text-lg mb-3">Focus on your weakest topics</h3>
-      <div className="card divide-y divide-stroke overflow-hidden">
-        {weakest.map((q) => (
-          <div key={q.id} className="flex items-center gap-4 px-5 py-3.5">
-            {q.last_score != null ? (
-              <ScoreRing percent={Number(q.last_score)} size={42} stroke={5} animated={false} />
-            ) : (
-              <span className="w-[42px] h-[42px] rounded-full bg-brand-soft text-brand text-[10px] font-bold flex items-center justify-center">NEW</span>
-            )}
-            <button onClick={() => onOpen(q)} className="flex-1 min-w-0 text-left">
-              <p className="font-semibold truncate hover:text-brand transition">{q.name}</p>
-              <p className="text-xs text-muted">{q.last_score == null ? "Not studied yet" : `Last score ${Math.round(Number(q.last_score))}%`}</p>
-            </button>
-            <button onClick={() => router.push(`/study/${q.id}/practice`)} className="btn-secondary px-3 py-1.5 text-sm">
-              <Target className="w-4 h-4" /> Practise
-            </button>
-          </div>
-        ))}
-      </div>
-    </>
+    </Modal>
   );
 }
 
 /* ------------------------------ Files ------------------------------ */
 
-function FilesSection({ files, onUpload, onDelete }: { files: CourseFile[]; onUpload: () => void; onDelete: (ids: number[]) => Promise<void> }) {
-  const [confirm, setConfirm] = useState<CourseFile | null>(null);
+const ALL = -1;
+const UNSORTED = 0;
+
+function FilesSection({
+  course,
+  files,
+  folders,
+  sets,
+  reload,
+}: {
+  course: Course;
+  files: CourseFile[];
+  folders: CourseFolder[];
+  sets: QuizSummary[];
+  reload: () => Promise<void>;
+}) {
+  const [view, setView] = useState<number>(ALL);
+  const [uploading, setUploading] = useState(false);
+  const [newFolder, setNewFolder] = useState(false);
+  const [organizing, setOrganizing] = useState(false);
+  const [renaming, setRenaming] = useState<CourseFolder | null>(null);
+  const [confirm, setConfirm] = useState<{ message: string; run: () => Promise<unknown> } | null>(null);
+  const [alert, setAlert] = useState<string | null>(null);
+
+  const inFolder = (f: CourseFile) => f.folder_id != null && folders.some((d) => d.id === f.folder_id);
+  const unsorted = files.filter((f) => !inFolder(f));
+  const shown = (view === ALL ? files : view === UNSORTED ? unsorted : files.filter((f) => f.folder_id === view)).slice().sort(byName);
+  const current = folders.find((f) => f.id === view);
+  const setFor = (folderId: number) => sets.find((s) => s.folder_id === folderId);
+
+  // A view that no longer exists (folder deleted) falls back to all files.
+  useEffect(() => {
+    if (view > 0 && !folders.some((f) => f.id === view)) setView(ALL);
+  }, [folders, view]);
+
+  const act = async (run: () => Promise<unknown>) => {
+    try {
+      await run();
+    } catch (e) {
+      setAlert((e as Error).message);
+    }
+    await reload();
+  };
+
   return (
     <>
-      <SectionHead title="Files" text="Lecture slides, notes, readings and videos. Study sets, Autopilot and cheat sheets are built from them.">
-        <button onClick={onUpload} className="btn-primary">
-          <UploadCloud className="w-4 h-4" /> Upload
+      <SectionHead title="Files" text="Each folder becomes a study set. Adding, moving or removing files updates the folder's study set automatically.">
+        <button onClick={() => setUploading(true)} className="btn-primary">
+          <UploadCloud className="w-4 h-4" /> Upload{current ? ` to ${current.name}` : ""}
+        </button>
+        <button onClick={() => setNewFolder(true)} className="btn-secondary">
+          <FolderPlus className="w-4 h-4" /> New folder
+        </button>
+        <button onClick={() => setOrganizing(true)} className="btn-secondary" disabled={files.length === 0}>
+          <Sparkles className="w-4 h-4" /> Organize with AI
         </button>
       </SectionHead>
-      {files.length === 0 ? (
+
+      {files.length === 0 && folders.length === 0 ? (
         <EmptyState
           icon={UploadCloud}
           title="No files in this course"
-          text="Upload lecture slides, notes, readings or YouTube lectures. Study sets and Autopilot are built from them."
+          text="Upload lecture slides, notes, readings or YouTube lectures, then sort them into folders (one per week or topic). Each folder becomes a study set."
           action="Upload files"
-          onAction={onUpload}
+          onAction={() => setUploading(true)}
         />
       ) : (
-        <div className="card divide-y divide-stroke overflow-hidden">
-          <AnimatePresence initial={false}>
-            {files.map((f, i) => (
-              <motion.div
-                key={f.id}
-                initial={{ opacity: 0, x: -10 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, height: 0 }}
-                transition={{ delay: Math.min(i, 15) * 0.02 }}
-                className="group flex items-center gap-4 px-5 py-3.5 hover:bg-surface-2/60 transition"
-              >
-                <span className="w-10 h-10 rounded-xl bg-sky-500/15 text-sky-600 dark:text-sky-400 flex items-center justify-center text-[10px] font-extrabold">
-                  {f.name.includes(".") ? f.name.split(".").pop()!.toUpperCase().slice(0, 4) : "FILE"}
-                </span>
-                <div className="flex-1 min-w-0">
-                  <p className="font-semibold truncate">{f.name}</p>
-                  <p className="text-xs text-muted">
-                    {formatBytes(f.size)} · added {new Date(f.uploaded_at).toLocaleDateString()}
-                  </p>
-                </div>
-                <button
-                  onClick={() => setConfirm(f)}
-                  className="icon-btn sm:opacity-0 group-hover:opacity-100 focus:opacity-100 hover:text-red-500 hover:bg-red-500/10"
-                  title="Delete file"
-                >
-                  <Trash2 className="w-4 h-4" />
+        <div className="grid md:grid-cols-[16rem_1fr] gap-6 items-start">
+          {/* Folders */}
+          <nav className="card p-2 flex flex-col gap-0.5 md:sticky md:top-24">
+            <FolderButton icon={<FolderOpen className="w-4 h-4" />} name="All files" count={files.length} active={view === ALL} onClick={() => setView(ALL)} />
+            {folders.map((f) => {
+              const set = setFor(f.id);
+              return (
+                <FolderButton
+                  key={f.id}
+                  icon={<Folder className="w-4 h-4" />}
+                  name={f.name}
+                  count={f.file_count}
+                  active={view === f.id}
+                  onClick={() => setView(f.id)}
+                  status={set ? (set.generation_status === "success" ? "ready" : set.generation_status === "failed" ? "failed" : "working") : undefined}
+                />
+              );
+            })}
+            {unsorted.length > 0 && (
+              <FolderButton icon={<Inbox className="w-4 h-4" />} name="Not in a folder" count={unsorted.length} active={view === UNSORTED} onClick={() => setView(UNSORTED)} muted />
+            )}
+          </nav>
+
+          {/* Files */}
+          <div className="flex flex-col gap-4">
+            {current && (
+              <div className="flex flex-wrap items-center gap-2">
+                <h3 className="text-lg font-bold flex-1 min-w-0 truncate">{current.name}</h3>
+                <button className="btn-ghost px-3 py-1.5 text-sm" onClick={() => setRenaming(current)}>
+                  <Pencil className="w-4 h-4" /> Rename
                 </button>
-              </motion.div>
-            ))}
-          </AnimatePresence>
+                <button
+                  className="btn-ghost px-3 py-1.5 text-sm hover:text-red-500 hover:bg-red-500/10"
+                  onClick={() =>
+                    setConfirm({
+                      message: `Delete the folder “${current.name}” and its study set? Its files stay in the course.`,
+                      run: () => deleteFolder(course.id, current.id),
+                    })
+                  }
+                >
+                  <Trash2 className="w-4 h-4" /> Delete folder
+                </button>
+              </div>
+            )}
+            {view === UNSORTED && unsorted.length > 0 && (
+              <p className="rounded-xl bg-amber-400/10 px-4 py-3 text-sm text-amber-700 dark:text-amber-300">
+                Files outside folders aren&apos;t in any study set. Move them into a folder, or let the AI sort them.
+              </p>
+            )}
+            {shown.length === 0 ? (
+              <div className="card border-dashed p-10 text-center text-muted">
+                {current ? (
+                  <>
+                    This folder is empty.{" "}
+                    <button className="font-semibold text-brand hover:underline" onClick={() => setUploading(true)}>
+                      Upload files into it
+                    </button>{" "}
+                    or move some here.
+                  </>
+                ) : (
+                  "No files here."
+                )}
+              </div>
+            ) : (
+              <div className="card divide-y divide-stroke">
+                <AnimatePresence initial={false}>
+                  {shown.map((f, i) => (
+                    <FileRow
+                      key={f.id}
+                      file={f}
+                      index={i}
+                      folders={folders}
+                      showFolder={view === ALL}
+                      onMove={(folderId) => act(() => moveFiles(course.id, [f.id], folderId))}
+                      onDelete={() => setConfirm({ message: `Delete “${f.name}”?`, run: () => deleteFiles([f.id]) })}
+                    />
+                  ))}
+                </AnimatePresence>
+              </div>
+            )}
+          </div>
         </div>
       )}
+
+      {uploading && (
+        <FileUploadPopup
+          isOpen
+          onClose={() => {
+            setUploading(false);
+            reload();
+          }}
+          onFileUpload={(file, onProgress) => uploadFile(file, { courseId: course.id, folderId: current ? String(current.id) : null }, onProgress)}
+          onYouTubeUpload={(url, onProgress) => uploadYouTube(url, { courseId: course.id, folderId: current ? String(current.id) : null }, onProgress)}
+        />
+      )}
+
+      <NameModal
+        isOpen={newFolder}
+        title="New folder"
+        placeholder="e.g. Week 1"
+        action="Create folder"
+        onClose={() => setNewFolder(false)}
+        onSubmit={async (name) => {
+          const folder = await createFolder(course.id, name);
+          await reload();
+          setView(folder.id);
+        }}
+      />
+      <NameModal
+        isOpen={!!renaming}
+        title="Rename folder"
+        initial={renaming?.name}
+        action="Rename"
+        onClose={() => setRenaming(null)}
+        onSubmit={async (name) => {
+          await renameFolder(course.id, renaming!.id, name);
+          await reload();
+        }}
+      />
+      <OrganizeModal
+        isOpen={organizing}
+        course={course}
+        files={files}
+        onClose={() => setOrganizing(false)}
+        onApplied={async () => {
+          setOrganizing(false);
+          await reload();
+        }}
+      />
+
       {confirm && (
         <AlertPopup
-          message={`Delete “${confirm.name}”? Study sets made from it keep their questions.`}
+          message={confirm.message}
           onClose={() => setConfirm(null)}
           actions={[
             { label: "Cancel", color: "gray", onClick: () => setConfirm(null) },
             {
               label: "Delete",
               color: "red",
-              onClick: async () => {
-                const f = confirm;
+              onClick: () => {
+                const run = confirm.run;
                 setConfirm(null);
-                await onDelete([f.id]);
+                act(run);
               },
             },
           ]}
         />
       )}
+      {alert && <AlertPopup message={alert} onClose={() => setAlert(null)} />}
     </>
+  );
+}
+
+function FolderButton({
+  icon,
+  name,
+  count,
+  active,
+  onClick,
+  status,
+  muted,
+}: {
+  icon: React.ReactNode;
+  name: string;
+  count: number;
+  active: boolean;
+  onClick: () => void;
+  status?: "ready" | "working" | "failed";
+  muted?: boolean;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={`relative flex items-center gap-2.5 rounded-xl px-3 py-2 text-sm font-semibold text-left transition ${
+        active ? "text-brand" : muted ? "text-muted hover:bg-surface-2" : "hover:bg-surface-2"
+      }`}
+    >
+      {active && <motion.span layoutId="folder-active" className="absolute inset-0 rounded-xl bg-brand-soft" transition={{ type: "spring", stiffness: 400, damping: 34 }} />}
+      <span className="relative">{icon}</span>
+      <span className="relative flex-1 truncate">{name}</span>
+      {status === "working" && <Loader2 className="relative w-3.5 h-3.5 animate-spin text-amber-500" />}
+      {status === "ready" && <BookOpen className="relative w-3.5 h-3.5 text-emerald-500" />}
+      {status === "failed" && <span className="relative w-2 h-2 rounded-full bg-red-500" />}
+      <span className="relative text-xs text-muted tabular-nums">{count}</span>
+    </button>
+  );
+}
+
+function FileRow({
+  file,
+  index,
+  folders,
+  showFolder,
+  onMove,
+  onDelete,
+}: {
+  file: CourseFile;
+  index: number;
+  folders: CourseFolder[];
+  showFolder: boolean;
+  onMove: (folderId: number | null) => void;
+  onDelete: () => void;
+}) {
+  const [menu, setMenu] = useState(false);
+  const folder = folders.find((f) => f.id === file.folder_id);
+  return (
+    <motion.div
+      initial={{ opacity: 0, x: -10 }}
+      animate={{ opacity: 1, x: 0 }}
+      exit={{ opacity: 0, height: 0 }}
+      transition={{ delay: Math.min(index, 15) * 0.02 }}
+      className="group relative flex items-center gap-4 px-5 py-3 hover:bg-surface-2/60 transition first:rounded-t-2xl last:rounded-b-2xl"
+    >
+      <span className="w-10 h-10 rounded-xl bg-sky-500/15 text-sky-600 dark:text-sky-400 flex items-center justify-center text-[10px] font-extrabold flex-shrink-0">
+        {file.name.includes(".") ? file.name.split(".").pop()!.toUpperCase().slice(0, 4) : "FILE"}
+      </span>
+      <div className="flex-1 min-w-0">
+        <p className="font-semibold truncate">{file.name}</p>
+        <p className="text-xs text-muted">
+          {formatBytes(file.size)}
+          {showFolder && (folder ? ` · ${folder.name}` : " · not in a folder")}
+        </p>
+      </div>
+      <button onClick={() => setMenu(!menu)} className="icon-btn" title="Move or delete">
+        <MoreHorizontal className="w-4 h-4" />
+      </button>
+      <AnimatePresence>
+        {menu && (
+          <>
+            <div className="fixed inset-0 z-10" onClick={() => setMenu(false)} />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: -4 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              style={{ transformOrigin: "top right" }}
+              className="absolute right-4 top-12 z-20 w-56 card p-1.5 max-h-72 overflow-y-auto"
+            >
+              <p className="px-3 pt-1 pb-1.5 text-xs font-bold uppercase tracking-wider text-muted">Move to</p>
+              {folders.map((f) => (
+                <button
+                  key={f.id}
+                  disabled={f.id === file.folder_id}
+                  onClick={() => {
+                    setMenu(false);
+                    onMove(f.id);
+                  }}
+                  className="w-full flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm text-left hover:bg-surface-2 disabled:opacity-40"
+                >
+                  <Folder className="w-4 h-4 text-muted" /> <span className="truncate">{f.name}</span>
+                </button>
+              ))}
+              {file.folder_id != null && (
+                <button
+                  onClick={() => {
+                    setMenu(false);
+                    onMove(null);
+                  }}
+                  className="w-full flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm text-left text-muted hover:bg-surface-2"
+                >
+                  <Inbox className="w-4 h-4" /> Out of folders
+                </button>
+              )}
+              <hr className="border-stroke my-1.5" />
+              <button
+                onClick={() => {
+                  setMenu(false);
+                  onDelete();
+                }}
+                className="w-full flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm text-left text-red-500 hover:bg-red-500/10"
+              >
+                <Trash2 className="w-4 h-4" /> Delete file
+              </button>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+    </motion.div>
+  );
+}
+
+/** The AI proposes folders for the course's files; you can rename them or drop any before they're made. */
+function OrganizeModal({
+  isOpen,
+  course,
+  files,
+  onClose,
+  onApplied,
+}: {
+  isOpen: boolean;
+  course: Course;
+  files: CourseFile[];
+  onClose: () => void;
+  onApplied: () => Promise<void>;
+}) {
+  const [plan, setPlan] = useState<FolderPlan[] | null>(null);
+  const [busy, setBusy] = useState<"thinking" | "applying" | null>(null);
+  const [error, setError] = useState("");
+  const names = useMemo(() => new Map(files.map((f) => [f.id, f.name])), [files]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    setPlan(null);
+    setError("");
+    setBusy("thinking");
+    organizeFiles(course.id)
+      .then(setPlan, (e) => setError((e as Error).message))
+      .finally(() => setBusy(null));
+  }, [isOpen, course.id]);
+
+  const apply = async () => {
+    if (!plan) return;
+    setBusy("applying");
+    try {
+      await applyFolders(course.id, plan);
+      await onApplied();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  return (
+    <Modal isOpen={isOpen} onClose={onClose} locked={busy === "applying"} title="Organize with AI" icon={<Sparkles className="w-5 h-5" />} width="max-w-2xl">
+      {busy === "thinking" ? (
+        <div className="flex flex-col items-center gap-3 py-10 text-muted">
+          <Loader2 className="w-8 h-8 animate-spin text-brand" />
+          Sorting {files.length} files into folders…
+        </div>
+      ) : plan ? (
+        <div className="flex flex-col gap-4">
+          <p className="text-sm text-muted">
+            Here&apos;s how the AI would sort them. Rename or remove folders, then apply: each folder becomes a study set.
+          </p>
+          <div className="flex flex-col gap-3 max-h-[50vh] overflow-y-auto pr-1">
+            {plan.map((folder, i) => (
+              <motion.div key={i} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.04 }} className="rounded-2xl border border-stroke p-3">
+                <div className="flex items-center gap-2">
+                  <Folder className="w-4 h-4 text-amber-500 flex-shrink-0" />
+                  <input
+                    className="input py-1.5 px-2.5 text-sm font-semibold"
+                    value={folder.name}
+                    onChange={(e) => setPlan(plan.map((p, j) => (j === i ? { ...p, name: e.target.value } : p)))}
+                  />
+                  <button onClick={() => setPlan(plan.filter((_, j) => j !== i))} className="icon-btn w-8 h-8 hover:text-red-500" title="Don't make this folder">
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+                <ul className="mt-2 ml-6 flex flex-col gap-0.5">
+                  {folder.file_ids.map((id) => (
+                    <li key={id} className="text-sm text-muted truncate">
+                      {names.get(id)}
+                    </li>
+                  ))}
+                </ul>
+              </motion.div>
+            ))}
+          </div>
+          {error && <p className="text-sm text-red-500">{error}</p>}
+          <button onClick={apply} className="btn-primary py-3" disabled={!!busy || plan.length === 0}>
+            {busy === "applying" ? <Loader2 className="w-5 h-5 animate-spin" /> : <Check className="w-5 h-5" />}
+            Make {plan.length} folder{plan.length === 1 ? "" : "s"}
+          </button>
+        </div>
+      ) : (
+        <p className="text-sm text-red-500 py-4">{error || "Something went wrong."}</p>
+      )}
+    </Modal>
+  );
+}
+
+function NameModal({
+  isOpen,
+  title,
+  initial = "",
+  placeholder,
+  action,
+  onClose,
+  onSubmit,
+}: {
+  isOpen: boolean;
+  title: string;
+  initial?: string;
+  placeholder?: string;
+  action: string;
+  onClose: () => void;
+  onSubmit: (name: string) => Promise<void>;
+}) {
+  const [name, setName] = useState(initial);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  useEffect(() => {
+    if (isOpen) {
+      setName(initial);
+      setError("");
+    }
+  }, [isOpen, initial]);
+
+  return (
+    <Modal isOpen={isOpen} onClose={onClose} locked={busy} title={title} icon={<FolderPlus className="w-5 h-5" />} width="max-w-sm">
+      <form
+        className="flex flex-col gap-4"
+        onSubmit={async (e) => {
+          e.preventDefault();
+          setBusy(true);
+          try {
+            await onSubmit(name.trim());
+            onClose();
+          } catch (err) {
+            setError((err as Error).message);
+          } finally {
+            setBusy(false);
+          }
+        }}
+      >
+        <input className="input" placeholder={placeholder} value={name} onChange={(e) => setName(e.target.value)} autoFocus />
+        {error && <p className="text-sm text-red-500">{error}</p>}
+        <button type="submit" className="btn-primary" disabled={busy || !name.trim()}>
+          {busy && <Loader2 className="w-4 h-4 animate-spin" />} {action}
+        </button>
+      </form>
+    </Modal>
   );
 }
 
 function SectionHead({ title, text, children }: { title: string; text: string; children?: React.ReactNode }) {
   return (
-    <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 mb-6 print:hidden">
+    <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-4 mb-6">
       <div>
         <h2 className="text-2xl font-extrabold tracking-tight">{title}</h2>
-        <p className="text-muted mt-1">{text}</p>
+        <p className="text-muted mt-1 max-w-2xl">{text}</p>
       </div>
       {children && <div className="flex flex-wrap gap-2">{children}</div>}
     </div>
@@ -954,7 +1015,7 @@ function EditCourseModal({
       </form>
       {confirmDelete && (
         <AlertPopup
-          message={`Delete ${course.code || course.name}, with all its study sets, cheat sheets and files? This can't be undone.`}
+          message={`Delete ${course.code || course.name}, with all its study sets, exams and files? This can't be undone.`}
           onClose={() => setConfirmDelete(false)}
           actions={[
             { label: "Cancel", color: "gray", onClick: () => setConfirmDelete(false) },

@@ -12,10 +12,7 @@ import {
   FileText,
   GraduationCap,
   Home,
-  LayoutDashboard,
-  Layers,
   Menu,
-  ScrollText,
   X,
   type LucideIcon,
 } from 'lucide-react';
@@ -29,11 +26,8 @@ const appTabs = [
 ];
 
 const sectionIcons: Record<CourseSection, LucideIcon> = {
-  '': LayoutDashboard,
-  sets: BookOpen,
-  flashcards: Layers,
-  cheatsheets: ScrollText,
-  exam: ClipboardCheck,
+  '': BookOpen,
+  exams: ClipboardCheck,
   files: FileText,
 };
 
@@ -41,9 +35,9 @@ const sectionIcons: Record<CourseSection, LucideIcon> = {
 function courseContext(pathname: string): { id: number; section: CourseSection } | null {
   const match = /^\/courses\/(\d+)(?:\/([a-z]+))?/.exec(pathname);
   if (match) return { id: Number(match[1]), section: (match[2] ?? '') as CourseSection };
-  if (pathname.startsWith('/quizDetails')) {
-    const saved = typeof window !== 'undefined' ? Number(sessionStorage.getItem('currentCourseId')) : 0;
-    if (saved) return { id: saved, section: 'sets' };
+  if (pathname.startsWith('/quizDetails') && typeof window !== 'undefined') {
+    const saved = Number(sessionStorage.getItem('currentCourseId'));
+    if (saved) return { id: saved, section: (sessionStorage.getItem('currentCourseSection') ?? '') as CourseSection };
   }
   return null;
 }
@@ -55,10 +49,16 @@ export default function Navbar() {
   const [courses, setCourses] = useState<Course[]>([]);
 
   useEffect(() => {
-    const ctx = courseContext(pathname);
-    setContext(ctx);
-    if (ctx && pathname.startsWith('/courses/')) sessionStorage.setItem('currentCourseId', String(ctx.id));
+    const update = () => {
+      const ctx = courseContext(pathname);
+      setContext(ctx);
+      if (ctx && pathname.startsWith('/courses/')) sessionStorage.setItem('currentCourseId', String(ctx.id));
+    };
+    update();
     setMenuOpen(false);
+    // A study set page says which course it's in once it has loaded.
+    window.addEventListener('studyjit-course', update);
+    return () => window.removeEventListener('studyjit-course', update);
   }, [pathname]);
 
   useEffect(() => {
