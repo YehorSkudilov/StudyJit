@@ -3,7 +3,7 @@
 import { AnimatePresence, motion } from "framer-motion";
 import { Play, Timer, Trophy } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { formatTime, readBest, recordBest, sample, shuffle, studyPairs, type StudyQuiz } from "@/lib/study";
+import { formatTime, readBest, recordBest, sample, shuffle, type StudyQuiz } from "@/lib/study";
 import Confetti from "@/components/ui/Confetti";
 import StudyShell, { ShellStat } from "./StudyShell";
 
@@ -19,7 +19,7 @@ interface Tile {
 
 /** Race the clock pairing each term with its definition; a wrong pair costs a second. */
 export default function Match({ quiz, onExit }: { quiz: StudyQuiz; onExit: () => void }) {
-  const pairs = useMemo(() => studyPairs(quiz), [quiz]);
+  const pairs = quiz.terms;
   const bestKey = `match.${quiz.id}`;
   const [game, setGame] = useState(0);
   const tiles = useMemo<Tile[]>(() => {

@@ -65,11 +65,21 @@ public class QuizGenerator(ApiDbContext db, OpenAiQuizClient openAi, StudySetSyn
             var generated = await openAi.GenerateAsync(source, ct);
             await db.QuizQuestions.Where(q => q.QuizId == quizId).ExecuteDeleteAsync(ct);
             await db.QuizTerms.Where(t => t.QuizId == quizId).ExecuteDeleteAsync(ct);
+            await db.QuizStatements.Where(s => s.QuizId == quizId).ExecuteDeleteAsync(ct);
+            await db.QuizShortAnswers.Where(s => s.QuizId == quizId).ExecuteDeleteAsync(ct);
             db.QuizQuestions.AddRange(generated.Questions.Select(q => new QuizQuestion
             {
                 QuizId = quizId, Question = q.Question, Options = q.Options, CorrectAnswer = q.Correct, Explanation = q.Explanation,
             }));
             db.QuizTerms.AddRange(generated.Terms.Select(t => new QuizTerm { QuizId = quizId, Term = t.Term, Definition = t.Definition }));
+            db.QuizStatements.AddRange(generated.Statements.Select(s => new QuizStatement
+            {
+                QuizId = quizId, Statement = s.Statement, IsTrue = s.IsTrue, Explanation = s.Explanation,
+            }));
+            db.QuizShortAnswers.AddRange(generated.ShortAnswers.Select(s => new QuizShortAnswer
+            {
+                QuizId = quizId, Question = s.Question, Answer = s.Answer, Alternatives = s.Alternatives, Explanation = s.Explanation,
+            }));
             quiz.Summary = generated.Summary;
             quiz.CheatSheet = generated.CheatSheet;
             quiz.GenerationStatus = GenerationStatus.Success;

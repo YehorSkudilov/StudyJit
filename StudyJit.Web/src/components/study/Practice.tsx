@@ -3,7 +3,7 @@
 import { AnimatePresence, motion } from "framer-motion";
 import { Flame } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
-import { mcqItem, pickQuestions, recordAnswer, saveScore, shuffle, isRight, SESSION_SIZE, type Question, type StudyQuiz } from "@/lib/study";
+import { mcqItem, pickQuestions, questionKey, recordAnswer, saveScore, shuffle, isRight, SESSION_SIZE, type Question, type StudyQuiz } from "@/lib/study";
 import Feedback from "./Feedback";
 import ItemView from "./ItemView";
 import Results, { type ReviewRow } from "./Results";
@@ -36,7 +36,7 @@ export default function Practice({ quiz, onExit }: { quiz: StudyQuiz; onExit: ()
       const v = String(value);
       const right = isRight(item, v);
       setGiven(v);
-      recordAnswer(quiz.id, pool[index].id, right);
+      recordAnswer(quiz.id, questionKey(pool[index]), right);
       setStreak((s) => {
         const next = right ? s + 1 : 0;
         setBestStreak((b) => Math.max(b, next));

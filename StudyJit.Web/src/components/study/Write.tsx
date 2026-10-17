@@ -2,20 +2,20 @@
 
 import { AnimatePresence, motion } from "framer-motion";
 import { useCallback, useState } from "react";
-import { isRight, shuffle, typeable, writtenFromQuestion, writtenFromTerm, type Item, type StudyQuiz } from "@/lib/study";
+import { isRight, pickFrom, recordAnswer, shortAnswerItem, shortAnswerKey, shuffle, writtenFromTerm, type Item, type StudyQuiz } from "@/lib/study";
 import Feedback from "./Feedback";
 import ItemView from "./ItemView";
 import Results, { type ReviewRow } from "./Results";
 import StudyShell, { ShellStat } from "./StudyShell";
 
+/** A round: short-answer questions written for typing (new and missed first) mixed with key terms to recall. */
 function buildItems(quiz: StudyQuiz): Item[] {
-  const fromTerms = quiz.terms.map(writtenFromTerm);
-  const fromQuestions = quiz.questions.filter(typeable).map(writtenFromQuestion);
-  // Every key term each time (they're the whole vocabulary), questions only when there are few terms.
-  return shuffle(fromTerms.length >= 4 ? fromTerms : [...fromTerms, ...fromQuestions]).slice(0, 25);
+  const answers = pickFrom(quiz.id, quiz.shortAnswers, shortAnswerKey, 15).map(shortAnswerItem);
+  const terms = shuffle(quiz.terms.map(writtenFromTerm)).slice(0, Math.max(10, 25 - answers.length));
+  return shuffle([...answers, ...terms]);
 }
 
-/** Recall without options: read the definition (or question) and type the answer. */
+/** Recall without options: answer short questions and name terms from their definitions by typing. */
 export default function Write({ quiz, onExit }: { quiz: StudyQuiz; onExit: () => void }) {
   const [items, setItems] = useState<Item[]>(() => buildItems(quiz));
   const [round, setRound] = useState(0);
@@ -33,9 +33,10 @@ export default function Write({ quiz, onExit }: { quiz: StudyQuiz; onExit: () =>
       if (given !== undefined || !item) return;
       const text = String(g);
       setGiven(text);
+      if (item.hid) recordAnswer(quiz.id, item.hid, isRight(item, text));
       setResults((r) => [...r, { prompt: item.prompt, answer: String(item.answer), given: text, correct: isRight(item, text), explanation: item.explanation }]);
     },
-    [given, item]
+    [given, item, quiz.id]
   );
 
   const next = useCallback(() => {

@@ -10,6 +10,10 @@ public record QuestionDto(int Id, string Question, List<string> Options, string 
 
 public record TermDto(string Term, string Definition);
 
+public record StatementDto(int Id, string Statement, [property: JsonPropertyName("is_true")] bool IsTrue, string Explanation);
+
+public record ShortAnswerDto(int Id, string Question, string Answer, List<string> Alternatives, string Explanation);
+
 public record QuizSummary(
     int Id,
     string Name,
@@ -39,7 +43,9 @@ public record QuizDetail(
     string? Summary,
     [property: JsonPropertyName("cheat_sheet")] string? CheatSheet,
     List<QuestionDto> Questions,
-    List<TermDto> Terms);
+    List<TermDto> Terms,
+    List<StatementDto> Statements,
+    [property: JsonPropertyName("short_answers")] List<ShortAnswerDto> ShortAnswers);
 
 public record CreateQuizRequest(
     string? Name,
@@ -108,12 +114,15 @@ public class QuizzesController(ApiDbContext db, ICurrentUser me, TimeProvider cl
     public async Task<IActionResult> Get(int id)
     {
         var userId = me.Id;
-        var q = await db.Quizzes.AsNoTracking().Include(x => x.Questions).Include(x => x.Terms).AsSplitQuery()
+        var q = await db.Quizzes.AsNoTracking().Include(x => x.Questions).Include(x => x.Terms)
+            .Include(x => x.Statements).Include(x => x.ShortAnswers).AsSplitQuery()
             .FirstOrDefaultAsync(x => x.Id == id && x.UserId == userId);
         if (q == null)
             return NotFoundError("Quiz not found.");
         return Ok(new QuizDetail(q.Id, q.Name, q.Description, q.Prompt, q.NumQuestions, q.GenerationStatus, q.LastScore, q.QueueNumber,
-            q.CourseId, q.FolderId, q.Kind, q.SourceQuizIds, q.Summary, q.CheatSheet, Questions(q), q.Terms.OrderBy(x => x.Id).Select(x => new TermDto(x.Term, x.Definition)).ToList()));
+            q.CourseId, q.FolderId, q.Kind, q.SourceQuizIds, q.Summary, q.CheatSheet, Questions(q), q.Terms.OrderBy(x => x.Id).Select(x => new TermDto(x.Term, x.Definition)).ToList(),
+            q.Statements.OrderBy(x => x.Id).Select(x => new StatementDto(x.Id, x.Statement, x.IsTrue, x.Explanation)).ToList(),
+            q.ShortAnswers.OrderBy(x => x.Id).Select(x => new ShortAnswerDto(x.Id, x.Question, x.Answer, x.Alternatives, x.Explanation)).ToList()));
     }
 
     [HttpPost("create")]

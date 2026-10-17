@@ -118,6 +118,10 @@ public class Quiz
     public List<QuizQuestion> Questions { get; set; } = [];
     /// <summary>Key terms of the material, for flashcards and matching.</summary>
     public List<QuizTerm> Terms { get; set; } = [];
+    /// <summary>True-or-false statements, written for that format.</summary>
+    public List<QuizStatement> Statements { get; set; } = [];
+    /// <summary>Questions with short answers to type.</summary>
+    public List<QuizShortAnswer> ShortAnswers { get; set; } = [];
 }
 
 public class QuizQuestion
@@ -138,6 +142,29 @@ public class QuizTerm
     public int QuizId { get; set; }
     public string Term { get; set; } = "";
     public string Definition { get; set; } = "";
+}
+
+/// <summary>A claim that's plainly true or false, for true-or-false practice.</summary>
+public class QuizStatement
+{
+    public int Id { get; set; }
+    public int QuizId { get; set; }
+    public string Statement { get; set; } = "";
+    public bool IsTrue { get; set; }
+    /// <summary>Why it's true, or what's actually right when it's false.</summary>
+    public string Explanation { get; set; } = "";
+}
+
+/// <summary>A question whose answer is a few words a student can type.</summary>
+public class QuizShortAnswer
+{
+    public int Id { get; set; }
+    public int QuizId { get; set; }
+    public string Question { get; set; } = "";
+    public string Answer { get; set; } = "";
+    /// <summary>Other answers that count as right (synonyms, abbreviations, other notations).</summary>
+    public List<string> Alternatives { get; set; } = [];
+    public string Explanation { get; set; } = "";
 }
 
 /// <summary>A file a quiz is generated from.</summary>

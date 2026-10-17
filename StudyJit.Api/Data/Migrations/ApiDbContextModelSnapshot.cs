@@ -458,6 +458,69 @@ namespace StudyJit.Api.Data.Migrations
                     b.ToTable("QuizQuestions");
                 });
 
+            modelBuilder.Entity("StudyJit.Api.Data.QuizShortAnswer", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.PrimitiveCollection<List<string>>("Alternatives")
+                        .IsRequired()
+                        .HasColumnType("text[]");
+
+                    b.Property<string>("Answer")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Explanation")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Question")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int>("QuizId")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("QuizId");
+
+                    b.ToTable("QuizShortAnswers");
+                });
+
+            modelBuilder.Entity("StudyJit.Api.Data.QuizStatement", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Explanation")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<bool>("IsTrue")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("QuizId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Statement")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("QuizId");
+
+                    b.ToTable("QuizStatements");
+                });
+
             modelBuilder.Entity("StudyJit.Api.Data.QuizTerm", b =>
                 {
                     b.Property<int>("Id")
@@ -713,6 +776,24 @@ namespace StudyJit.Api.Data.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("StudyJit.Api.Data.QuizShortAnswer", b =>
+                {
+                    b.HasOne("StudyJit.Api.Data.Quiz", null)
+                        .WithMany("ShortAnswers")
+                        .HasForeignKey("QuizId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("StudyJit.Api.Data.QuizStatement", b =>
+                {
+                    b.HasOne("StudyJit.Api.Data.Quiz", null)
+                        .WithMany("Statements")
+                        .HasForeignKey("QuizId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("StudyJit.Api.Data.QuizTerm", b =>
                 {
                     b.HasOne("StudyJit.Api.Data.Quiz", null)
@@ -753,6 +834,10 @@ namespace StudyJit.Api.Data.Migrations
             modelBuilder.Entity("StudyJit.Api.Data.Quiz", b =>
                 {
                     b.Navigation("Questions");
+
+                    b.Navigation("ShortAnswers");
+
+                    b.Navigation("Statements");
 
                     b.Navigation("Terms");
                 });

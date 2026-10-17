@@ -4,15 +4,16 @@ import { AnimatePresence, motion } from "framer-motion";
 import { ArrowRight, Brain, Sparkles } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import {
+  answerText,
   isRight,
   mcqItem,
+  pickFrom,
   pickQuestions,
   recordAnswer,
   sample,
+  shortAnswerItem,
+  shortAnswerKey,
   shuffle,
-  trueFalseItem,
-  typeable,
-  writtenFromQuestion,
   writtenFromTerm,
   type Item,
   type StudyQuiz,
@@ -24,22 +25,32 @@ import StudyShell, { ShellStat } from "./StudyShell";
 
 const ROUND = 7;
 
-/** Something to master: asked as multiple choice first, then in a harder form once that's right. */
+/** Something to master: answered right twice, the second time in a harder form where it has one. */
 interface Learnable {
   id: string;
   easy: () => Item;
   hard: () => Item;
 }
 
-/** Questions and key terms Learn works through in one sitting (a big bank is learnt over several). */
-const LEARN_QUESTIONS = 20;
-const LEARN_TERMS = 12;
+/** What Learn works through in one sitting (a big set is learnt over several). */
+const LEARN_QUESTIONS = 14;
+const LEARN_SHORT_ANSWERS = 8;
+const LEARN_TERMS = 10;
 
+/**
+ * Each kind of content in the form it was written for: questions as multiple choice (options reshuffled the second
+ * time), key terms picked from four then typed, short answers typed.
+ */
 function learnables(quiz: StudyQuiz): Learnable[] {
   const fromQuestions: Learnable[] = pickQuestions(quiz.id, quiz.questions, LEARN_QUESTIONS).map((q) => ({
     id: `q${q.id}`,
     easy: () => mcqItem(q),
-    hard: () => (typeable(q) ? writtenFromQuestion(q) : trueFalseItem(q)),
+    hard: () => mcqItem(q),
+  }));
+  const fromShortAnswers: Learnable[] = pickFrom(quiz.id, quiz.shortAnswers, shortAnswerKey, LEARN_SHORT_ANSWERS).map((s) => ({
+    id: `a${s.id}`,
+    easy: () => shortAnswerItem(s),
+    hard: () => shortAnswerItem(s),
   }));
   const terms = quiz.terms;
   const fromTerms: Learnable[] =
@@ -56,7 +67,7 @@ function learnables(quiz: StudyQuiz): Learnable[] {
           hard: () => writtenFromTerm(t, i),
         }))
       : [];
-  return shuffle([...fromQuestions, ...fromTerms]);
+  return shuffle([...fromQuestions, ...fromShortAnswers, ...fromTerms]);
 }
 
 /**
@@ -87,7 +98,7 @@ export default function Learn({ quiz, onExit }: { quiz: StudyQuiz; onExit: () =>
       if (given !== undefined) return;
       setGiven(g);
       const right = isRight(current.item, g);
-      if (current.item.qid != null) recordAnswer(quiz.id, current.item.qid, right);
+      if (current.item.hid) recordAnswer(quiz.id, current.item.hid, right);
       setLevel((lv) => {
         const now = lv[current.l.id] ?? 0;
         return { ...lv, [current.l.id]: right ? Math.min(2, now + 1) : Math.max(0, now - 1) };
@@ -192,7 +203,7 @@ export default function Learn({ quiz, onExit }: { quiz: StudyQuiz; onExit: () =>
   }
 
   const item = current.item;
-  const answerText = item.kind === "tf" ? (item.answer ? "True" : `False: it's “${item.truth}”`) : item.answer;
+  const rightAnswer = answerText(item);
   return shell(
     <>
       <div className="max-w-3xl mx-auto mb-4 flex gap-1.5">
@@ -212,16 +223,16 @@ export default function Learn({ quiz, onExit }: { quiz: StudyQuiz; onExit: () =>
           transition={{ duration: 0.25 }}
           className="card p-6 sm:p-8 max-w-3xl mx-auto"
         >
-          {(level[current.l.id] ?? 0) > 0 && !answered && (
+          {(level[current.l.id] ?? 0) > 0 && !answered && current.item.kind === "written" && current.l.id.startsWith("t") && (
             <span className="chip bg-violet-500/15 text-violet-600 dark:text-violet-400 mb-4">
-              <Sparkles className="w-3 h-3" /> Level up: now without options
+              <Sparkles className="w-3 h-3" /> Level up: now type it
             </span>
           )}
           <ItemView item={item} given={given} revealed={answered} onAnswer={answer} />
           {answered && (
             <Feedback
               correct={correct}
-              answer={answerText}
+              answer={rightAnswer}
               given={item.kind === "written" ? String(given) : undefined}
               explanation={item.explanation}
               onContinue={next}

@@ -1,6 +1,5 @@
 import { BookOpenText, Brain, ClipboardCheck, Layers, PenLine, Puzzle, ScrollText, Target, Zap, type LucideIcon } from "lucide-react";
 import type { StudyMode, StudyQuiz } from "@/lib/study";
-import { studyPairs, typeable } from "@/lib/study";
 
 export interface ModeInfo {
   mode: StudyMode;
@@ -29,7 +28,7 @@ export const modes: ModeInfo[] = [
     blurb: "Flip, swipe and sort into “know it” and “still learning”",
     icon: Layers,
     gradient: "from-sky-500 to-cyan-400",
-    unavailable: (q) => (studyPairs(q).length ? null : "Generate questions first"),
+    unavailable: (q) => (q.terms.length ? null : "Regenerate to get key terms"),
   },
   {
     mode: "practice",
@@ -45,7 +44,7 @@ export const modes: ModeInfo[] = [
     blurb: "Mixed question types, optional timer, graded at the end",
     icon: ClipboardCheck,
     gradient: "from-blue-600 to-indigo-500",
-    unavailable: needsQuestions,
+    unavailable: (q) => (q.questions.length || q.statements.length || q.shortAnswers.length ? null : "Generate questions first"),
   },
   {
     mode: "match",
@@ -53,7 +52,7 @@ export const modes: ModeInfo[] = [
     blurb: "Pair terms with definitions against the clock",
     icon: Puzzle,
     gradient: "from-amber-500 to-orange-500",
-    unavailable: (q) => (studyPairs(q).length >= 2 ? null : "Needs at least 2 terms"),
+    unavailable: (q) => (q.terms.length >= 2 ? null : "Regenerate to get key terms"),
   },
   {
     mode: "truefalse",
@@ -61,7 +60,7 @@ export const modes: ModeInfo[] = [
     blurb: "A 60-second blitz: build a combo, beat your best",
     icon: Zap,
     gradient: "from-rose-500 to-pink-500",
-    unavailable: needsQuestions,
+    unavailable: (q) => (q.statements.length ? null : "Regenerate to get true-or-false statements"),
   },
   {
     mode: "write",
@@ -69,7 +68,7 @@ export const modes: ModeInfo[] = [
     blurb: "Type answers from memory for the strongest recall",
     icon: PenLine,
     gradient: "from-lime-500 to-green-500",
-    unavailable: (q) => (q.terms.length || q.questions.some(typeable) ? null : "Regenerate to get key terms"),
+    unavailable: (q) => (q.terms.length || q.shortAnswers.length ? null : "Regenerate to get written questions"),
   },
   {
     mode: "guide",

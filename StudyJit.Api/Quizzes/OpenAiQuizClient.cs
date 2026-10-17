@@ -22,8 +22,13 @@ public record GeneratedQuestion(string Question, List<string> Options, string Co
 
 public record GeneratedTerm(string Term, string Definition);
 
-/// <summary>What one generation writes: the questions, plus a study guide and key terms for the other study modes.</summary>
-public record GeneratedQuiz(List<GeneratedQuestion> Questions, string Summary, List<GeneratedTerm> Terms, string CheatSheet);
+public record GeneratedStatement(string Statement, [property: System.Text.Json.Serialization.JsonPropertyName("is_true")] bool IsTrue, string Explanation);
+
+public record GeneratedShortAnswer(string Question, string Answer, List<string> Alternatives, string Explanation);
+
+/// <summary>What one generation writes: content for each way of studying, a study guide and a cheat sheet.</summary>
+public record GeneratedQuiz(List<GeneratedQuestion> Questions, string Summary, List<GeneratedTerm> Terms, string CheatSheet,
+    List<GeneratedStatement> Statements, List<GeneratedShortAnswer> ShortAnswers);
 
 /// <summary>What a quiz is generated from: the topic, plus text, images and documents from the linked files.</summary>
 public class QuizSource
@@ -45,34 +50,51 @@ public class QuizSource
 /// set to expire on their own, so a crash mid-generation leaves nothing behind for long. The answer is a strict JSON
 /// schema, and every question is checked before it's kept.
 /// </summary>
-public class OpenAiQuizClient(HttpClient http, OpenAiOptions options, ILogger<OpenAiQuizClient> log)
+public partial class OpenAiQuizClient(HttpClient http, OpenAiOptions options, ILogger<OpenAiQuizClient> log)
 {
     public bool IsConfigured => !string.IsNullOrWhiteSpace(options.ApiKey);
 
     const string Instructions = """
         You are an expert teacher preparing study material for a student revising. Base everything on the attached
         material when there is any (search it with file_search), otherwise on the topic, and write in the language of the
-        material.
+        material. Each part below feeds a different way of studying, so write each one for its own format.
 
-        questions: a question bank the student is drilled from many times, a different mix each session, so it has to
-        cover the material completely and vary:
-        - Decide how many the material needs: go through every concept, fact, process, formula and example in it and
-          write at least two questions on each important one, asked differently (e.g. one recall, one applied). Short
-          material might need 15; a full lecture usually 30 to 60; never more than 80.
+        Everything must stand on its own: the student sees one item at a time, without the slides or notes. Never write
+        "in the slides", "in the lecture", "shown above", "the example", "Figure 2", "the code below" or anything else
+        that points at the material; if an item needs a piece of code, a formula or a scenario, put it in the item. Every
+        item must be correct according to the material; when unsure, leave it out.
+
+        questions (multiple choice): a bank the student is drilled from many times, a different mix each session, so it
+        covers the material completely and varies:
+        - Decide how many the material needs: go through every concept, fact, process, formula and example and write at
+          least two questions on each important one, asked differently (e.g. one recall, one applied). Short material
+          might need 15; a full lecture usually 30 to 60; never more than 80.
         - Mix the styles: definitions, "which example shows…", scenarios and applications, cause and effect,
-          comparisons, ordering steps, spotting the mistake, and calculations or worked problems where the material has
-          them. Vary the wording and the order things come up in; don't repeat a question in other words.
-        - Each has exactly four distinct, plausible options of similar length, one of them right; "correct" is the
-          exact text of the right option. Wrong options should be real misconceptions, not obviously silly. Avoid trick
-          questions, "all of the above" and "none of the above".
-        - "explanation" says in one or two sentences why the right option is right (and, when useful, why a tempting
-          wrong one isn't).
+          comparisons, ordering steps, spotting the mistake, predicting what code or a process does, and calculations or
+          worked problems where the material has them. Don't repeat a question in other words.
+        - Exactly four distinct options of similar length and style, exactly one right and the other three definitely
+          wrong (real misconceptions, not silly). "correct" is the exact text of the right option. No trick questions,
+          "all of the above", "none of the above", or questions whose answer depends on opinion.
+        - "explanation": one or two sentences on why the right option is right (and, when useful, why a tempting wrong
+          one isn't).
+
+        true_false: 15 to 40 statements for a rapid true-or-false round. Each is one complete, self-contained
+        declarative sentence about the material that is unambiguously true or unambiguously false: not a question, not
+        a bare value or line of code on its own, and with no "always/never" wording that makes it a trick. Make about
+        half false, each by changing one key detail of a true fact into a believable misconception. "explanation" says
+        why it's true, or what's actually right if it's false.
+
+        short_answers: 10 to 30 questions answered by typing a few words (1 to 4): a term, name, number, keyword or
+        short expression. Ask only things with one clear answer a student could recall exactly; skip anything that needs
+        a sentence to answer. "answer" is the expected answer; "alternatives" lists other answers that should also count
+        (synonyms, abbreviations, other notations, with or without units); "explanation" is one sentence.
+
+        terms (for flashcards and a term-matching game): every important term, name, concept and formula in the
+        material (as many as it has, up to 40). "definition" is one short sentence (under 20 words) that identifies the
+        term without using the term itself or words formed from it.
 
         summary: a concise study guide of the material in Markdown: a few "## " sections of short paragraphs and "- "
         bullet points, with key ideas in **bold**. No more than about 400 words.
-
-        terms: every important term, name, concept and formula in the material (as many as it has, up to 40), each with
-        a short definition (one sentence) that doesn't repeat the term itself.
 
         cheat_sheet: the condensed notes a student would bring into an exam, in Markdown, about one printed page (350
         words at most), no introduction, every line worth its space. Use 4 to 8 "## " sections by topic (e.g. "Key
@@ -217,6 +239,19 @@ public class OpenAiQuizClient(HttpClient http, OpenAiOptions options, ILogger<Op
             ["correct"] = SchemaString(),
             ["explanation"] = SchemaString(),
         })),
+        ["true_false"] = SchemaArray(SchemaObject(new()
+        {
+            ["statement"] = SchemaString(),
+            ["is_true"] = new JsonObject { ["type"] = "boolean" },
+            ["explanation"] = SchemaString(),
+        })),
+        ["short_answers"] = SchemaArray(SchemaObject(new()
+        {
+            ["question"] = SchemaString(),
+            ["answer"] = SchemaString(),
+            ["alternatives"] = SchemaArray(SchemaString()),
+            ["explanation"] = SchemaString(),
+        })),
         ["summary"] = SchemaString(),
         ["terms"] = SchemaArray(SchemaObject(new() { ["term"] = SchemaString(), ["definition"] = SchemaString() })),
         ["cheat_sheet"] = SchemaString(),
@@ -241,7 +276,7 @@ public class OpenAiQuizClient(HttpClient http, OpenAiOptions options, ILogger<Op
         {
             var opts = q.Options.Select(o => o.Trim()).Where(o => o.Length > 0).Distinct(StringComparer.OrdinalIgnoreCase).Take(4).ToList();
             var correct = opts.FirstOrDefault(o => string.Equals(o, q.Correct?.Trim(), StringComparison.OrdinalIgnoreCase));
-            if (string.IsNullOrWhiteSpace(q.Question) || opts.Count != 4 || correct == null)
+            if (string.IsNullOrWhiteSpace(q.Question) || opts.Count != 4 || correct == null || PointsAtMaterial(q.Question))
                 continue;
             kept.Add(new GeneratedQuestion(q.Question.Trim(), opts, correct, q.Explanation?.Trim() ?? ""));
         }
@@ -251,18 +286,54 @@ public class OpenAiQuizClient(HttpClient http, OpenAiOptions options, ILogger<Op
         var terms = (quiz?.Terms ?? [])
             .Where(x => !string.IsNullOrWhiteSpace(x.Term) && !string.IsNullOrWhiteSpace(x.Definition))
             .Select(x => new GeneratedTerm(x.Term.Trim(), x.Definition.Trim()))
+            // A definition that names its own term gives the flashcard or match away.
+            .Where(x => !x.Definition.Contains(x.Term, StringComparison.OrdinalIgnoreCase))
             .DistinctBy(x => x.Term, StringComparer.OrdinalIgnoreCase)
             .Take(MaxTerms).ToList();
-        return new GeneratedQuiz(kept.Take(MaxQuestions).ToList(), quiz?.Summary?.Trim() ?? "", terms, quiz?.CheatSheet?.Trim() ?? "");
+
+        var statements = (quiz?.TrueFalse ?? [])
+            .Select(s => s with { Statement = s.Statement?.Trim() ?? "", Explanation = s.Explanation?.Trim() ?? "" })
+            // A statement is a sentence: not a question, not a bare value or line of code.
+            .Where(s => s.Statement.Split(' ', StringSplitOptions.RemoveEmptyEntries).Length >= 4 && !s.Statement.EndsWith('?') && !PointsAtMaterial(s.Statement))
+            .DistinctBy(s => s.Statement, StringComparer.OrdinalIgnoreCase)
+            .Take(MaxStatements).ToList();
+
+        var shortAnswers = (quiz?.ShortAnswers ?? [])
+            .Select(s => new GeneratedShortAnswer(s.Question?.Trim() ?? "", s.Answer?.Trim() ?? "",
+                (s.Alternatives ?? []).Select(a => a.Trim()).Where(a => a.Length > 0).Distinct(StringComparer.OrdinalIgnoreCase).Take(8).ToList(),
+                s.Explanation?.Trim() ?? ""))
+            // Short enough to type and recall exactly.
+            .Where(s => s.Question.Length > 0 && s.Answer.Length is > 0 and <= 40 && s.Answer.Split(' ', StringSplitOptions.RemoveEmptyEntries).Length <= 5
+                && !PointsAtMaterial(s.Question))
+            .DistinctBy(s => s.Question, StringComparer.OrdinalIgnoreCase)
+            .Take(MaxShortAnswers).ToList();
+
+        return new GeneratedQuiz(kept.Take(MaxQuestions).ToList(), quiz?.Summary?.Trim() ?? "", terms, quiz?.CheatSheet?.Trim() ?? "",
+            statements, shortAnswers);
     }
 
+    /// <summary>
+    /// Items that lean on the material ("shown in the slides", "the example above") make no sense on their own, as the
+    /// student sees them; they're dropped even if the AI writes them despite being told not to.
+    /// </summary>
+    static bool PointsAtMaterial(string text) => MaterialReference().IsMatch(text);
+
+    [System.Text.RegularExpressions.GeneratedRegex(
+        @"\b(in|from|on|per|according to) the (slides?|lecture|notes|reading|document|text|video|figure|diagram|table|handout|textbook)\b|\b(shown|given|listed|described) (above|below|earlier|in the)\b|\bthe (example|code|figure|diagram|table) (above|below)\b",
+        System.Text.RegularExpressions.RegexOptions.IgnoreCase)]
+    private static partial System.Text.RegularExpressions.Regex MaterialReference();
+
     const int MaxTerms = 40;
+    const int MaxStatements = 40;
+    const int MaxShortAnswers = 30;
 
     /// <summary>The most questions kept from one generation; the AI decides how many the material needs, up to this.</summary>
     public const int MaxQuestions = 80;
 
     record QuizJson(List<GeneratedQuestion>? Questions, string? Summary, List<GeneratedTerm>? Terms,
-        [property: System.Text.Json.Serialization.JsonPropertyName("cheat_sheet")] string? CheatSheet);
+        [property: System.Text.Json.Serialization.JsonPropertyName("cheat_sheet")] string? CheatSheet,
+        [property: System.Text.Json.Serialization.JsonPropertyName("true_false")] List<GeneratedStatement>? TrueFalse,
+        [property: System.Text.Json.Serialization.JsonPropertyName("short_answers")] List<GeneratedShortAnswer>? ShortAnswers);
 
     /// <summary>How long an upload lives if it isn't deleted (OpenAI's shortest is an hour).</summary>
     const int UploadLifetimeSeconds = 6 * 3600;

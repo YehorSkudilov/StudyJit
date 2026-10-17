@@ -1,6 +1,6 @@
-// What every study mode works from: a quiz's questions (multiple choice, each with an explanation), its key terms and
-// its study guide, as GET /api/items/quizzes/get/{id} returns them. Quizzes generated before terms existed have none, so
-// the term-based modes fall back to question → answer pairs.
+// What every study mode works from, as GET /api/items/quizzes/get/{id} returns it. The AI writes content for each way
+// of studying: multiple-choice questions (Practice, Test, Learn), true-or-false statements (True or False, Test), short
+// answers to type (Write, Test, Learn), key terms (Flashcards, Match, Learn, Write), a study guide and a cheat sheet.
 
 import { apiFetch } from "@/lib/api";
 import { useEffect, useState } from "react";
@@ -18,6 +18,21 @@ export interface Term {
   definition: string;
 }
 
+export interface Statement {
+  id: number;
+  statement: string;
+  isTrue: boolean;
+  explanation: string;
+}
+
+export interface ShortAnswer {
+  id: number;
+  question: string;
+  answer: string;
+  alternatives: string[];
+  explanation: string;
+}
+
 export interface StudyQuiz {
   id: number;
   name: string;
@@ -26,6 +41,8 @@ export interface StudyQuiz {
   cheatSheet: string;
   questions: Question[];
   terms: Term[];
+  statements: Statement[];
+  shortAnswers: ShortAnswer[];
   lastScore: number | null;
   status: string;
 }
@@ -44,6 +61,13 @@ export async function loadQuiz(id: number): Promise<StudyQuiz> {
     cheatSheet: data.cheat_sheet ?? "",
     questions: data.questions ?? [],
     terms: data.terms ?? [],
+    statements: (data.statements ?? []).map((s: { id: number; statement: string; is_true: boolean; explanation: string }) => ({
+      id: s.id,
+      statement: s.statement,
+      isTrue: s.is_true,
+      explanation: s.explanation,
+    })),
+    shortAnswers: data.short_answers ?? [],
     lastScore: data.last_score ?? null,
     status: data.generation_status,
   };
@@ -93,28 +117,32 @@ export function sample<T>(items: readonly T[], count: number): T[] {
   return shuffle(items).slice(0, count);
 }
 
-/** Term/definition pairs: the quiz's key terms, or its questions and answers when it has none. */
-export function studyPairs(quiz: StudyQuiz): Term[] {
-  if (quiz.terms.length >= 4) return quiz.terms;
-  return quiz.questions.map((q) => ({ term: q.correct, definition: q.question }));
-}
-
-/** Whether the pairs are real key terms (vs. questions standing in for them), for wording. */
-export const hasTerms = (quiz: StudyQuiz) => quiz.terms.length >= 4;
-
 // ---------- Question types for tests and Learn ----------
 
-/** One thing to answer; qid is the bank question it came from, when it did (key terms have none). */
+/** One thing to answer. hid keys its history (see recordAnswer); key terms have none. */
 export type Item =
-  | { kind: "mcq"; key: string; qid?: number; prompt: string; options: string[]; answer: string; explanation?: string }
-  | { kind: "tf"; key: string; qid?: number; prompt: string; statement: string; answer: boolean; truth: string; explanation?: string }
-  | { kind: "written"; key: string; qid?: number; prompt: string; answer: string; explanation?: string; label?: string };
+  | { kind: "mcq"; key: string; hid?: string; prompt: string; options: string[]; answer: string; explanation?: string }
+  | { kind: "tf"; key: string; hid?: string; prompt: string; statement: string; answer: boolean; explanation?: string }
+  | {
+      kind: "written";
+      key: string;
+      hid?: string;
+      prompt: string;
+      answer: string;
+      alternatives?: string[];
+      explanation?: string;
+      label?: string;
+    };
+
+export const questionKey = (q: Question) => `q${q.id}`;
+export const statementKey = (s: Statement) => `s${s.id}`;
+export const shortAnswerKey = (s: ShortAnswer) => `a${s.id}`;
 
 export function mcqItem(q: Question): Item {
   return {
     kind: "mcq",
-    key: `q${q.id}`,
-    qid: q.id,
+    key: questionKey(q),
+    hid: questionKey(q),
     prompt: q.question,
     options: shuffle(q.options),
     answer: q.correct,
@@ -122,40 +150,38 @@ export function mcqItem(q: Question): Item {
   };
 }
 
-/** "Q? — A" is true half the time; otherwise a wrong option takes the answer's place. */
-export function trueFalseItem(q: Question): Item {
-  const isTrue = Math.random() < 0.5;
-  const wrong = q.options.filter((o) => !same(o, q.correct));
-  const shown = isTrue || wrong.length === 0 ? q.correct : wrong[Math.floor(Math.random() * wrong.length)];
+/** A statement written to be judged true or false. */
+export function statementItem(s: Statement): Item {
+  return { kind: "tf", key: statementKey(s), hid: statementKey(s), prompt: "True or false?", statement: s.statement, answer: s.isTrue, explanation: s.explanation };
+}
+
+/** A question answered by typing a few words; its alternatives count too. */
+export function shortAnswerItem(s: ShortAnswer): Item {
   return {
-    kind: "tf",
-    key: `tf${q.id}`,
-    qid: q.id,
-    prompt: q.question,
-    statement: shown,
-    answer: isTrue || wrong.length === 0,
-    truth: q.correct,
-    explanation: q.explanation,
+    kind: "written",
+    key: shortAnswerKey(s),
+    hid: shortAnswerKey(s),
+    prompt: s.question,
+    answer: s.answer,
+    alternatives: s.alternatives,
+    explanation: s.explanation,
   };
 }
 
+/** A key term to type from its definition. */
 export function writtenFromTerm(t: Term, i: number): Item {
   return { kind: "written", key: `w${i}`, prompt: t.definition, answer: t.term, label: "Write the term" };
 }
-
-export function writtenFromQuestion(q: Question): Item {
-  return { kind: "written", key: `wq${q.id}`, qid: q.id, prompt: q.question, answer: q.correct, explanation: q.explanation };
-}
-
-/** Questions short enough to answer by typing. */
-export const typeable = (q: Question) => q.correct.length <= 40 && q.correct.split(/\s+/).length <= 5;
 
 export function isRight(item: Item, given: string | boolean | undefined): boolean {
   if (given === undefined || given === "") return false;
   if (item.kind === "tf") return given === item.answer;
   if (item.kind === "mcq") return same(String(given), item.answer);
-  return closeEnough(String(given), item.answer);
+  return [item.answer, ...(item.alternatives ?? [])].some((a) => closeEnough(String(given), a));
 }
+
+/** The right answer as text, e.g. for feedback and reviews. */
+export const answerText = (item: Item) => (item.kind === "tf" ? (item.answer ? "True" : "False") : item.answer);
 
 // ---------- Comparing typed answers ----------
 
@@ -243,11 +269,11 @@ function readHistory(quizId: number): History {
 }
 
 /** Remembers how a question went (in this browser), so later sessions favour what's new or was missed. */
-export function recordAnswer(quizId: number, questionId: number, correct: boolean) {
+export function recordAnswer(quizId: number, key: string, correct: boolean) {
   try {
     const history = readHistory(quizId);
-    const entry = history[questionId] ?? { seen: 0, right: 0, wrong: 0 };
-    history[questionId] = { seen: Date.now(), right: entry.right + (correct ? 1 : 0), wrong: entry.wrong + (correct ? 0 : 1) };
+    const entry = history[key] ?? { seen: 0, right: 0, wrong: 0 };
+    history[key] = { seen: Date.now(), right: entry.right + (correct ? 1 : 0), wrong: entry.wrong + (correct ? 0 : 1) };
     localStorage.setItem(historyKey(quizId), JSON.stringify(history));
   } catch {
     // No storage: sessions are just random.
@@ -255,23 +281,25 @@ export function recordAnswer(quizId: number, questionId: number, correct: boolea
 }
 
 /**
- * Picks a session's questions from the bank: never-seen ones first, then ones answered wrong more than right, then
- * the longest since seen, with a little randomness so no two sessions are alike. Returned in random order.
+ * Picks a session's items from a bank: never-seen ones first, then ones answered wrong more than right, then the
+ * longest since seen, with a little randomness so no two sessions are alike. Returned in random order.
  */
-export function pickQuestions(quizId: number, questions: Question[], size: number): Question[] {
-  if (questions.length <= size) return shuffle(questions);
+export function pickFrom<T>(quizId: number, items: T[], keyOf: (item: T) => string, size: number): T[] {
+  if (items.length <= size) return shuffle(items);
   const history = readHistory(quizId);
   const now = Date.now();
-  const score = (q: Question) => {
-    const h = history[q.id];
+  const score = (item: T) => {
+    const h = history[keyOf(item)];
     if (!h) return 1000 + Math.random() * 100;
     const struggling = Math.max(0, h.wrong - h.right) * 50;
     const daysSince = (now - h.seen) / 86_400_000;
     return struggling + Math.min(daysSince, 30) * 5 + Math.random() * 40;
   };
-  const ranked = questions.map((q) => ({ q, s: score(q) })).sort((a, b) => b.s - a.s);
-  return shuffle(ranked.slice(0, size).map((r) => r.q));
+  const ranked = items.map((item) => ({ item, s: score(item) })).sort((a, b) => b.s - a.s);
+  return shuffle(ranked.slice(0, size).map((r) => r.item));
 }
+
+export const pickQuestions = (quizId: number, questions: Question[], size: number) => pickFrom(quizId, questions, questionKey, size);
 
 /** How many questions one practice session takes from the bank. */
 export const SESSION_SIZE = 15;

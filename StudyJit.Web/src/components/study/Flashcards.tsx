@@ -3,7 +3,7 @@
 import { AnimatePresence, motion, useMotionValue, useTransform, type PanInfo } from "framer-motion";
 import { Check, Repeat, RotateCcw, Shuffle, Undo2, X } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
-import { hasTerms, shuffle, studyPairs, type StudyQuiz, type Term } from "@/lib/study";
+import { shuffle, type StudyQuiz, type Term } from "@/lib/study";
 import Confetti from "@/components/ui/Confetti";
 import StudyShell, { ShellStat } from "./StudyShell";
 
@@ -12,11 +12,11 @@ import StudyShell, { ShellStat } from "./StudyShell";
  * "still learning" pile can go round again until it's empty.
  */
 export default function Flashcards({ quiz, onExit }: { quiz: StudyQuiz; onExit: () => void }) {
-  const all = studyPairs(quiz);
+  const all = quiz.terms;
   const [deck, setDeck] = useState<Term[]>(() => shuffle(all));
   const [index, setIndex] = useState(0);
   const [flipped, setFlipped] = useState(false);
-  const [termFirst, setTermFirst] = useState(hasTerms(quiz));
+  const [termFirst, setTermFirst] = useState(true);
   const [known, setKnown] = useState<Term[]>([]);
   const [learning, setLearning] = useState<Term[]>([]);
   const [history, setHistory] = useState<boolean[]>([]);
@@ -135,8 +135,8 @@ export default function Flashcards({ quiz, onExit }: { quiz: StudyQuiz; onExit: 
                 key={`${index}-${card.term}`}
                 front={front}
                 back={back}
-                frontLabel={termFirst ? (hasTerms(quiz) ? "Term" : "Answer") : hasTerms(quiz) ? "Definition" : "Question"}
-                backLabel={termFirst ? (hasTerms(quiz) ? "Definition" : "Question") : hasTerms(quiz) ? "Term" : "Answer"}
+                frontLabel={termFirst ? "Term" : "Definition"}
+                backLabel={termFirst ? "Definition" : "Term"}
                 flipped={flipped}
                 onFlip={() => setFlipped((f) => !f)}
                 onSwipe={sort}

@@ -3,7 +3,7 @@
 import { AnimatePresence, motion } from "framer-motion";
 import { Check, Flame, Play, Timer, Trophy, X, Zap } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { readBest, recordAnswer, recordBest, shuffle, trueFalseItem, type Item, type StudyQuiz } from "@/lib/study";
+import { pickFrom, readBest, recordAnswer, recordBest, statementItem, statementKey, type Item, type StudyQuiz } from "@/lib/study";
 import Confetti from "@/components/ui/Confetti";
 import Results from "./Results";
 import StudyShell, { ShellStat } from "./StudyShell";
@@ -29,10 +29,12 @@ export default function TrueFalse({ quiz, onExit }: { quiz: StudyQuiz; onExit: (
   const [newBest, setNewBest] = useState(false);
 
   const draw = useCallback(() => {
-    if (deck.current.length === 0) deck.current = shuffle(quiz.questions).map((q) => trueFalseItem(q) as TF);
+    // Statements written for this format, new and missed ones first.
+    if (deck.current.length === 0)
+      deck.current = pickFrom(quiz.id, quiz.statements, statementKey, quiz.statements.length).map((s) => statementItem(s) as TF);
     setCurrent(deck.current.pop()!);
     setCount((c) => c + 1);
-  }, [quiz.questions]);
+  }, [quiz.id, quiz.statements]);
 
   const start = () => {
     deck.current = [];
@@ -65,7 +67,7 @@ export default function TrueFalse({ quiz, onExit }: { quiz: StudyQuiz; onExit: (
     (value: boolean) => {
       if (phase !== "playing" || !current) return;
       const right = value === current.answer;
-      if (current.qid != null) recordAnswer(quiz.id, current.qid, right);
+      if (current.hid) recordAnswer(quiz.id, current.hid, right);
       setLog((l) => [...l, { item: current, given: value }]);
       if (right) {
         const nextCombo = combo + 1;
@@ -129,8 +131,8 @@ export default function TrueFalse({ quiz, onExit }: { quiz: StudyQuiz; onExit: (
             { label: "Best combo", value: String(bestCombo) },
           ]}
           review={log.map(({ item, given }) => ({
-            prompt: `${item.prompt} — “${item.statement}”`,
-            answer: item.answer ? "True" : `False (it's “${item.truth}”)`,
+            prompt: item.statement,
+            answer: item.answer ? "True" : "False",
             given: given ? "True" : "False",
             correct: given === item.answer,
             explanation: item.explanation,
@@ -175,8 +177,8 @@ export default function TrueFalse({ quiz, onExit }: { quiz: StudyQuiz; onExit: (
                 flash === "right" ? "!border-emerald-500" : flash === "wrong" ? "!border-red-500 animate-shake" : ""
               }`}
             >
-              <p className="text-lg font-semibold text-muted">{current.prompt}</p>
-              <p className="mt-4 text-2xl sm:text-3xl font-extrabold leading-snug">{current.statement}</p>
+              <p className="text-xs font-bold uppercase tracking-wider text-muted">{current.prompt}</p>
+              <p className="mt-3 text-2xl sm:text-3xl font-extrabold leading-snug">{current.statement}</p>
             </motion.div>
           )}
         </AnimatePresence>

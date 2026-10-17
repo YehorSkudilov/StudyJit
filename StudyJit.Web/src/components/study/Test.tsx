@@ -7,13 +7,16 @@ import {
   formatTime,
   isRight,
   mcqItem,
+  answerText,
+  pickFrom,
   pickQuestions,
   recordAnswer,
   saveScore,
+  shortAnswerItem,
+  shortAnswerKey,
   shuffle,
-  trueFalseItem,
-  typeable,
-  writtenFromQuestion,
+  statementItem,
+  statementKey,
   writtenFromTerm,
   type Item,
   type StudyQuiz,
@@ -31,34 +34,36 @@ const kinds: { kind: Kind; title: string; icon: typeof ListChecks }[] = [
   { kind: "written", title: "Written", icon: PenLine },
 ];
 
-/** Builds a test of the chosen size, spreading the questions across the chosen types. */
+/** Each question type's own pool: questions, statements, and short answers (or key terms when there are none). */
+function pools(quiz: StudyQuiz): Record<Kind, () => Item[]> {
+  return {
+    mcq: () => pickQuestions(quiz.id, quiz.questions, quiz.questions.length).map(mcqItem),
+    tf: () => pickFrom(quiz.id, quiz.statements, statementKey, quiz.statements.length).map(statementItem),
+    written: () =>
+      quiz.shortAnswers.length
+        ? pickFrom(quiz.id, quiz.shortAnswers, shortAnswerKey, quiz.shortAnswers.length).map(shortAnswerItem)
+        : shuffle(quiz.terms).map(writtenFromTerm),
+  };
+}
+
+const poolSize = (quiz: StudyQuiz, kind: Kind) =>
+  kind === "mcq" ? quiz.questions.length : kind === "tf" ? quiz.statements.length : quiz.shortAnswers.length || quiz.terms.length;
+
+/** Builds a test of the chosen size, taking turns between the chosen types (each from its own pool, new and missed first). */
 function buildTest(quiz: StudyQuiz, count: number, chosen: Kind[]): Item[] {
-  // A fresh mix from the bank each time, favouring what's new or was missed.
-  const questions = pickQuestions(quiz.id, quiz.questions, count);
-  const writable = quiz.terms.length > 0 ? quiz.terms : [];
-  return shuffle(
-    questions.map((q, i) => {
-      const kind = chosen[i % chosen.length];
-      if (kind === "tf") return trueFalseItem(q);
-      if (kind === "written") {
-        if (typeable(q)) return writtenFromQuestion(q);
-        // Long answers are hard to type: ask for a key term instead, or fall back to multiple choice.
-        if (writable.length) {
-          const t = writable[i % writable.length];
-          return writtenFromTerm(t, i);
-        }
-        return mcqItem(q);
-      }
-      return mcqItem(q);
-    })
-  );
+  const queues = chosen.map((kind) => pools(quiz)[kind]());
+  const items: Item[] = [];
+  for (let round = 0; items.length < count && queues.some((q) => q.length); round++)
+    for (const queue of queues) if (items.length < count && queue.length) items.push(queue.shift()!);
+  return shuffle(items);
 }
 
 /** A full test: choose its size, question types and timing, answer it all, then see a graded review. */
 export default function Test({ quiz, onExit }: { quiz: StudyQuiz; onExit: () => void }) {
-  const max = quiz.questions.length;
+  const available = kinds.map((k) => k.kind).filter((k) => poolSize(quiz, k) > 0);
+  const [chosen, setChosen] = useState<Kind[]>(available);
+  const max = Math.max(1, chosen.reduce((n, k) => n + poolSize(quiz, k), 0));
   const [count, setCount] = useState(Math.min(max, 20));
-  const [chosen, setChosen] = useState<Kind[]>(["mcq", "tf", "written"]);
   const [timed, setTimed] = useState(false);
   const [items, setItems] = useState<Item[] | null>(null);
   const [answers, setAnswers] = useState<Record<string, string | boolean>>({});
@@ -86,7 +91,7 @@ export default function Test({ quiz, onExit }: { quiz: StudyQuiz; onExit: () => 
   useEffect(() => {
     if (!submitted || !items) return;
     saveScore(quiz.id, (score / items.length) * 100);
-    for (const it of items) if (it.qid != null) recordAnswer(quiz.id, it.qid, isRight(it, answers[it.key]));
+    for (const it of items) if (it.hid) recordAnswer(quiz.id, it.hid, isRight(it, answers[it.key]));
     window.scrollTo({ top: 0, behavior: "smooth" });
   }, [submitted]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -130,17 +135,24 @@ export default function Test({ quiz, onExit }: { quiz: StudyQuiz; onExit: () => 
           <div className="grid grid-cols-3 gap-2">
             {kinds.map(({ kind, title, icon: Icon }) => {
               const on = chosen.includes(kind);
+              const none = !available.includes(kind);
               return (
                 <button
                   key={kind}
-                  onClick={() => setChosen(on ? (chosen.length > 1 ? chosen.filter((k) => k !== kind) : chosen) : [...chosen, kind])}
-                  className={`relative rounded-2xl border-2 p-3 flex flex-col items-center gap-2 text-sm font-semibold transition ${
-                    on ? "border-brand bg-brand-soft text-brand" : "border-stroke text-muted hover:border-brand/40"
+                  disabled={none}
+                  title={none ? "This set has none; regenerate it to get them" : undefined}
+                  onClick={() => {
+                    const next = on ? (chosen.length > 1 ? chosen.filter((k) => k !== kind) : chosen) : [...chosen, kind];
+                    setChosen(next);
+                    setCount((c) => Math.min(c, Math.max(1, next.reduce((n, k) => n + poolSize(quiz, k), 0))));
+                  }}
+                  className={`relative rounded-2xl border-2 p-3 flex flex-col items-center gap-2 text-sm font-semibold transition disabled:opacity-40 disabled:cursor-not-allowed ${
+                    on && !none ? "border-brand bg-brand-soft text-brand" : "border-stroke text-muted hover:border-brand/40"
                   }`}
                 >
                   <Icon className="w-5 h-5" />
                   {title}
-                  {on && <CheckSquare className="absolute top-2 right-2 w-3.5 h-3.5" />}
+                  {on && !none && <CheckSquare className="absolute top-2 right-2 w-3.5 h-3.5" />}
                 </button>
               );
             })}
@@ -185,8 +197,8 @@ export default function Test({ quiz, onExit }: { quiz: StudyQuiz; onExit: () => 
           review={items.map((it) => {
             const g = answers[it.key];
             return {
-              prompt: it.kind === "tf" ? `${it.prompt} — “${it.statement}”` : it.prompt,
-              answer: it.kind === "tf" ? (it.answer ? "True" : `False (it's “${it.truth}”)`) : it.answer,
+              prompt: it.kind === "tf" ? it.statement : it.prompt,
+              answer: answerText(it),
               given: g === undefined ? undefined : typeof g === "boolean" ? (g ? "True" : "False") : g,
               correct: isRight(it, g),
               explanation: it.explanation,

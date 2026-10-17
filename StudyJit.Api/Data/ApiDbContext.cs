@@ -12,6 +12,8 @@ public class ApiDbContext(DbContextOptions<ApiDbContext> options) : IdentityDbCo
     public DbSet<Quiz> Quizzes => Set<Quiz>();
     public DbSet<QuizQuestion> QuizQuestions => Set<QuizQuestion>();
     public DbSet<QuizTerm> QuizTerms => Set<QuizTerm>();
+    public DbSet<QuizStatement> QuizStatements => Set<QuizStatement>();
+    public DbSet<QuizShortAnswer> QuizShortAnswers => Set<QuizShortAnswer>();
     public DbSet<QuizFile> QuizFiles => Set<QuizFile>();
     public DbSet<ServerSetting> Settings => Set<ServerSetting>();
 
@@ -85,6 +87,8 @@ public class ApiDbContext(DbContextOptions<ApiDbContext> options) : IdentityDbCo
             e.HasOne<Folder>().WithMany().HasForeignKey(q => q.FolderId).OnDelete(DeleteBehavior.SetNull);
             e.HasMany(q => q.Questions).WithOne().HasForeignKey(q => q.QuizId).OnDelete(DeleteBehavior.Cascade);
             e.HasMany(q => q.Terms).WithOne().HasForeignKey(t => t.QuizId).OnDelete(DeleteBehavior.Cascade);
+            e.HasMany(q => q.Statements).WithOne().HasForeignKey(s => s.QuizId).OnDelete(DeleteBehavior.Cascade);
+            e.HasMany(q => q.ShortAnswers).WithOne().HasForeignKey(s => s.QuizId).OnDelete(DeleteBehavior.Cascade);
         });
 
         b.Entity<QuizFile>(e =>
