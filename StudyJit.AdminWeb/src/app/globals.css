@@ -1,0 +1,69 @@
+/* StudyJit admin: a dark palette, like GymBook's admin. */
+:root {
+  --bg: #0b0d12;
+  --surface: #151821;
+  --surface-2: #1d212c;
+  --surface-3: #272c39;
+  --stroke: #2c3240;
+
+  --text: #f4f6fb;
+  --text-2: #9aa3b5;
+  --text-3: #626b7e;
+
+  --accent: #3f7dff;
+  --accent-soft: #1a2a4f;
+  --accent-2: #7c5cff;
+  --success: #2ed47a;
+  --success-soft: #133526;
+  --warning: #ffb020;
+  --warning-soft: #3a2c10;
+  --danger: #ff4d5e;
+  --danger-soft: #3a1419;
+
+  --radius-card: 20px;
+  --radius-button: 14px;
+  --gutter: 20px;
+
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-open-sans), system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-size: 16px;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+}
+
+a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+h1,
+h2,
+h3 {
+  font-weight: 600;
+  line-height: 1.15;
+  margin: 0;
+}
+
+p {
+  margin: 0;
+}

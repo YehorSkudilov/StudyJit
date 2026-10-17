@@ -1,0 +1,19 @@
+# The website. Settings come from .env next to this file (see .env.example); on the server the Publish Web workflow
+# writes it.
+#
+#   docker compose up -d --build
+#
+# Its own project name, so it never touches the API's or admin site's containers (they share the server and
+# --remove-orphans).
+name: studyjit-web
+
+services:
+  web:
+    build:
+      context: .
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-}
+    restart: unless-stopped
+    # Plain HTTP on every interface; the reverse proxy terminates TLS in front of it.
+    ports:
+      - "${WEB_PORT:?WEB_PORT is not set}:3000"
