@@ -12,6 +12,8 @@ services:
       - db
     environment:
       - NODE_ENV=production
+      - APP_NAME=${APP_NAME}
+      - NEXTAUTH_SECRET=${NEXTAUTH_SECRET}
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - DB_HOST=${DB_HOST}
       - DB_USER=root

@@ -1,0 +1,78 @@
+name: Publish Web
+
+on:
+  workflow_dispatch:
+  # Lets Publish.yml call this as a reusable workflow - see that file's deploy-web job.
+  workflow_call:
+
+jobs:
+
+# ==================================================
+# DEPLOY WEBSITE
+# ==================================================
+  deploy-web:
+    runs-on: ubuntu-latest
+
+    # Only deploy from the main branch
+    if: github.ref == 'refs/heads/main'
+
+    steps:
+      - name: Deploy over SSH
+        uses: appleboy/ssh-action@v1.2.2
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          command_timeout: 20m
+          script: |
+            set -e
+
+            echo "Deploying StudyJit..."
+
+            # The lock keeps deploys running side by side from resetting the checkout at the same time.
+            cd /opt/StudyJit
+
+            echo "Pulling latest code..."
+            flock /tmp/studyjit-deploy-git.lock -c "git fetch origin && git reset --hard origin/main"
+
+            # See .env.example. The app, database and Swagger UI all read this file.
+            echo "Writing .env..."
+            cat > .env <<'ENVEOF'
+            APP_PORT=${{ vars.APP_PORT }}
+            APP_NAME=${{ vars.APP_NAME }}
+            DB_PORT=${{ vars.DB_PORT }}
+            DB_PASS=${{ secrets.DB_PASS }}
+            DB_NAME=${{ vars.DB_NAME }}
+            DB_HOST=${{ vars.DB_HOST }}
+            SWAGGER_PORT=${{ vars.SWAGGER_PORT }}
+            NEXTAUTH_SECRET=${{ secrets.NEXTAUTH_SECRET }}
+            OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}
+            ENVEOF
+
+            echo "Building latest image..."
+            docker compose build --pull
+
+            echo "Restarting containers..."
+            docker compose up -d --remove-orphans
+
+            echo "Waiting for the site to respond..."
+            PORT=$(grep '^APP_PORT=' .env | cut -d= -f2 | tr -d '[:space:]')
+            for i in $(seq 1 30); do
+              if curl -fsS "http://127.0.0.1:$PORT/" > /dev/null; then
+                echo "Website is up."
+                break
+              fi
+              if [ "$i" = 30 ]; then
+                echo "Website did not respond; recent logs:"
+                docker compose logs --tail 100 app
+                exit 1
+              fi
+              sleep 2
+            done
+
+            echo "Removing dangling images..."
+            # Deploys running side by side take turns (Docker runs one prune at a time), and a failed cleanup doesn't fail
+            # a deploy that already succeeded.
+            flock /tmp/gymbook-docker-prune.lock docker image prune -f || echo "Couldn't remove dangling images; skipped."
+
+            echo "Deployment complete!"
