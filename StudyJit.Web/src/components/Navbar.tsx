@@ -4,12 +4,14 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { BookOpen, FolderOpen, Menu, X } from 'lucide-react';
+import { BookOpen, FolderOpen, GraduationCap, Home, Menu, X } from 'lucide-react';
 import AccountMenu from '@/components/AccountMenu';
 import Logo from '@/components/ui/Logo';
 
 const tabs = [
-  { href: '/learningSpace', label: 'Learning Space', icon: BookOpen, also: ['/quizDetails'] },
+  { href: '/home', label: 'Home', icon: Home, also: [] as string[] },
+  { href: '/courses', label: 'Courses', icon: GraduationCap, also: ['/courses/'] },
+  { href: '/learningSpace', label: 'Study sets', icon: BookOpen, also: ['/quizDetails'] },
   { href: '/files', label: 'Files', icon: FolderOpen, also: [] as string[] },
 ];
 
@@ -22,7 +24,7 @@ export default function Navbar() {
   return (
     <nav className="sticky top-0 z-[5000] w-full border-b border-stroke/70 bg-surface/75 backdrop-blur-xl">
       <div className="mx-auto max-w-7xl h-16 px-4 sm:px-6 flex items-center justify-between gap-4">
-        <Link href="/learningSpace" className="flex items-center transition hover:opacity-80">
+        <Link href="/home" className="flex items-center transition hover:opacity-80">
           <Logo size={34} />
         </Link>
 

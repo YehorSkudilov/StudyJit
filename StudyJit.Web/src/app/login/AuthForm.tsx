@@ -52,7 +52,7 @@ export default function AuthForm() {
     try {
       if (isRegister) await register(name, email, password);
       else await signIn(email, password);
-      router.push("/learningSpace");
+      router.push("/home");
     } catch (err) {
       setError(err instanceof TypeError ? "Couldn't reach the server. Please try again." : (err as Error).message);
       setBusy(false);

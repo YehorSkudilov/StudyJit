@@ -44,11 +44,27 @@ public class Folder
     public DateTimeOffset CreatedAt { get; set; }
 }
 
+/// <summary>A course the user takes: it holds that course's study sets and files.</summary>
+public class Course
+{
+    public int Id { get; set; }
+    public string UserId { get; set; } = "";
+    /// <summary>The course code, e.g. "COMP 3760"; may be empty.</summary>
+    public string Code { get; set; } = "";
+    public string Name { get; set; } = "";
+    /// <summary>When it's taken, e.g. "Fall 2026"; may be empty.</summary>
+    public string Term { get; set; } = "";
+    /// <summary>A colour key the web app picks the course's colour by.</summary>
+    public string Color { get; set; } = "blue";
+    public DateTimeOffset CreatedAt { get; set; }
+}
+
 public class StoredFile
 {
     public int Id { get; set; }
     public string UserId { get; set; } = "";
     public int? FolderId { get; set; }
+    public int? CourseId { get; set; }
     public string Name { get; set; } = "";
     /// <summary>Where it is on disk, under Storage:Root.</summary>
     public string Path { get; set; } = "";
@@ -71,6 +87,7 @@ public class Quiz
     public int Id { get; set; }
     public string UserId { get; set; } = "";
     public int? FolderId { get; set; }
+    public int? CourseId { get; set; }
     public string Name { get; set; } = "";
     public string? Description { get; set; }
     public string? Prompt { get; set; }

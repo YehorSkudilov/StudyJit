@@ -16,6 +16,7 @@ public record FileRow(
     int Id,
     string Name,
     [property: JsonPropertyName("folder_id")] int? FolderId,
+    [property: JsonPropertyName("course_id")] int? CourseId,
     long Size,
     [property: JsonPropertyName("mime_type")] string? MimeType,
     [property: JsonPropertyName("uploaded_at")] DateTimeOffset UploadedAt);
@@ -24,7 +25,7 @@ public record MoveItemRequest([property: JsonPropertyName("folder_id")] int? Fol
 
 public record DeleteItemsRequest(int[] Ids);
 
-public record YouTubeRequest(string? Url, string? Folder);
+public record YouTubeRequest(string? Url, string? Folder, int? Course = null);
 
 public record ChunkResponse(bool Success, long Start, long End, long Total, int? FolderId);
 
@@ -37,14 +38,17 @@ public partial class FilesController(ApiDbContext db, ICurrentUser me, FileStora
     /// <summary>Most a chunk may be (the web app sends 5 MB).</summary>
     const int MaxChunkBytes = 16 * 1024 * 1024;
 
-    /// <summary>Every file, newest first (the web app picks a folder's own).</summary>
+    /// <summary>Every file, or with course={id} a course's, newest first (the web app picks a folder's own).</summary>
     [HttpGet]
     [ProducesResponseType<List<FileRow>>(StatusCodes.Status200OK)]
-    public async Task<IActionResult> List()
+    public async Task<IActionResult> List(int? course)
     {
         var userId = me.Id;
-        return Ok(await db.Files.Where(f => f.UserId == userId).OrderByDescending(f => f.UploadedAt)
-            .Select(f => new FileRow(f.Id, f.Name, f.FolderId, f.Size, f.MimeType, f.UploadedAt)).ToListAsync());
+        var files = db.Files.Where(f => f.UserId == userId);
+        if (course != null)
+            files = files.Where(f => f.CourseId == course);
+        return Ok(await files.OrderByDescending(f => f.UploadedAt)
+            .Select(f => new FileRow(f.Id, f.Name, f.FolderId, f.CourseId, f.Size, f.MimeType, f.UploadedAt)).ToListAsync());
     }
 
     [HttpDelete("{id:int}")]
@@ -109,7 +113,9 @@ public partial class FilesController(ApiDbContext db, ICurrentUser me, FileStora
             var request = await JsonSerializer.DeserializeAsync<YouTubeRequest>(Request.Body, json.Value.JsonSerializerOptions, ct);
             if (string.IsNullOrWhiteSpace(request?.Url))
                 return BadRequestError("Missing YouTube URL.");
-            await DownloadYouTube(youTube, request.Url.Trim(), FoldersController.ParseFolder(request.Folder), ct);
+            if (request.Course != null && !await CoursesController.Owns(db, me.Id, request.Course.Value, ct))
+                return NotFoundError("Course not found.");
+            await DownloadYouTube(youTube, request.Url.Trim(), FoldersController.ParseFolder(request.Folder), request.Course, ct);
             return new EmptyResult();
         }
 
@@ -127,6 +133,9 @@ public partial class FilesController(ApiDbContext db, ICurrentUser me, FileStora
         var folderId = FoldersController.ParseFolder(Request.Headers["X-Folder"].ToString());
         if (folderId != null && !await db.Folders.AnyAsync(f => f.Id == folderId && f.UserId == userId && f.Context == FolderContext.Files, ct))
             return NotFoundError("Folder not found.");
+        int? courseId = int.TryParse(Request.Headers["X-Course"].ToString(), out var c) ? c : null;
+        if (courseId != null && !await CoursesController.Owns(db, userId, courseId.Value, ct))
+            return NotFoundError("Course not found.");
 
         var path = storage.PathFor(userId, fileName);
         if (start > 0 && (!System.IO.File.Exists(path) || new FileInfo(path).Length != start))
@@ -136,11 +145,11 @@ public partial class FilesController(ApiDbContext db, ICurrentUser me, FileStora
             await Request.Body.CopyToAsync(stream, ct);
 
         if (end + 1 >= total)
-            await AddFile(userId, path, folderId, ct);
+            await AddFile(userId, path, folderId, courseId, ct);
         return Ok(new ChunkResponse(true, start, end, total, folderId));
     }
 
-    async Task DownloadYouTube(YouTubeDownloader youTube, string url, int? folderId, CancellationToken ct)
+    async Task DownloadYouTube(YouTubeDownloader youTube, string url, int? folderId, int? courseId, CancellationToken ct)
     {
         HttpContext.Features.Get<IHttpResponseBodyFeature>()?.DisableBuffering();
         Response.ContentType = "text/event-stream; charset=utf-8";
@@ -161,7 +170,7 @@ public partial class FilesController(ApiDbContext db, ICurrentUser me, FileStora
                 throw new InvalidOperationException("Folder not found.");
             var path = await youTube.DownloadAsync(userId, url, percent => Send(new { percent = Math.Round(percent, 1) }), ct);
             await Send(new { status = "merging" });
-            await AddFile(userId, path, folderId, ct);
+            await AddFile(userId, path, folderId, courseId, ct);
             await Send(new { percent = 100, status = "complete" });
         }
         catch (InvalidOperationException e)
@@ -170,7 +179,7 @@ public partial class FilesController(ApiDbContext db, ICurrentUser me, FileStora
         }
     }
 
-    async Task AddFile(string userId, string path, int? folderId, CancellationToken ct)
+    async Task AddFile(string userId, string path, int? folderId, int? courseId, CancellationToken ct)
     {
         var name = Path.GetFileName(path);
         // Uploading a file with the same name again replaces it.
@@ -178,6 +187,7 @@ public partial class FilesController(ApiDbContext db, ICurrentUser me, FileStora
         var file = existing ?? db.Files.Add(new StoredFile { UserId = userId, Path = path }).Entity;
         file.Name = name;
         file.FolderId = folderId;
+        file.CourseId = courseId ?? file.CourseId;
         file.Size = new FileInfo(path).Length;
         file.MimeType = FileStorage.MimeTypeOf(name);
         file.UploadedAt = clock.GetUtcNow();

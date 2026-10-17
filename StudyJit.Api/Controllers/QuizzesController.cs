@@ -17,6 +17,7 @@ public record QuizSummary(
     [property: JsonPropertyName("generation_status")] string GenerationStatus,
     [property: JsonPropertyName("num_questions")] int NumQuestions,
     [property: JsonPropertyName("folder_id")] int? FolderId,
+    [property: JsonPropertyName("course_id")] int? CourseId,
     [property: JsonPropertyName("last_score")] decimal? LastScore,
     List<QuestionDto> Questions);
 
@@ -29,6 +30,7 @@ public record QuizDetail(
     [property: JsonPropertyName("generation_status")] string GenerationStatus,
     [property: JsonPropertyName("last_score")] decimal? LastScore,
     [property: JsonPropertyName("queue_number")] int? QueueNumber,
+    [property: JsonPropertyName("course_id")] int? CourseId,
     string? Summary,
     List<QuestionDto> Questions,
     List<TermDto> Terms);
@@ -38,7 +40,8 @@ public record CreateQuizRequest(
     string? Description,
     string? Prompt,
     int? NumQuestions,
-    [property: JsonPropertyName("folder_id")] int? FolderId);
+    [property: JsonPropertyName("folder_id")] int? FolderId,
+    [property: JsonPropertyName("course_id")] int? CourseId = null);
 
 public record CreateQuizResponse(bool Success, int QuizId, int? FolderId, string Message);
 
@@ -62,19 +65,30 @@ public class QuizzesController(ApiDbContext db, ICurrentUser me, TimeProvider cl
 {
     public const int MaxQuestions = 50;
 
-    /// <summary>The quizzes in a folder ("root" or empty for the top), newest first, with their questions.</summary>
+    /// <summary>
+    /// The quizzes in a folder ("root" or empty for the top), or with course={id} a course's quizzes, or with
+    /// course=all every quiz; newest first, with their questions.
+    /// </summary>
     [HttpGet("getAll")]
     [ProducesResponseType<List<QuizSummary>>(StatusCodes.Status200OK)]
-    public async Task<IActionResult> List(string? folder)
+    public async Task<IActionResult> List(string? folder, string? course)
     {
         var userId = me.Id;
-        var folderId = FoldersController.ParseFolder(folder);
-        var quizzes = await db.Quizzes.AsNoTracking().Include(q => q.Questions)
-            .Where(q => q.UserId == userId && q.FolderId == folderId)
-            .OrderByDescending(q => q.Id).ToListAsync();
-        return Ok(quizzes.Select(q => new QuizSummary(q.Id, q.Name, q.Description, q.GenerationStatus, q.NumQuestions, q.FolderId,
-            q.LastScore, Questions(q))));
+        var query = db.Quizzes.AsNoTracking().Include(q => q.Questions).Where(q => q.UserId == userId);
+        if (course == "all") { }
+        else if (int.TryParse(course, out var courseId))
+            query = query.Where(q => q.CourseId == courseId);
+        else
+        {
+            var folderId = FoldersController.ParseFolder(folder);
+            query = query.Where(q => q.FolderId == folderId);
+        }
+        var quizzes = await query.OrderByDescending(q => q.Id).ToListAsync();
+        return Ok(quizzes.Select(Summary));
     }
+
+    public static QuizSummary Summary(Quiz q) =>
+        new(q.Id, q.Name, q.Description, q.GenerationStatus, q.NumQuestions, q.FolderId, q.CourseId, q.LastScore, Questions(q));
 
     [HttpGet("get/{id:int}")]
     [ProducesResponseType<QuizDetail>(StatusCodes.Status200OK)]
@@ -86,7 +100,7 @@ public class QuizzesController(ApiDbContext db, ICurrentUser me, TimeProvider cl
         if (q == null)
             return NotFoundError("Quiz not found.");
         return Ok(new QuizDetail(q.Id, q.Name, q.Description, q.Prompt, q.NumQuestions, q.GenerationStatus, q.LastScore, q.QueueNumber,
-            q.Summary, Questions(q), q.Terms.OrderBy(x => x.Id).Select(x => new TermDto(x.Term, x.Definition)).ToList()));
+            q.CourseId, q.Summary, Questions(q), q.Terms.OrderBy(x => x.Id).Select(x => new TermDto(x.Term, x.Definition)).ToList()));
     }
 
     [HttpPost("create")]
@@ -98,11 +112,14 @@ public class QuizzesController(ApiDbContext db, ICurrentUser me, TimeProvider cl
             return BadRequestError("Quiz name is required.");
         if (request.FolderId != null && !await OwnsQuizFolder(request.FolderId.Value))
             return NotFoundError("Folder not found.");
+        if (request.CourseId != null && !await CoursesController.Owns(db, me.Id, request.CourseId.Value))
+            return NotFoundError("Course not found.");
 
         var quiz = new Quiz
         {
             UserId = me.Id,
             FolderId = request.FolderId,
+            CourseId = request.CourseId,
             Name = name,
             Description = request.Description ?? "",
             Prompt = request.Prompt ?? "",
@@ -212,7 +229,7 @@ public class QuizzesController(ApiDbContext db, ICurrentUser me, TimeProvider cl
             : new SuccessMessageResponse(true, "File unlinked successfully"));
     }
 
-    static List<QuestionDto> Questions(Quiz quiz) =>
+    public static List<QuestionDto> Questions(Quiz quiz) =>
         quiz.Questions.OrderBy(x => x.Id).Select(x => new QuestionDto(x.Id, x.Question, x.Options, x.CorrectAnswer, x.Explanation)).ToList();
 
     Task<Quiz?> FindQuiz(int id)

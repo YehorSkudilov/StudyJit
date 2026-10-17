@@ -9,7 +9,7 @@ export default function LoginPage() {
   const router = useRouter();
 
   useEffect(() => {
-    if (isSignedIn()) router.replace("/learningSpace");
+    if (isSignedIn()) router.replace("/home");
   }, [router]);
 
   return <AuthForm />;

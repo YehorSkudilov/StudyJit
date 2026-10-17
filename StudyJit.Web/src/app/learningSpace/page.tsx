@@ -35,7 +35,7 @@ export default function LearningSpace() {
   const [loaded, setLoaded] = useState(false);
 
   const [activeFolderId, setActiveFolderId] = useState<string | null>(null);
-  const [activeFolderName, setActiveFolderName] = useState<string>("Learning Space");
+  const [activeFolderName, setActiveFolderName] = useState<string>("Study sets");
   const [folderStack, setFolderStack] = useState<FolderCrumb[]>([]);
 
   const [isActionChooserOpen, setIsActionChooserOpen] = useState(false);
@@ -135,10 +135,10 @@ export default function LearningSpace() {
       const last = prevStack.pop()!;
       setFolderStack(prevStack);
       setActiveFolderId(last.id);
-      setActiveFolderName(last.name || "Learning Space");
+      setActiveFolderName(last.name || "Study sets");
     } else {
       setActiveFolderId(null);
-      setActiveFolderName("Learning Space");
+      setActiveFolderName("Study sets");
     }
   };
 

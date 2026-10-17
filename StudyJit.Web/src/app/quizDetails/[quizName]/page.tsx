@@ -24,6 +24,7 @@ import QuizAddFilePopup from "@/components/QuizAddFilePopup";
 import ScoreRing from "@/components/ui/ScoreRing";
 import { loadQuiz, type StudyQuiz } from "@/lib/study";
 import { modes, studyHref } from "@/lib/modes";
+import { courseFiles, courseTitle, getCourse, type Course, type CourseFile } from "@/lib/courses";
 
 type GenerationStatus = "never_generated" | "queued" | "pending" | "success" | "failed" | null;
 
@@ -48,6 +49,8 @@ export default function QuizDetailsPage() {
   const [lastScore, setLastScore] = useState<number | null>(null);
   const [queueNumber, setQueueNumber] = useState<number | null>(null);
   const [tab, setTab] = useState<"study" | "setup">("study");
+  const [course, setCourse] = useState<Course | null>(null);
+  const [courseFileList, setCourseFileList] = useState<CourseFile[]>([]);
 
   const [originalDocuments, setOriginalDocuments] = useState<DocumentItem[]>([]);
   const [stagedDocuments, setStagedDocuments] = useState<DocumentItem[]>([]);
@@ -72,6 +75,10 @@ export default function QuizDetailsPage() {
     setNumQuestions(data.num_questions || 15);
     setLastScore(data.last_score ?? null);
     setQueueNumber(data.queue_number ?? null);
+    if (data.course_id) {
+      getCourse(data.course_id).then(setCourse, () => setCourse(null));
+      courseFiles(data.course_id).then(setCourseFileList, () => setCourseFileList([]));
+    }
     setQuiz(await loadQuiz(id));
     if (chooseTab) setTab(data.questions?.length ? "study" : "setup");
   }, []);
@@ -195,8 +202,11 @@ export default function QuizDetailsPage() {
       {alertMessage && <AlertPopup message={alertMessage} onClose={() => setAlertMessage(null)} />}
 
       <div className="mx-auto max-w-6xl px-4 sm:px-6 py-8">
-        <button onClick={() => router.push("/learningSpace")} className="btn-ghost -ml-3 mb-4 px-3 py-1.5 text-sm">
-          <ChevronLeft className="w-4 h-4" /> Study sets
+        <button
+          onClick={() => router.push(course ? `/courses/${course.id}` : "/learningSpace")}
+          className="btn-ghost -ml-3 mb-4 px-3 py-1.5 text-sm"
+        >
+          <ChevronLeft className="w-4 h-4" /> {course ? courseTitle(course) : "Study sets"}
         </button>
 
         {/* Hero */}
@@ -359,6 +369,20 @@ export default function QuizDetailsPage() {
                       <Plus className="w-4 h-4" /> Add
                     </button>
                   </div>
+                  {course && courseFileList.some((f) => !stagedDocuments.some((d) => d.id === f.id)) && (
+                    <button
+                      onClick={() =>
+                        setStagedDocuments((prev) => [
+                          ...prev,
+                          ...courseFileList.filter((f) => !prev.some((d) => d.id === f.id)).map((f) => ({ id: f.id, name: f.name, size: f.size })),
+                        ])
+                      }
+                      className="mb-3 w-full flex items-center gap-3 rounded-xl bg-brand-soft text-brand px-4 py-3 font-semibold hover:brightness-95 transition"
+                    >
+                      <Sparkles className="w-4 h-4" />
+                      Use all {courseFileList.length} file{courseFileList.length === 1 ? "" : "s"} from {course.code || course.name}
+                    </button>
+                  )}
                   {stagedDocuments.length === 0 ? (
                     <button
                       onClick={() => setShowFilePopup(true)}

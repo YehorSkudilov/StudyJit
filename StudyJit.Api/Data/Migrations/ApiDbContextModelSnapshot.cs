@@ -234,6 +234,48 @@ namespace StudyJit.Api.Data.Migrations
                     b.ToTable("AspNetUsers", (string)null);
                 });
 
+            modelBuilder.Entity("StudyJit.Api.Data.Course", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<string>("Color")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)");
+
+                    b.Property<string>("Term")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("Courses");
+                });
+
             modelBuilder.Entity("StudyJit.Api.Data.Folder", b =>
                 {
                     b.Property<int>("Id")
@@ -279,6 +321,9 @@ namespace StudyJit.Api.Data.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
+                    b.Property<int?>("CourseId")
+                        .HasColumnType("integer");
+
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -319,6 +364,8 @@ namespace StudyJit.Api.Data.Migrations
                         .HasColumnType("text");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("CourseId");
 
                     b.HasIndex("FolderId");
 
@@ -483,6 +530,9 @@ namespace StudyJit.Api.Data.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
+                    b.Property<int?>("CourseId")
+                        .HasColumnType("integer");
+
                     b.Property<int?>("FolderId")
                         .HasColumnType("integer");
 
@@ -510,6 +560,8 @@ namespace StudyJit.Api.Data.Migrations
                         .HasColumnType("text");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("CourseId");
 
                     b.HasIndex("FolderId");
 
@@ -569,6 +621,15 @@ namespace StudyJit.Api.Data.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("StudyJit.Api.Data.Course", b =>
+                {
+                    b.HasOne("StudyJit.Api.Data.AppUser", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("StudyJit.Api.Data.Folder", b =>
                 {
                     b.HasOne("StudyJit.Api.Data.Folder", null)
@@ -585,6 +646,11 @@ namespace StudyJit.Api.Data.Migrations
 
             modelBuilder.Entity("StudyJit.Api.Data.Quiz", b =>
                 {
+                    b.HasOne("StudyJit.Api.Data.Course", null)
+                        .WithMany()
+                        .HasForeignKey("CourseId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
                     b.HasOne("StudyJit.Api.Data.Folder", null)
                         .WithMany()
                         .HasForeignKey("FolderId")
@@ -641,6 +707,11 @@ namespace StudyJit.Api.Data.Migrations
 
             modelBuilder.Entity("StudyJit.Api.Data.StoredFile", b =>
                 {
+                    b.HasOne("StudyJit.Api.Data.Course", null)
+                        .WithMany()
+                        .HasForeignKey("CourseId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
                     b.HasOne("StudyJit.Api.Data.Folder", null)
                         .WithMany()
                         .HasForeignKey("FolderId")

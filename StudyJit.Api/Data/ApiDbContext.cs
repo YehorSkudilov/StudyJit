@@ -7,6 +7,7 @@ public class ApiDbContext(DbContextOptions<ApiDbContext> options) : IdentityDbCo
 {
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
     public DbSet<Folder> Folders => Set<Folder>();
+    public DbSet<Course> Courses => Set<Course>();
     public DbSet<StoredFile> Files => Set<StoredFile>();
     public DbSet<Quiz> Quizzes => Set<Quiz>();
     public DbSet<QuizQuestion> QuizQuestions => Set<QuizQuestion>();
@@ -44,8 +45,21 @@ public class ApiDbContext(DbContextOptions<ApiDbContext> options) : IdentityDbCo
             e.HasOne<Folder>().WithMany().HasForeignKey(f => f.ParentId).OnDelete(DeleteBehavior.Cascade);
         });
 
+        // Deleting a course deletes its study sets and files (see CoursesController); the keys only clear as a fallback.
+        b.Entity<Course>(e =>
+        {
+            e.Property(c => c.Code).HasMaxLength(50);
+            e.Property(c => c.Name).HasMaxLength(255);
+            e.Property(c => c.Term).HasMaxLength(50);
+            e.Property(c => c.Color).HasMaxLength(20);
+            e.HasIndex(c => c.UserId);
+            e.HasOne<AppUser>().WithMany().HasForeignKey(c => c.UserId).OnDelete(DeleteBehavior.Cascade);
+        });
+
         b.Entity<StoredFile>(e =>
         {
+            e.HasIndex(f => f.CourseId);
+            e.HasOne<Course>().WithMany().HasForeignKey(f => f.CourseId).OnDelete(DeleteBehavior.SetNull);
             e.ToTable("StoredFiles");
             e.Property(f => f.Name).HasMaxLength(255);
             e.Property(f => f.MimeType).HasMaxLength(255);
@@ -61,6 +75,8 @@ public class ApiDbContext(DbContextOptions<ApiDbContext> options) : IdentityDbCo
             e.Property(q => q.LastScore).HasPrecision(5, 2);
             e.HasIndex(q => new { q.UserId, q.FolderId });
             e.HasIndex(q => q.GenerationStatus);
+            e.HasIndex(q => q.CourseId);
+            e.HasOne<Course>().WithMany().HasForeignKey(q => q.CourseId).OnDelete(DeleteBehavior.SetNull);
             e.HasOne<AppUser>().WithMany().HasForeignKey(q => q.UserId).OnDelete(DeleteBehavior.Cascade);
             e.HasOne<Folder>().WithMany().HasForeignKey(q => q.FolderId).OnDelete(DeleteBehavior.SetNull);
             e.HasMany(q => q.Questions).WithOne().HasForeignKey(q => q.QuizId).OnDelete(DeleteBehavior.Cascade);

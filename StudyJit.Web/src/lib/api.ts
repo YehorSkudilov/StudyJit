@@ -65,6 +65,9 @@ function set(auth: AuthResponse) {
   });
 }
 
+/** The signed-in user's name, for greetings. */
+export const userName = () => current()?.name ?? "";
+
 /** True when there's a saved session (it may still turn out to have expired). */
 export const isSignedIn = () => current() !== null;
 

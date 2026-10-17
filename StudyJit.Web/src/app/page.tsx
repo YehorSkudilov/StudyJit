@@ -47,7 +47,7 @@ const fadeUp = {
 export default function Home() {
   const [signedIn, setSignedIn] = useState(false);
   useEffect(() => setSignedIn(isSignedIn()), []);
-  const startHref = signedIn ? "/learningSpace" : "/login";
+  const startHref = signedIn ? "/home" : "/login";
 
   return (
     <div className="relative min-h-screen overflow-hidden">

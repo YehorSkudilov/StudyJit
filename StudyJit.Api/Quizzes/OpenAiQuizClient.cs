@@ -113,14 +113,7 @@ public class OpenAiQuizClient(HttpClient http, OpenAiOptions options, ILogger<Op
             var response = await SendAsync(HttpMethod.Post, "responses", JsonContent(body), ct);
             if (response["status"]?.GetValue<string>() is { } status && status != "completed")
                 throw new QuizGenerationException("The AI didn't finish the quiz. Try fewer questions or smaller files.");
-            var text = string.Concat(
-                (response["output"]?.AsArray() ?? [])
-                .Where(o => o?["type"]?.GetValue<string>() == "message")
-                .SelectMany(o => o!["content"]?.AsArray() ?? [])
-                .Where(c => c?["type"]?.GetValue<string>() == "output_text")
-                .Select(c => c!["text"]?.GetValue<string>()));
-
-            return Check(text, source.Questions);
+            return Check(OutputText(response), source.Questions);
         }
         finally
         {
@@ -130,6 +123,59 @@ public class OpenAiQuizClient(HttpClient http, OpenAiOptions options, ILogger<Op
                 await TryDeleteAsync($"files/{id}");
         }
     }
+
+    /// <summary>
+    /// A small structured task (no files): the model reads the input and answers with JSON matching the schema, which
+    /// comes back parsed. For helpers like reading a course list or planning study sets.
+    /// </summary>
+    public async Task<JsonNode> CompleteJsonAsync(string instructions, string input, string name, JsonObject schema, CancellationToken ct)
+    {
+        if (!IsConfigured)
+            throw new QuizGenerationException("AI isn't set up on this server.");
+        var body = new JsonObject
+        {
+            ["model"] = options.Model,
+            ["instructions"] = instructions,
+            ["input"] = input,
+            ["text"] = new JsonObject
+            {
+                ["format"] = new JsonObject { ["type"] = "json_schema", ["name"] = name, ["strict"] = true, ["schema"] = schema },
+            },
+        };
+        if (!string.IsNullOrWhiteSpace(options.ReasoningEffort))
+            body["reasoning"] = new JsonObject { ["effort"] = options.ReasoningEffort };
+        var response = await SendAsync(HttpMethod.Post, "responses", JsonContent(body), ct);
+        try
+        {
+            return JsonNode.Parse(OutputText(response)) ?? throw new QuizGenerationException("The AI gave an empty answer. Please try again.");
+        }
+        catch (JsonException e)
+        {
+            throw new QuizGenerationException("The AI's answer couldn't be read. Please try again.", e);
+        }
+    }
+
+    static string OutputText(JsonNode response) => string.Concat(
+        (response["output"]?.AsArray() ?? [])
+        .Where(o => o?["type"]?.GetValue<string>() == "message")
+        .SelectMany(o => o!["content"]?.AsArray() ?? [])
+        .Where(c => c?["type"]?.GetValue<string>() == "output_text")
+        .Select(c => c!["text"]?.GetValue<string>()));
+
+    /// <summary>A strict schema object: every property required, nothing else allowed.</summary>
+    public static JsonObject SchemaObject(Dictionary<string, JsonNode> properties) => new()
+    {
+        ["type"] = "object",
+        ["additionalProperties"] = false,
+        ["required"] = new JsonArray(properties.Keys.Select(k => (JsonNode)k).ToArray()),
+        ["properties"] = new JsonObject(properties.Select(p => KeyValuePair.Create(p.Key, (JsonNode?)p.Value))),
+    };
+
+    public static JsonObject SchemaArray(JsonNode items) => new() { ["type"] = "array", ["items"] = items };
+
+    public static JsonObject SchemaString() => new() { ["type"] = "string" };
+
+    public static JsonObject SchemaInteger() => new() { ["type"] = "integer" };
 
     static string Request(QuizSource source, bool hasDocuments)
     {
@@ -159,18 +205,6 @@ public class OpenAiQuizClient(HttpClient http, OpenAiOptions options, ILogger<Op
         ["terms"] = SchemaArray(SchemaObject(new() { ["term"] = SchemaString(), ["definition"] = SchemaString() })),
     });
 
-    /// <summary>A strict schema object: every property required, nothing else allowed.</summary>
-    static JsonObject SchemaObject(Dictionary<string, JsonNode> properties) => new()
-    {
-        ["type"] = "object",
-        ["additionalProperties"] = false,
-        ["required"] = new JsonArray(properties.Keys.Select(k => (JsonNode)k).ToArray()),
-        ["properties"] = new JsonObject(properties.Select(p => KeyValuePair.Create(p.Key, (JsonNode?)p.Value))),
-    };
-
-    static JsonObject SchemaArray(JsonNode items) => new() { ["type"] = "array", ["items"] = items };
-
-    static JsonObject SchemaString() => new() { ["type"] = "string" };
 
     /// <summary>Keeps the questions with four distinct options and a right answer among them, and the complete terms.</summary>
     static GeneratedQuiz Check(string text, int wanted)
