@@ -54,16 +54,20 @@ public partial class OpenAiQuizClient(HttpClient http, OpenAiOptions options, IL
 {
     public bool IsConfigured => !string.IsNullOrWhiteSpace(options.ApiKey);
 
-    const string Instructions = """
+    const string Preamble = """
         You are an expert teacher preparing study material for a student revising. Base everything on the attached
         material when there is any (search it with file_search), otherwise on the topic, and write in the language of the
-        material. Each part below feeds a different way of studying, so write each one for its own format.
+        material. The material is written in parts, each for a different way of studying and each by its own request;
+        write only the part asked for here, for its own format.
 
         Everything must stand on its own: the student sees one item at a time, without the slides or notes. Never write
         "in the slides", "in the lecture", "shown above", "the example", "Figure 2", "the code below" or anything else
         that points at the material; if an item needs a piece of code, a formula or a scenario, put it in the item. Every
         item must be correct according to the material; when unsure, leave it out.
 
+        """;
+
+    const string QuestionsPart = """
         questions (multiple choice): a bank the student is drilled from many times, a different mix each session, so it
         covers the material completely and varies:
         - Decide how many the material needs: go through every concept, fact, process, formula and example and write at
@@ -77,18 +81,24 @@ public partial class OpenAiQuizClient(HttpClient http, OpenAiOptions options, IL
           "all of the above", "none of the above", or questions whose answer depends on opinion.
         - "explanation": one or two sentences on why the right option is right (and, when useful, why a tempting wrong
           one isn't).
+        """;
 
+    const string TrueFalsePart = """
         true_false: 15 to 40 statements for a rapid true-or-false round. Each is one complete, self-contained
         declarative sentence about the material that is unambiguously true or unambiguously false: not a question, not
         a bare value or line of code on its own, and with no "always/never" wording that makes it a trick. Make about
         half false, each by changing one key detail of a true fact into a believable misconception. "explanation" says
         why it's true, or what's actually right if it's false.
+        """;
 
+    const string ShortAnswersPart = """
         short_answers: 10 to 30 questions answered by typing a few words (1 to 4): a term, name, number, keyword or
         short expression. Ask only things with one clear answer a student could recall exactly; skip anything that needs
         a sentence to answer. "answer" is the expected answer; "alternatives" lists other answers that should also count
         (synonyms, abbreviations, other notations, with or without units); "explanation" is one sentence.
+        """;
 
+    const string NotesPart = """
         terms (for flashcards and a term-matching game): every important term, name, concept and formula in the
         material (as many as it has, up to 40). "definition" is one short sentence (under 20 words) that identifies the
         term without using the term itself or words formed from it.
@@ -105,6 +115,18 @@ public partial class OpenAiQuizClient(HttpClient http, OpenAiOptions options, IL
         - "- " bullets for facts, with **bold** on the words that matter most.
         Finish with a "## Common mistakes" section when the material has pitfalls worth flagging.
         """;
+
+    /// <summary>
+    /// The parts one generation is split into, each written by its own request at the same time: one big answer takes
+    /// far longer to write than a few smaller ones side by side.
+    /// </summary>
+    static readonly (string Instructions, string[] Fields)[] Parts =
+    [
+        (Preamble + QuestionsPart, ["questions"]),
+        (Preamble + TrueFalsePart, ["true_false"]),
+        (Preamble + ShortAnswersPart, ["short_answers"]),
+        (Preamble + NotesPart, ["terms", "summary", "cheat_sheet"]),
+    ];
 
     public async Task<GeneratedQuiz> GenerateAsync(QuizSource source, CancellationToken ct)
     {
@@ -129,29 +151,13 @@ public partial class OpenAiQuizClient(HttpClient http, OpenAiOptions options, IL
             if (fileIds.Count > 0)
                 vectorStoreId = await CreateVectorStoreAsync(fileIds, ct);
 
-            var content = new JsonArray { new JsonObject { ["type"] = "input_text", ["text"] = Request(source, vectorStoreId != null) } };
-            foreach (var (mimeType, bytes) in source.Images)
-                content.Add(new JsonObject { ["type"] = "input_image", ["image_url"] = $"data:{mimeType};base64,{Convert.ToBase64String(bytes)}" });
-
-            var body = new JsonObject
-            {
-                ["model"] = options.Model,
-                ["instructions"] = Instructions,
-                ["input"] = new JsonArray { new JsonObject { ["role"] = "user", ["content"] = content } },
-                ["text"] = new JsonObject
-                {
-                    ["format"] = new JsonObject { ["type"] = "json_schema", ["name"] = "quiz", ["strict"] = true, ["schema"] = Schema() },
-                },
-            };
-            if (vectorStoreId != null)
-                body["tools"] = new JsonArray { new JsonObject { ["type"] = "file_search", ["vector_store_ids"] = new JsonArray(vectorStoreId) } };
-            if (!string.IsNullOrWhiteSpace(options.ReasoningEffort))
-                body["reasoning"] = new JsonObject { ["effort"] = options.ReasoningEffort };
-
-            var response = await SendAsync(HttpMethod.Post, "responses", JsonContent(body), ct);
-            if (response["status"]?.GetValue<string>() is { } status && status != "completed")
-                throw new QuizGenerationException("The AI didn't finish the quiz. Try fewer questions or smaller files.");
-            return Check(OutputText(response));
+            var request = Request(source, vectorStoreId != null);
+            var answers = await Task.WhenAll(Parts.Select(p => GeneratePartAsync(p.Instructions, p.Fields, request, source.Images, vectorStoreId, ct)));
+            var quiz = new JsonObject();
+            foreach (var answer in answers)
+                foreach (var (field, value) in answer)
+                    quiz[field] = value?.DeepClone();
+            return Check(quiz.ToJsonString());
         }
         finally
         {
@@ -159,6 +165,42 @@ public partial class OpenAiQuizClient(HttpClient http, OpenAiOptions options, IL
                 await TryDeleteAsync($"vector_stores/{vectorStoreId}");
             foreach (var id in fileIds)
                 await TryDeleteAsync($"files/{id}");
+        }
+    }
+
+    /// <summary>Writes one part of the material, answering with just its fields.</summary>
+    async Task<JsonObject> GeneratePartAsync(string instructions, string[] fields, string request, List<(string MimeType, byte[] Bytes)> images,
+        string? vectorStoreId, CancellationToken ct)
+    {
+        var content = new JsonArray { new JsonObject { ["type"] = "input_text", ["text"] = request } };
+        foreach (var (mimeType, bytes) in images)
+            content.Add(new JsonObject { ["type"] = "input_image", ["image_url"] = $"data:{mimeType};base64,{Convert.ToBase64String(bytes)}" });
+
+        var body = new JsonObject
+        {
+            ["model"] = options.Model,
+            ["instructions"] = instructions,
+            ["input"] = new JsonArray { new JsonObject { ["role"] = "user", ["content"] = content } },
+            ["text"] = new JsonObject
+            {
+                ["format"] = new JsonObject { ["type"] = "json_schema", ["name"] = "quiz", ["strict"] = true, ["schema"] = Schema(fields) },
+            },
+        };
+        if (vectorStoreId != null)
+            body["tools"] = new JsonArray { new JsonObject { ["type"] = "file_search", ["vector_store_ids"] = new JsonArray(vectorStoreId) } };
+        if (!string.IsNullOrWhiteSpace(options.ReasoningEffort))
+            body["reasoning"] = new JsonObject { ["effort"] = options.ReasoningEffort };
+
+        var response = await SendAsync(HttpMethod.Post, "responses", JsonContent(body), ct);
+        if (response["status"]?.GetValue<string>() is { } status && status != "completed")
+            throw new QuizGenerationException("The AI didn't finish the quiz. Try fewer questions or smaller files.");
+        try
+        {
+            return JsonNode.Parse(OutputText(response)) as JsonObject ?? throw new QuizGenerationException("The AI gave an empty answer. Please try again.");
+        }
+        catch (JsonException e)
+        {
+            throw new QuizGenerationException("The AI's answer couldn't be read. Please try again.", e);
         }
     }
 
@@ -230,7 +272,14 @@ public partial class OpenAiQuizClient(HttpClient http, OpenAiOptions options, IL
         return text.ToString();
     }
 
-    static JsonObject Schema() => SchemaObject(new()
+    /// <summary>The answer schema for some of the material's fields.</summary>
+    static JsonObject Schema(string[] fields)
+    {
+        var all = SchemaFields();
+        return SchemaObject(fields.ToDictionary(f => f, f => all[f]));
+    }
+
+    static Dictionary<string, JsonNode> SchemaFields() => new()
     {
         ["questions"] = SchemaArray(SchemaObject(new()
         {
@@ -255,7 +304,7 @@ public partial class OpenAiQuizClient(HttpClient http, OpenAiOptions options, IL
         ["summary"] = SchemaString(),
         ["terms"] = SchemaArray(SchemaObject(new() { ["term"] = SchemaString(), ["definition"] = SchemaString() })),
         ["cheat_sheet"] = SchemaString(),
-    });
+    };
 
 
     /// <summary>Keeps the questions with four distinct options and a right answer among them, and the complete terms.</summary>
