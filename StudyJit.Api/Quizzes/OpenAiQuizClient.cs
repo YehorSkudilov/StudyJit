@@ -36,6 +36,8 @@ public class QuizSource
     public string Name { get; init; } = "";
     public string? Description { get; init; }
     public string? Prompt { get; init; }
+    /// <summary>An exam (e.g. a midterm) covering several study sets, so its cheat sheet spans all of them.</summary>
+    public bool IsExam { get; init; }
     /// <summary>Plain-text files, inlined into the request.</summary>
     public List<(string Name, string Text)> Texts { get; } = [];
     /// <summary>Images, sent for the model to look at.</summary>
@@ -96,14 +98,21 @@ public partial class OpenAiQuizClient(HttpClient http, OpenAiOptions options, IL
         summary: a concise study guide of the material in Markdown: a few "## " sections of short paragraphs and "- "
         bullet points, with key ideas in **bold**. No more than about 400 words.
 
-        cheat_sheet: the condensed notes a student would bring into an exam, in Markdown, about one printed page (350
-        words at most), no introduction, every line worth its space. Use 4 to 8 "## " sections by topic (e.g. "Key
-        terms", "Formulas", "Process", one per main idea), and inside them:
+        cheat_sheet: the notes a student would bring into an exam, in Markdown. It must cover ALL of the material: every
+        topic, concept, syntax form, rule, formula and process that could be examined gets a place, not just the
+        highlights. Make it example-led: for each concept show a short, concrete example (a few lines of code, a worked
+        calculation, a filled-in formula, a real case) next to a one-line explanation, rather than describing it in prose.
+        For example, an entry on arrays shows how one is declared and initialised, read, changed and looped over, each with
+        the result in a comment. No introduction; every line worth its space. Length follows the material: as much as
+        it takes to cover everything, typically 600 to 1500 words for one lecture or topic. Organise it as:
+        - one "## " section per topic, in the order the material teaches them (as many sections as it needs);
         - "- **Term**: meaning" lines for definitions;
-        - formulas, equations, code and units in `backticks`;
+        - fenced code blocks (```kotlin, ```python, ```sql, … or plain ```) for examples of more than one line, with the
+          output or result in a comment; formulas, short code and units inline in `backticks`;
         - "1. " numbered lines for steps or sequences;
-        - "- " bullets for facts, with **bold** on the words that matter most.
-        Finish with a "## Common mistakes" section when the material has pitfalls worth flagging.
+        - "- " bullets for facts, rules and comparisons, with **bold** on the words that matter most.
+        Finish with a "## Common mistakes" section when the material has pitfalls worth flagging, each with the wrong and
+        the right version.
         """;
 
     public async Task<GeneratedQuiz> GenerateAsync(QuizSource source, CancellationToken ct)
@@ -225,6 +234,12 @@ public partial class OpenAiQuizClient(HttpClient http, OpenAiOptions options, IL
             text.AppendLine($"Topic and instructions: {source.Prompt}");
         if (hasDocuments)
             text.AppendLine("Use the attached documents as the main source.");
+        if (source.IsExam)
+            text.AppendLine("""
+                This is an exam (e.g. a midterm) covering every study set below. Its cheat_sheet must cover all of them
+                completely: every topic of every set, each with its examples, not a summary of the highlights. Use the sets'
+                cheat sheets as a checklist and go beyond them where the material has more; expect 1500 to 3500 words.
+                """);
         foreach (var (name, content) in source.Texts)
             text.AppendLine().AppendLine($"--- {name} ---").AppendLine(content);
         return text.ToString();

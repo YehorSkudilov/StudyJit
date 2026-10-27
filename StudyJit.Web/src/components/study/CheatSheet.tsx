@@ -22,7 +22,8 @@ type Line =
   | { kind: "term"; term: string; meaning: string }
   | { kind: "bullet"; text: string }
   | { kind: "step"; n: number; text: string }
-  | { kind: "text"; text: string };
+  | { kind: "text"; text: string }
+  | { kind: "code"; lang: string; code: string };
 
 interface Section {
   title: string;
@@ -33,8 +34,23 @@ interface Section {
 function parse(markdown: string): Section[] {
   const sections: Section[] = [];
   let current: Section | null = null;
+  let fence: { lang: string; lines: string[] } | null = null;
+  const section = () => (current ??= sections[sections.push({ title: "Essentials", lines: [] }) - 1]);
   for (const raw of markdown.replace(/\r/g, "").split("\n")) {
     const line = raw.trim();
+    // ``` fenced examples keep their lines and indentation as written.
+    const fenceMark = /^(?:[-*]\s+)?```\s*([\w+#.-]*)/.exec(line);
+    if (fence) {
+      if (line.startsWith("```")) {
+        section().lines.push({ kind: "code", lang: fence.lang, code: dedent(fence.lines) });
+        fence = null;
+      } else fence.lines.push(raw);
+      continue;
+    }
+    if (fenceMark) {
+      fence = { lang: fenceMark[1], lines: [] };
+      continue;
+    }
     if (!line) continue;
     const heading = /^#{1,3}\s+(.*)$/.exec(line);
     if (heading) {
@@ -53,7 +69,15 @@ function parse(markdown: string): Section[] {
     else if (bullet) current.lines.push({ kind: "bullet", text: body });
     else current.lines.push({ kind: "text", text: line });
   }
+  if (fence) section().lines.push({ kind: "code", lang: fence.lang, code: dedent(fence.lines) });
   return sections.filter((s) => s.lines.length > 0);
+}
+
+/** Drops the indentation every line of a code block shares (e.g. from sitting under a bullet). */
+function dedent(lines: string[]): string {
+  const indents = lines.filter((l) => l.trim()).map((l) => /^\s*/.exec(l)![0].length);
+  const cut = indents.length ? Math.min(...indents) : 0;
+  return lines.map((l) => l.slice(cut)).join("\n").replace(/^\n+|\s+$/g, "");
 }
 
 function iconFor(title: string, lines: Line[]): LucideIcon {
@@ -181,6 +205,16 @@ export default function CheatSheet({ quiz, onExit }: { quiz: StudyQuiz; onExit: 
                           <Inline text={line.text} tone={tone} />
                         </span>
                       </div>
+                    ) : line.kind === "code" ? (
+                      <pre
+                        key={j}
+                        className="relative rounded-xl bg-surface-2 border border-stroke px-3 py-2.5 font-mono text-[0.8rem] leading-relaxed text-foreground overflow-x-auto print:whitespace-pre-wrap print:overflow-visible"
+                      >
+                        {line.lang && (
+                          <span className={`absolute right-2 top-1.5 rounded px-1.5 text-[0.65rem] font-bold uppercase ${tone.pill}`}>{line.lang}</span>
+                        )}
+                        <code>{line.code}</code>
+                      </pre>
                     ) : line.kind === "bullet" ? (
                       <div key={j} className="flex gap-2.5">
                         <span className={`w-1.5 h-1.5 mt-[0.45rem] rounded-full flex-shrink-0 bg-gradient-to-br ${tone.bar}`} />

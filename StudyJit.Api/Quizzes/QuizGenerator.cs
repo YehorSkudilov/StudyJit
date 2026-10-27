@@ -29,8 +29,8 @@ public class QuizGenerator(ApiDbContext db, OpenAiQuizClient openAi, StudySetSyn
 
         try
         {
-            var source = new QuizSource { Name = quiz.Name, Description = quiz.Description, Prompt = quiz.Prompt };
-            // The quiz's own files; a study set's folder's files; and an exam's study sets' files and guides.
+            var source = new QuizSource { Name = quiz.Name, Description = quiz.Description, Prompt = quiz.Prompt, IsExam = quiz.Kind == QuizKind.Exam };
+            // The quiz's own files; a study set's folder's files; and an exam's study sets' files, guides and cheat sheets.
             var sources = quiz.Kind == QuizKind.Exam && quiz.SourceQuizIds.Count > 0
                 ? await db.Quizzes.AsNoTracking().Where(q => quiz.SourceQuizIds.Contains(q.Id) && q.UserId == quiz.UserId).ToListAsync(ct)
                 : [];
@@ -42,6 +42,8 @@ public class QuizGenerator(ApiDbContext db, OpenAiQuizClient openAi, StudySetSyn
                 .ToListAsync(ct);
             foreach (var set in sources.Where(s => !string.IsNullOrWhiteSpace(s.Summary)))
                 source.Texts.Add(($"Study guide: {set.Name}", set.Summary!));
+            foreach (var set in sources.Where(s => !string.IsNullOrWhiteSpace(s.CheatSheet)))
+                source.Texts.Add(($"Cheat sheet: {set.Name}", set.CheatSheet!));
             foreach (var file in files)
             {
                 if (!File.Exists(file.Path))
