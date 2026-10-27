@@ -70,7 +70,22 @@ function parse(markdown: string): Section[] {
     else current.lines.push({ kind: "text", text: line });
   }
   if (fence) section().lines.push({ kind: "code", lang: fence.lang, code: dedent(fence.lines) });
-  return sections.filter((s) => s.lines.length > 0);
+  return sections.filter((s) => s.lines.length > 0).map((s) => ({ ...s, lines: explainFirst(s.lines) }));
+}
+
+/** An example followed by the definitions that explain it moves below them, so each label reads above its code. */
+function explainFirst(lines: Line[]): Line[] {
+  const out = [...lines];
+  for (let i = 0; i < out.length; i++) {
+    if (out[i].kind !== "code" || out[i - 1]?.kind === "term") continue;
+    let end = i + 1;
+    while (out[end]?.kind === "term") end++;
+    if (end > i + 1) {
+      out.splice(end - 1, 0, ...out.splice(i, 1));
+      i = end - 1;
+    }
+  }
+  return out;
 }
 
 /** Drops the indentation every line of a code block shares (e.g. from sitting under a bullet). */

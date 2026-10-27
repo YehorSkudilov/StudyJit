@@ -127,7 +127,8 @@ public partial class OpenAiQuizClient(HttpClient http, OpenAiOptions options, IL
         - one "## " section per topic, in the order the material teaches them (as many sections as it needs);
         - "- **Term**: meaning" lines for definitions;
         - fenced code blocks (```kotlin, ```python, ```sql, … or plain ```) for examples of more than one line, with the
-          output or result in a comment; formulas, short code and units inline in `backticks`;
+          output or result in a comment, placed AFTER the heading, definition or line that explains it, never before;
+          formulas, short code and units inline in `backticks`;
         - "1. " numbered lines for steps or sequences;
         - "- " bullets for facts, rules and comparisons, with **bold** on the words that matter most.
         Finish with a "## Common mistakes" section when the material has pitfalls worth flagging, each with the wrong and
