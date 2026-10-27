@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using StudyJit.Api.Auth;
 using StudyJit.Api.Data;
+using StudyJit.Api.Quizzes;
 
 namespace StudyJit.Api.Controllers;
 
@@ -13,6 +14,10 @@ public record TermDto(string Term, string Definition);
 public record StatementDto(int Id, string Statement, [property: JsonPropertyName("is_true")] bool IsTrue, string Explanation);
 
 public record ShortAnswerDto(int Id, string Question, string Answer, List<string> Alternatives, string Explanation);
+
+public record WrittenAnswerDto(int Id, string Question, string Kind,
+    [property: JsonPropertyName("model_answer")] string ModelAnswer,
+    [property: JsonPropertyName("key_points")] List<string> KeyPoints);
 
 public record QuizSummary(
     int Id,
@@ -25,7 +30,9 @@ public record QuizSummary(
     [property: JsonPropertyName("last_score")] decimal? LastScore,
     List<QuestionDto> Questions,
     string Kind,
-    [property: JsonPropertyName("source_ids")] List<int> SourceIds);
+    [property: JsonPropertyName("source_ids")] List<int> SourceIds,
+    /// <summary>How far the generation running now has got; null when none is.</summary>
+    GenerationProgressDto? Progress = null);
 
 public record QuizDetail(
     int Id,
@@ -45,7 +52,9 @@ public record QuizDetail(
     List<QuestionDto> Questions,
     List<TermDto> Terms,
     List<StatementDto> Statements,
-    [property: JsonPropertyName("short_answers")] List<ShortAnswerDto> ShortAnswers);
+    [property: JsonPropertyName("short_answers")] List<ShortAnswerDto> ShortAnswers,
+    [property: JsonPropertyName("written_answers")] List<WrittenAnswerDto> WrittenAnswers,
+    GenerationProgressDto? Progress);
 
 public record CreateQuizRequest(
     string? Name,
@@ -80,7 +89,7 @@ public record RemoveQuizFileRequest(
 
 /// <summary>Quizzes in the learning space, their questions, and the files they're generated from.</summary>
 [Route("api/items/quizzes")]
-public class QuizzesController(ApiDbContext db, ICurrentUser me, TimeProvider clock) : ApiControllerBase
+public class QuizzesController(ApiDbContext db, ICurrentUser me, TimeProvider clock, GenerationProgress progress) : ApiControllerBase
 {
     public const int MaxQuestions = 50;
 
@@ -103,7 +112,7 @@ public class QuizzesController(ApiDbContext db, ICurrentUser me, TimeProvider cl
             query = query.Where(q => q.FolderId == folderId);
         }
         var quizzes = await query.OrderByDescending(q => q.Id).ToListAsync();
-        return Ok(quizzes.Select(Summary));
+        return Ok(quizzes.Select(q => Summary(q) with { Progress = progress.Get(q.Id) }));
     }
 
     public static QuizSummary Summary(Quiz q) =>
@@ -115,14 +124,16 @@ public class QuizzesController(ApiDbContext db, ICurrentUser me, TimeProvider cl
     {
         var userId = me.Id;
         var q = await db.Quizzes.AsNoTracking().Include(x => x.Questions).Include(x => x.Terms)
-            .Include(x => x.Statements).Include(x => x.ShortAnswers).AsSplitQuery()
+            .Include(x => x.Statements).Include(x => x.ShortAnswers).Include(x => x.WrittenAnswers).AsSplitQuery()
             .FirstOrDefaultAsync(x => x.Id == id && x.UserId == userId);
         if (q == null)
             return NotFoundError("Quiz not found.");
         return Ok(new QuizDetail(q.Id, q.Name, q.Description, q.Prompt, q.NumQuestions, q.GenerationStatus, q.LastScore, q.QueueNumber,
             q.CourseId, q.FolderId, q.Kind, q.SourceQuizIds, q.Summary, q.CheatSheet, Questions(q), q.Terms.OrderBy(x => x.Id).Select(x => new TermDto(x.Term, x.Definition)).ToList(),
             q.Statements.OrderBy(x => x.Id).Select(x => new StatementDto(x.Id, x.Statement, x.IsTrue, x.Explanation)).ToList(),
-            q.ShortAnswers.OrderBy(x => x.Id).Select(x => new ShortAnswerDto(x.Id, x.Question, x.Answer, x.Alternatives, x.Explanation)).ToList()));
+            q.ShortAnswers.OrderBy(x => x.Id).Select(x => new ShortAnswerDto(x.Id, x.Question, x.Answer, x.Alternatives, x.Explanation)).ToList(),
+            q.WrittenAnswers.OrderBy(x => x.Id).Select(x => new WrittenAnswerDto(x.Id, x.Question, x.Kind, x.ModelAnswer, x.KeyPoints)).ToList(),
+            progress.Get(q.Id)));
     }
 
     [HttpPost("create")]

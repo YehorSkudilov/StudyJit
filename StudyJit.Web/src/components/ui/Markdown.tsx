@@ -1,11 +1,12 @@
 import { Fragment } from "react";
 
-/** Headings (#, ##, ###), bullet lists (- or *), numbered lists and **bold**: what the guide is written in. */
+/** Headings (#, ##, ###), bullet lists (- or *), numbered lists, **bold**, `code` and ``` code blocks. */
 export default function Markdown({ text }: { text: string }) {
   const blocks: React.ReactNode[] = [];
   const lines = text.replace(/\r/g, "").split("\n");
   let list = null as { ordered: boolean; items: string[] } | null;
   let paragraph: string[] = [];
+  let code = null as string[] | null;
 
   const flushParagraph = () => {
     if (paragraph.length) blocks.push(<p key={blocks.length} className="leading-relaxed">{inline(paragraph.join(" "))}</p>);
@@ -34,6 +35,19 @@ export default function Markdown({ text }: { text: string }) {
 
   for (const raw of lines) {
     const line = raw.trim();
+    if (code) {
+      if (line.startsWith("```")) {
+        blocks.push(<CodeBlock key={blocks.length} lines={code} />);
+        code = null;
+      } else code.push(raw);
+      continue;
+    }
+    if (line.startsWith("```")) {
+      flushParagraph();
+      flushList();
+      code = [];
+      continue;
+    }
     const heading = /^(#{1,3})\s+(.*)$/.exec(line);
     const bullet = /^[-*•]\s+(.*)$/.exec(line);
     const numbered = /^\d+[.)]\s+(.*)$/.exec(line);
@@ -65,15 +79,29 @@ export default function Markdown({ text }: { text: string }) {
   }
   flushParagraph();
   flushList();
+  if (code) blocks.push(<CodeBlock key={blocks.length} lines={code} />);
   return <div className="flex flex-col gap-3 text-[1.02rem]">{blocks}</div>;
 }
 
+function CodeBlock({ lines }: { lines: string[] }) {
+  const indent = Math.min(...lines.filter((l) => l.trim()).map((l) => /^\s*/.exec(l)![0].length), Infinity);
+  return (
+    <pre className="rounded-xl bg-surface-2 border border-stroke px-4 py-3 font-mono text-sm leading-relaxed overflow-x-auto">
+      <code>{lines.map((l) => l.slice(indent === Infinity ? 0 : indent)).join("\n")}</code>
+    </pre>
+  );
+}
+
 function inline(text: string) {
-  return text.split(/(\*\*[^*]+\*\*)/g).map((part, i) =>
+  return text.split(/(\*\*[^*]+\*\*|`[^`]+`)/g).map((part, i) =>
     part.startsWith("**") && part.endsWith("**") ? (
       <strong key={i} className="font-bold text-foreground">
         {part.slice(2, -2)}
       </strong>
+    ) : part.startsWith("`") && part.endsWith("`") && part.length > 1 ? (
+      <code key={i} className="rounded-md bg-surface-2 border border-stroke px-1.5 py-0.5 font-mono text-[0.88em]">
+        {part.slice(1, -1)}
+      </code>
     ) : (
       <Fragment key={i}>{part}</Fragment>
     )

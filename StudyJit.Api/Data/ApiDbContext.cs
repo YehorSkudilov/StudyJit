@@ -14,6 +14,7 @@ public class ApiDbContext(DbContextOptions<ApiDbContext> options) : IdentityDbCo
     public DbSet<QuizTerm> QuizTerms => Set<QuizTerm>();
     public DbSet<QuizStatement> QuizStatements => Set<QuizStatement>();
     public DbSet<QuizShortAnswer> QuizShortAnswers => Set<QuizShortAnswer>();
+    public DbSet<QuizWrittenAnswer> QuizWrittenAnswers => Set<QuizWrittenAnswer>();
     public DbSet<QuizFile> QuizFiles => Set<QuizFile>();
     public DbSet<ServerSetting> Settings => Set<ServerSetting>();
 
@@ -89,6 +90,7 @@ public class ApiDbContext(DbContextOptions<ApiDbContext> options) : IdentityDbCo
             e.HasMany(q => q.Terms).WithOne().HasForeignKey(t => t.QuizId).OnDelete(DeleteBehavior.Cascade);
             e.HasMany(q => q.Statements).WithOne().HasForeignKey(s => s.QuizId).OnDelete(DeleteBehavior.Cascade);
             e.HasMany(q => q.ShortAnswers).WithOne().HasForeignKey(s => s.QuizId).OnDelete(DeleteBehavior.Cascade);
+            e.HasMany(q => q.WrittenAnswers).WithOne().HasForeignKey(w => w.QuizId).OnDelete(DeleteBehavior.Cascade);
         });
 
         b.Entity<QuizFile>(e =>

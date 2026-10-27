@@ -13,6 +13,7 @@ import Test from "@/components/study/Test";
 import TrueFalse from "@/components/study/TrueFalse";
 import Write from "@/components/study/Write";
 import CheatSheet from "@/components/study/CheatSheet";
+import ExamAnswers from "@/components/study/ExamAnswers";
 
 const components = {
   learn: Learn,
@@ -22,6 +23,7 @@ const components = {
   match: Match,
   truefalse: TrueFalse,
   write: Write,
+  answers: ExamAnswers,
   guide: Guide,
   cheatsheet: CheatSheet,
 };

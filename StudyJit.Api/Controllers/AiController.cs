@@ -26,6 +26,8 @@ public record RegenerateResponse(int Queued);
 
 public record OrganizeResponse(List<FolderPlan> Folders);
 
+public record GradeWrittenRequest([property: JsonPropertyName("written_answer_id")] int WrittenAnswerId, string? Answer);
+
 public record CreateExamRequest(
     string? Name,
     [property: JsonPropertyName("set_ids")] int[] SetIds,
@@ -66,6 +68,36 @@ public class AiController(ApiDbContext db, ICurrentUser me, QuizGenerationQueue 
     /// Queues several study sets or exams to be generated again (e.g. the ones ticked on a course's Study sets tab).
     /// Counts as one request against the generation limit; ones already generating are left alone.
     /// </summary>
+    /// <summary>Marks the student's answer to one of their written-answer questions against its key points.</summary>
+    [HttpPost("gradeWritten")]
+    [EnableRateLimiting(RateLimits.Grade)]
+    [ProducesResponseType<WrittenGrade>(StatusCodes.Status200OK)]
+    public async Task<IActionResult> GradeWritten(GradeWrittenRequest request, CancellationToken ct)
+    {
+        if (!openAi.IsConfigured)
+            return Error(StatusCodes.Status503ServiceUnavailable, "AI marking isn't set up on this server.");
+        var userId = me.Id;
+        var item = await db.QuizWrittenAnswers.AsNoTracking()
+            .FirstOrDefaultAsync(w => w.Id == request.WrittenAnswerId && db.Quizzes.Any(q => q.Id == w.QuizId && q.UserId == userId), ct);
+        if (item == null)
+            return NotFoundError("Question not found.");
+        var answer = request.Answer?.Trim() ?? "";
+        if (answer.Length == 0)
+            return Ok(new WrittenGrade(0, "incorrect", "There's no answer to mark yet.", [], item.KeyPoints));
+        if (answer.Length > MaxWrittenAnswerChars)
+            return BadRequestError($"Answers can be up to {MaxWrittenAnswerChars} characters.");
+        try
+        {
+            return Ok(await openAi.GradeAsync(item.Question, item.Kind, item.ModelAnswer, item.KeyPoints, answer, ct));
+        }
+        catch (QuizGenerationException e)
+        {
+            return Error(StatusCodes.Status502BadGateway, e.Message);
+        }
+    }
+
+    const int MaxWrittenAnswerChars = 8000;
+
     [HttpPost("regenerate")]
     [EnableRateLimiting(RateLimits.Generate)]
     [ProducesResponseType<RegenerateResponse>(StatusCodes.Status200OK)]

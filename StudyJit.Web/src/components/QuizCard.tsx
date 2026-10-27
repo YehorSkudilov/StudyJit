@@ -1,5 +1,6 @@
-import { AlertTriangle, BookOpen, Loader2, Sparkles } from "lucide-react";
+import { AlertTriangle, BookOpen, Sparkles } from "lucide-react";
 import ScoreRing from "@/components/ui/ScoreRing";
+import GenerationProgress, { type GenerationProgressInfo } from "@/components/GenerationProgress";
 
 interface QuizCardProps {
   quizName: string;
@@ -7,6 +8,7 @@ interface QuizCardProps {
   lastScore?: number | null;
   status?: string | null;
   questionCount?: number;
+  progress?: GenerationProgressInfo | null;
   selected: boolean;
   onClick: (e: React.MouseEvent) => void;
   onDoubleClick: () => void;
@@ -19,6 +21,7 @@ export default function QuizCard({
   lastScore,
   status,
   questionCount = 0,
+  progress,
   selected,
   onClick,
   onDoubleClick,
@@ -45,12 +48,10 @@ export default function QuizCard({
         {description && <p className="mt-1 text-xs text-muted line-clamp-2">{description}</p>}
       </div>
 
+      {generating && <GenerationProgress progress={progress} status={status} compact />}
+
       <div className="flex items-center gap-2 text-xs">
-        {generating ? (
-          <span className="chip bg-amber-500/15 text-amber-600 dark:text-amber-400">
-            <Loader2 className="w-3 h-3 animate-spin" /> Generating
-          </span>
-        ) : status === "failed" ? (
+        {generating ? null : status === "failed" ? (
           <span className="chip bg-red-500/15 text-red-600 dark:text-red-400">
             <AlertTriangle className="w-3 h-3" /> Failed
           </span>

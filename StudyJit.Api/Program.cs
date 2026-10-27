@@ -95,6 +95,10 @@ builder.Services.AddRateLimiter(o =>
     o.AddPolicy(RateLimits.Assist, ctx => RateLimitPartition.GetTokenBucketLimiter(
         ctx.User.FindFirst("sub")?.Value ?? ctx.Connection.RemoteIpAddress?.ToString() ?? "unknown",
         _ => new TokenBucketRateLimiterOptions { TokenLimit = 60, TokensPerPeriod = 60, ReplenishmentPeriod = TimeSpan.FromHours(1) }));
+    // Marking a written answer is a small AI call, made once per answer while studying.
+    o.AddPolicy(RateLimits.Grade, ctx => RateLimitPartition.GetTokenBucketLimiter(
+        ctx.User.FindFirst("sub")?.Value ?? ctx.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+        _ => new TokenBucketRateLimiterOptions { TokenLimit = 150, TokensPerPeriod = 150, ReplenishmentPeriod = TimeSpan.FromHours(1) }));
 });
 
 builder.Services.AddScoped<TokenService>();
@@ -114,6 +118,7 @@ builder.Services.AddScoped<QuizGenerator>();
 builder.Services.AddScoped<CourseAssistant>();
 builder.Services.AddScoped<StudySetSync>();
 builder.Services.AddSingleton<QuizGenerationQueue>();
+builder.Services.AddSingleton<GenerationProgress>();
 builder.Services.AddHostedService<QuizGenerationWorker>();
 
 // The website (StudyJit.Web) and the admin site (StudyJit.AdminWeb) call the API from their own addresses: their
@@ -181,6 +186,7 @@ namespace StudyJit.Api
         public const string Auth = "auth";
         public const string Generate = "generate";
         public const string Assist = "assist";
+        public const string Grade = "grade";
     }
 
     /// <summary>Reads an int? from a number, a numeric string, or null; any other string ("root", "") reads as null.</summary>

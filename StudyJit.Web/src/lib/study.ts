@@ -1,6 +1,6 @@
 // What every study mode works from, as GET /api/items/quizzes/get/{id} returns it. The AI writes content for each way
 // of studying: multiple-choice questions (Practice, Test, Learn), true-or-false statements (True or False, Test), short
-// answers to type (Write, Test, Learn), key terms (Flashcards, Match, Learn, Write), a study guide and a cheat sheet.
+// answers to type (Write, Test, Learn), exam-style written answers the AI marks (Exam answers), key terms (Flashcards, Match, Learn, Write), a study guide and a cheat sheet.
 
 import { apiFetch } from "@/lib/api";
 import { useEffect, useState } from "react";
@@ -33,6 +33,36 @@ export interface ShortAnswer {
   explanation: string;
 }
 
+/** An open question answered in sentences or code, marked by the AI against its key points. */
+export interface WrittenAnswer {
+  id: number;
+  question: string;
+  kind: "explain" | "code";
+  modelAnswer: string;
+  keyPoints: string[];
+}
+
+/** How the AI marked a written answer. */
+export interface WrittenGrade {
+  score: number;
+  verdict: "correct" | "partial" | "incorrect";
+  feedback: string;
+  covered: string[];
+  missed: string[];
+}
+
+export async function gradeWritten(id: number, answer: string): Promise<WrittenGrade> {
+  const res = await apiFetch("/api/ai/gradeWritten", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ written_answer_id: id, answer }),
+  });
+  const data = await res.json().catch(() => null);
+  if (res.status === 429) throw new Error("You've marked a lot of answers this hour. Try again a little later.");
+  if (!res.ok) throw new Error(data?.error || "Couldn't mark this answer. Please try again.");
+  return data;
+}
+
 export interface StudyQuiz {
   id: number;
   name: string;
@@ -43,11 +73,12 @@ export interface StudyQuiz {
   terms: Term[];
   statements: Statement[];
   shortAnswers: ShortAnswer[];
+  writtenAnswers: WrittenAnswer[];
   lastScore: number | null;
   status: string;
 }
 
-export type StudyMode = "learn" | "flashcards" | "practice" | "test" | "match" | "truefalse" | "write" | "guide" | "cheatsheet";
+export type StudyMode = "learn" | "flashcards" | "practice" | "test" | "match" | "truefalse" | "write" | "answers" | "guide" | "cheatsheet";
 
 export async function loadQuiz(id: number): Promise<StudyQuiz> {
   const res = await apiFetch(`/api/items/quizzes/get/${id}`);
@@ -68,6 +99,15 @@ export async function loadQuiz(id: number): Promise<StudyQuiz> {
       explanation: s.explanation,
     })),
     shortAnswers: data.short_answers ?? [],
+    writtenAnswers: (data.written_answers ?? []).map(
+      (w: { id: number; question: string; kind: "explain" | "code"; model_answer: string; key_points: string[] }) => ({
+        id: w.id,
+        question: w.question,
+        kind: w.kind,
+        modelAnswer: w.model_answer,
+        keyPoints: w.key_points,
+      })
+    ),
     lastScore: data.last_score ?? null,
     status: data.generation_status,
   };

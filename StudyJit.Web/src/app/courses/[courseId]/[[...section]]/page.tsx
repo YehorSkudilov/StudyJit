@@ -316,6 +316,7 @@ function SetsSection({
                 }
                 lastScore={q.last_score}
                 status={q.generation_status}
+                progress={q.progress}
                 questionCount={q.questions.length}
                 selected={selecting && picked.has(q.id)}
                 onClick={() => (selecting ? toggle(q.id) : onOpen(q))}
@@ -374,6 +375,7 @@ function ExamsSection({
                 description={q.description}
                 lastScore={q.last_score}
                 status={q.generation_status}
+                progress={q.progress}
                 questionCount={q.questions.length}
                 selected={false}
                 onClick={() => onOpen(q)}

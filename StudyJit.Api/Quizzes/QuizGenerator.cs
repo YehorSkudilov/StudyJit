@@ -4,7 +4,7 @@ using StudyJit.Api.Data;
 namespace StudyJit.Api.Quizzes;
 
 /// <summary>Generates one quiz's questions, study guide and key terms from its topic and linked files, replacing any it had.</summary>
-public class QuizGenerator(ApiDbContext db, OpenAiQuizClient openAi, StudySetSync studySets, ILogger<QuizGenerator> log)
+public class QuizGenerator(ApiDbContext db, OpenAiQuizClient openAi, StudySetSync studySets, GenerationProgress progress, ILogger<QuizGenerator> log)
 {
     static readonly string[] TextExtensions = [".txt", ".md", ".csv", ".json", ".html", ".htm", ".xml", ".rtf"];
     static readonly string[] DocumentExtensions = [".pdf", ".doc", ".docx", ".pptx"];
@@ -26,6 +26,7 @@ public class QuizGenerator(ApiDbContext db, OpenAiQuizClient openAi, StudySetSyn
         quiz.GenerationStatus = GenerationStatus.Pending;
         quiz.QueueNumber = null;
         await db.SaveChangesAsync(ct);
+        progress.Start(quizId);
 
         try
         {
@@ -64,11 +65,13 @@ public class QuizGenerator(ApiDbContext db, OpenAiQuizClient openAi, StudySetSyn
                 // Audio and video aren't read (yet).
             }
 
-            var generated = await openAi.GenerateAsync(source, ct);
+            var generated = await openAi.GenerateAsync(source, change => progress.Update(quizId, change), ct);
+            progress.Update(quizId, p => p with { Stage = "saving" });
             await db.QuizQuestions.Where(q => q.QuizId == quizId).ExecuteDeleteAsync(ct);
             await db.QuizTerms.Where(t => t.QuizId == quizId).ExecuteDeleteAsync(ct);
             await db.QuizStatements.Where(s => s.QuizId == quizId).ExecuteDeleteAsync(ct);
             await db.QuizShortAnswers.Where(s => s.QuizId == quizId).ExecuteDeleteAsync(ct);
+            await db.QuizWrittenAnswers.Where(w => w.QuizId == quizId).ExecuteDeleteAsync(ct);
             db.QuizQuestions.AddRange(generated.Questions.Select(q => new QuizQuestion
             {
                 QuizId = quizId, Question = q.Question, Options = q.Options, CorrectAnswer = q.Correct, Explanation = q.Explanation,
@@ -81,6 +84,10 @@ public class QuizGenerator(ApiDbContext db, OpenAiQuizClient openAi, StudySetSyn
             db.QuizShortAnswers.AddRange(generated.ShortAnswers.Select(s => new QuizShortAnswer
             {
                 QuizId = quizId, Question = s.Question, Answer = s.Answer, Alternatives = s.Alternatives, Explanation = s.Explanation,
+            }));
+            db.QuizWrittenAnswers.AddRange(generated.WrittenAnswers.Select(w => new QuizWrittenAnswer
+            {
+                QuizId = quizId, Question = w.Question, Kind = w.Kind, ModelAnswer = w.ModelAnswer, KeyPoints = w.KeyPoints,
             }));
             quiz.Summary = generated.Summary;
             quiz.CheatSheet = generated.CheatSheet;
@@ -96,6 +103,10 @@ public class QuizGenerator(ApiDbContext db, OpenAiQuizClient openAi, StudySetSyn
             db.ChangeTracker.Clear();
             await db.Quizzes.Where(q => q.Id == quizId)
                 .ExecuteUpdateAsync(s => s.SetProperty(q => q.GenerationStatus, GenerationStatus.Failed).SetProperty(q => q.QueueNumber, (int?)null), CancellationToken.None);
+        }
+        finally
+        {
+            progress.Finish(quizId);
         }
     }
 }

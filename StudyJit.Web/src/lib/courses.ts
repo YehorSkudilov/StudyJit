@@ -2,6 +2,7 @@
 // and exams combining study sets; plus the AI helpers that read a pasted course list and sort files into folders.
 
 import { apiFetch } from "@/lib/api";
+import type { GenerationProgressInfo } from "@/components/GenerationProgress";
 
 export interface Course {
   id: number;
@@ -36,6 +37,8 @@ export interface QuizSummary {
   /** "set": a folder's study set; "exam": built from chosen study sets. */
   kind: "set" | "exam";
   source_ids: number[];
+  /** How far the generation running now has got; null when none is. */
+  progress?: GenerationProgressInfo | null;
 }
 
 export interface CourseFolder {

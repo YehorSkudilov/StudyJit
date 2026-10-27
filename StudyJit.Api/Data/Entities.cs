@@ -122,6 +122,8 @@ public class Quiz
     public List<QuizStatement> Statements { get; set; } = [];
     /// <summary>Questions with short answers to type.</summary>
     public List<QuizShortAnswer> ShortAnswers { get; set; } = [];
+    /// <summary>Open questions answered in sentences or code, which the AI marks.</summary>
+    public List<QuizWrittenAnswer> WrittenAnswers { get; set; } = [];
 }
 
 public class QuizQuestion
@@ -165,6 +167,26 @@ public class QuizShortAnswer
     /// <summary>Other answers that count as right (synonyms, abbreviations, other notations).</summary>
     public List<string> Alternatives { get; set; } = [];
     public string Explanation { get; set; } = "";
+}
+
+/// <summary>An exam-style open question ("Explain…", "Write a function that…"), answered at length and marked by the AI.</summary>
+public class QuizWrittenAnswer
+{
+    public int Id { get; set; }
+    public int QuizId { get; set; }
+    public string Question { get; set; } = "";
+    /// <summary>"explain" for answers in words, "code" for answers that are code.</summary>
+    public string Kind { get; set; } = WrittenAnswerKind.Explain;
+    /// <summary>A full-marks answer, shown after marking.</summary>
+    public string ModelAnswer { get; set; } = "";
+    /// <summary>What a full-marks answer must contain; the marking checks each.</summary>
+    public List<string> KeyPoints { get; set; } = [];
+}
+
+public static class WrittenAnswerKind
+{
+    public const string Explain = "explain";
+    public const string Code = "code";
 }
 
 /// <summary>A file a quiz is generated from.</summary>

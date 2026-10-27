@@ -547,6 +547,40 @@ namespace StudyJit.Api.Data.Migrations
                     b.ToTable("QuizTerms");
                 });
 
+            modelBuilder.Entity("StudyJit.Api.Data.QuizWrittenAnswer", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.PrimitiveCollection<List<string>>("KeyPoints")
+                        .IsRequired()
+                        .HasColumnType("text[]");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("ModelAnswer")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Question")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int>("QuizId")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("QuizId");
+
+                    b.ToTable("QuizWrittenAnswers");
+                });
+
             modelBuilder.Entity("StudyJit.Api.Data.RefreshToken", b =>
                 {
                     b.Property<long>("Id")
@@ -803,6 +837,15 @@ namespace StudyJit.Api.Data.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("StudyJit.Api.Data.QuizWrittenAnswer", b =>
+                {
+                    b.HasOne("StudyJit.Api.Data.Quiz", null)
+                        .WithMany("WrittenAnswers")
+                        .HasForeignKey("QuizId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("StudyJit.Api.Data.RefreshToken", b =>
                 {
                     b.HasOne("StudyJit.Api.Data.AppUser", null)
@@ -840,6 +883,8 @@ namespace StudyJit.Api.Data.Migrations
                     b.Navigation("Statements");
 
                     b.Navigation("Terms");
+
+                    b.Navigation("WrittenAnswers");
                 });
 #pragma warning restore 612, 618
         }

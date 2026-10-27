@@ -1,4 +1,4 @@
-import { BookOpenText, Brain, ClipboardCheck, Layers, PenLine, Puzzle, ScrollText, Target, Zap, type LucideIcon } from "lucide-react";
+import { BookOpenText, Brain, ClipboardCheck, FileCode2, Layers, PenLine, Puzzle, ScrollText, Target, Zap, type LucideIcon } from "lucide-react";
 import type { StudyMode, StudyQuiz } from "@/lib/study";
 
 export interface ModeInfo {
@@ -69,6 +69,14 @@ export const modes: ModeInfo[] = [
     icon: PenLine,
     gradient: "from-lime-500 to-green-500",
     unavailable: (q) => (q.terms.length || q.shortAnswers.length ? null : "Regenerate to get written questions"),
+  },
+  {
+    mode: "answers",
+    title: "Exam answers",
+    blurb: "Explain concepts and write code; the AI marks it like an exam",
+    icon: FileCode2,
+    gradient: "from-indigo-500 to-violet-500",
+    unavailable: (q) => (q.writtenAnswers.length ? null : "Regenerate to get exam-style questions"),
   },
   {
     mode: "guide",

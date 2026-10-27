@@ -7,6 +7,7 @@ import { motion } from "framer-motion";
 import { AlertTriangle, Check, ChevronLeft, ClipboardCheck, FileText, Folder, Loader2, Lock, RefreshCw, Trash2, Wand2 } from "lucide-react";
 import AlertPopup from "@/components/AlertPopup";
 import ScoreRing from "@/components/ui/ScoreRing";
+import GenerationProgress, { type GenerationProgressInfo } from "@/components/GenerationProgress";
 import { loadQuiz, type StudyQuiz } from "@/lib/study";
 import { modes, studyHref } from "@/lib/modes";
 import {
@@ -36,6 +37,7 @@ interface Detail {
   folderId: number | null;
   kind: "set" | "exam";
   sourceIds: number[];
+  progress: GenerationProgressInfo | null;
 }
 
 /**
@@ -67,6 +69,7 @@ export default function QuizDetailsPage() {
       status: data.generation_status ?? null,
       lastScore: data.last_score ?? null,
       queueNumber: data.queue_number ?? null,
+      progress: data.progress ?? null,
       courseId: data.course_id ?? null,
       folderId: data.folder_id ?? null,
       kind: data.kind ?? "set",
@@ -161,11 +164,10 @@ export default function QuizDetailsPage() {
           </div>
           {generating && (
             <div className="relative mt-6">
-              <p className="text-sm font-semibold mb-2 flex items-center gap-2">
-                <Loader2 className="w-4 h-4 animate-spin text-brand" />
+              <p className="text-sm font-semibold mb-3">
                 {hasQuestions ? "Updating with the latest files…" : "The AI is building this set…"}
               </p>
-              <GeneratingBar />
+              <GenerationProgress progress={detail?.progress} status={detail?.status} queueNumber={detail?.queueNumber} />
             </div>
           )}
         </motion.section>
@@ -316,17 +318,5 @@ function StatusChip({ status, queueNumber, count }: { status: GenerationStatus; 
     <span className="chip bg-surface-2 text-muted">
       <Wand2 className="w-3 h-3" /> Not generated yet
     </span>
-  );
-}
-
-function GeneratingBar() {
-  return (
-    <div className="h-2 rounded-full bg-surface-2 overflow-hidden">
-      <motion.div
-        className="h-full w-1/3 rounded-full bg-gradient-to-r from-brand to-brand-2"
-        animate={{ x: ["-100%", "300%"] }}
-        transition={{ repeat: Infinity, duration: 1.4, ease: "easeInOut" }}
-      />
-    </div>
   );
 }
