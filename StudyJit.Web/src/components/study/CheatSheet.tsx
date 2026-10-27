@@ -206,15 +206,18 @@ export default function CheatSheet({ quiz, onExit }: { quiz: StudyQuiz; onExit: 
                         </span>
                       </div>
                     ) : line.kind === "code" ? (
-                      <pre
-                        key={j}
-                        className="relative rounded-xl bg-surface-2 border border-stroke px-3 py-2.5 font-mono text-[0.8rem] leading-relaxed text-foreground overflow-x-auto print:whitespace-pre-wrap print:overflow-visible"
-                      >
+                      <div key={j} className="rounded-xl bg-surface-2 border border-stroke overflow-hidden">
+                        {/* The language sits in its own strip, so it never covers the code. */}
                         {line.lang && (
-                          <span className={`absolute right-2 top-1.5 rounded px-1.5 text-[0.65rem] font-bold uppercase ${tone.pill}`}>{line.lang}</span>
+                          <div className="flex justify-end border-b border-stroke px-2 py-1">
+                            <span className={`rounded px-1.5 text-[0.65rem] font-bold uppercase ${tone.pill}`}>{line.lang}</span>
+                          </div>
                         )}
-                        <code>{line.code}</code>
-                      </pre>
+                        {/* Long lines wrap rather than scroll, so trailing comments (the results) stay visible. */}
+                        <pre className="px-3 py-2.5 font-mono text-[0.8rem] leading-relaxed text-foreground whitespace-pre-wrap break-words">
+                          <code>{line.code}</code>
+                        </pre>
+                      </div>
                     ) : line.kind === "bullet" ? (
                       <div key={j} className="flex gap-2.5">
                         <span className={`w-1.5 h-1.5 mt-[0.45rem] rounded-full flex-shrink-0 bg-gradient-to-br ${tone.bar}`} />
