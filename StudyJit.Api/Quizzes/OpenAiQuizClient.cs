@@ -75,6 +75,11 @@ public partial class OpenAiQuizClient(HttpClient http, OpenAiOptions options, IL
         that points at the material; if an item needs a piece of code, a formula or a scenario, put it in the item. Every
         item must be correct according to the material; when unsure, leave it out.
 
+        Cover only the subject matter itself. Skip anything about the course rather than its content: grading and
+        assessment weights, exam or midterm format and rules, deadlines, attendance, course policies, instructors, office
+        hours, textbooks, schedules and the like. Write no items, terms or cheat-sheet lines about them, even when the
+        material (e.g. a syllabus or an introductory lecture) spends time on them.
+
         questions (multiple choice): a bank the student is drilled from many times, a different mix each session, so it
         covers the material completely and varies:
         - Decide how many the material needs: go through every concept, fact, process, formula and example and write at
