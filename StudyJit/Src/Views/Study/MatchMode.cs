@@ -26,7 +26,7 @@ public class MatchMode : ModeView
     {
         Host.SetProgress(null);
         Host.SetStat("");
-        var best = StudyHistory.Best(BestKey);
+        var best = Progress.Best(BestKey);
         Show(Ui.Stack(14,
             Ui.Icon("extension", 56, "Warning"),
             Ui.Text("Match", 24, bold: true, align: TextAlignment.Center),
@@ -134,8 +134,8 @@ public class MatchMode : ModeView
     {
         var time = Elapsed;
         Stop();
-        var newBest = StudyHistory.RecordBest(BestKey, time.TotalMilliseconds, lowerIsBetter: true);
-        var best = StudyHistory.Best(BestKey) ?? time.TotalMilliseconds;
+        var newBest = Progress.RecordBest(BestKey, time.TotalMilliseconds, lowerIsBetter: true);
+        var best = Progress.Best(BestKey) ?? time.TotalMilliseconds;
         Host.SetStat(StudyItems.FormatTime(time));
         Show(Ui.Stack(14,
             Ui.Icon(newBest ? "emoji_events" : "timer", 56, newBest ? "Warning" : "Accent"),

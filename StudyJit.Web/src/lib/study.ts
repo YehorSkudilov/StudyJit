@@ -81,7 +81,7 @@ export interface StudyQuiz {
 export type StudyMode = "learn" | "flashcards" | "practice" | "test" | "match" | "truefalse" | "write" | "answers" | "guide" | "cheatsheet";
 
 export async function loadQuiz(id: number): Promise<StudyQuiz> {
-  const res = await apiFetch(`/api/items/quizzes/get/${id}`);
+  const [res] = await Promise.all([apiFetch(`/api/items/quizzes/get/${id}`), loadProgress(id)]);
   const data = await res.json();
   if (!res.ok) throw new Error(data?.error || "Couldn't load this study set.");
   return {
@@ -262,7 +262,53 @@ export function closeEnough(given: string, expected: string) {
   return distance(g, e) <= allowed;
 }
 
-// ---------- Personal bests (per browser) ----------
+// ---------- Practice history and bests, kept with the account ----------
+// Every answer and best also goes to the API (api/study/progress), where the app's go too (it sends what it saved
+// offline once it's back online). Opening a set brings the account's history for it and every best into this browser.
+
+type ServerProgress = {
+  history: { quiz_id: number; key: string; seen: string; right: number; wrong: number }[];
+  bests: { key: string; value: number; lower_is_better: boolean }[];
+};
+
+/** Merges the account's history for one set and its bests into this browser; studying goes on without it. */
+async function loadProgress(quizId: number) {
+  try {
+    const res = await apiFetch(`/api/study/progress?quiz=${quizId}`);
+    if (!res.ok) return;
+    const progress = (await res.json()) as ServerProgress;
+    const history = readHistory(quizId);
+    for (const h of progress.history) {
+      const local = history[h.key];
+      // The server has every answer sent from here too: its counts win unless this browser's are ahead (not sent yet).
+      if (!local || h.right + h.wrong >= local.right + local.wrong)
+        history[h.key] = { seen: Date.parse(h.seen), right: h.right, wrong: h.wrong };
+    }
+    localStorage.setItem(historyKey(quizId), JSON.stringify(history));
+    for (const b of progress.bests) {
+      const best = readBest(b.key);
+      if (best == null || (b.lower_is_better ? b.value < best : b.value > best)) localStorage.setItem(`studyjit.best.${b.key}`, String(b.value));
+    }
+  } catch {
+    // Offline or no storage: this browser's own history still works.
+  }
+}
+
+/** Sends an answer or a best to the account, in the background. */
+function sendProgress(body: { answers?: unknown[]; bests?: unknown[] }) {
+  apiFetch("/api/study/progress", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }).catch(
+    () => {
+      // Lost: this browser keeps it, and the history still helps here.
+    }
+  );
+}
+
+const newId = () =>
+  typeof crypto !== "undefined" && "randomUUID" in crypto
+    ? crypto.randomUUID()
+    : "xxxxxxxx-xxxx-4xxx-8xxx-xxxxxxxxxxxx".replace(/x/g, () => Math.floor(Math.random() * 16).toString(16));
+
+// ---------- Personal bests ----------
 
 export function readBest(key: string): number | null {
   try {
@@ -281,8 +327,9 @@ export function recordBest(key: string, value: number, lowerIsBetter: boolean): 
     try {
       localStorage.setItem(`studyjit.best.${key}`, String(value));
     } catch {
-      // No storage: no personal bests.
+      // No storage: no personal bests here (the account still keeps it).
     }
+    sendProgress({ bests: [{ key, value, lower_is_better: lowerIsBetter }] });
   }
   return better;
 }
@@ -308,8 +355,9 @@ function readHistory(quizId: number): History {
   }
 }
 
-/** Remembers how a question went (in this browser), so later sessions favour what's new or was missed. */
+/** Remembers how a question went (here and in the account), so later sessions favour what's new or was missed. */
 export function recordAnswer(quizId: number, key: string, correct: boolean) {
+  sendProgress({ answers: [{ id: newId(), quiz_id: quizId, key, correct, answered_at: new Date().toISOString() }] });
   try {
     const history = readHistory(quizId);
     const entry = history[key] ?? { seen: 0, right: 0, wrong: 0 };

@@ -85,6 +85,8 @@
 		<PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
 		<!-- The study guide and cheat sheet are Markdown, shown as HTML (Src/Services/MarkdownHtml.cs). -->
 		<PackageReference Include="Markdig" Version="1.4.0" />
+		<!-- The database on the device that keeps everything for studying offline (Src/Services/Offline/LocalStore.cs). -->
+		<PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.13" />
 	</ItemGroup>
 
 	<ItemGroup>

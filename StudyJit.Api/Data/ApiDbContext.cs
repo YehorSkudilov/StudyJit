@@ -17,6 +17,8 @@ public class ApiDbContext(DbContextOptions<ApiDbContext> options) : IdentityDbCo
     public DbSet<QuizWrittenAnswer> QuizWrittenAnswers => Set<QuizWrittenAnswer>();
     public DbSet<QuizFile> QuizFiles => Set<QuizFile>();
     public DbSet<ServerSetting> Settings => Set<ServerSetting>();
+    public DbSet<StudyAnswer> StudyAnswers => Set<StudyAnswer>();
+    public DbSet<StudyBest> StudyBests => Set<StudyBest>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -98,6 +100,22 @@ public class ApiDbContext(DbContextOptions<ApiDbContext> options) : IdentityDbCo
             e.HasIndex(l => new { l.QuizId, l.FileId }).IsUnique();
             e.HasOne<Quiz>().WithMany().HasForeignKey(l => l.QuizId).OnDelete(DeleteBehavior.Cascade);
             e.HasOne<StoredFile>().WithMany().HasForeignKey(l => l.FileId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // Practice history and bests go with the account, and a study set's answers with the set.
+        b.Entity<StudyAnswer>(e =>
+        {
+            e.Property(a => a.Key).HasMaxLength(20);
+            e.HasIndex(a => new { a.UserId, a.QuizId });
+            e.HasOne<AppUser>().WithMany().HasForeignKey(a => a.UserId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne<Quiz>().WithMany().HasForeignKey(a => a.QuizId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        b.Entity<StudyBest>(e =>
+        {
+            e.HasKey(x => new { x.UserId, x.Key });
+            e.Property(x => x.Key).HasMaxLength(40);
+            e.HasOne<AppUser>().WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Cascade);
         });
 
         b.Entity<ServerSetting>(e =>

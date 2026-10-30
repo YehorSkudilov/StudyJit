@@ -13,7 +13,7 @@ public class WriteMode : ModeView
 
     List<StudyItem> Build()
     {
-        var answers = StudyHistory.PickFrom(Quiz.Id, Quiz.ShortAnswers, StudyItems.ShortAnswerKey, 15).Select(StudyItems.Written).ToList();
+        var answers = Progress.PickFrom(Quiz.Id, Quiz.ShortAnswers, StudyItems.ShortAnswerKey, 15).Select(StudyItems.Written).ToList();
         var terms = StudyItems.Shuffle(Quiz.Terms.Select(StudyItems.WrittenFromTerm)).Take(Math.Max(10, 25 - answers.Count));
         return StudyItems.Shuffle(answers.Concat(terms));
     }
@@ -40,14 +40,14 @@ public class WriteMode : ModeView
         card.Answered += (_, right) =>
         {
             if (item.HistoryKey != null)
-                StudyHistory.Record(Quiz.Id, item.HistoryKey, right);
+                Progress.Record(Quiz.Id, item.HistoryKey, right);
             _review.Add(ResultsView.Row(item, card.Given));
         };
         card.Overridden += (_, _) =>
         {
             _review[^1] = _review[^1] with { Correct = true };
             if (item.HistoryKey != null)
-                StudyHistory.Record(Quiz.Id, item.HistoryKey, true);
+                Progress.Record(Quiz.Id, item.HistoryKey, true);
         };
         card.Continued += (_, _) =>
         {

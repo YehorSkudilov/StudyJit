@@ -10,6 +10,9 @@ namespace StudyJit.Services;
 public class ApiException(string message, HttpStatusCode? status = null) : Exception(message)
 {
     public HttpStatusCode? Status { get; } = status;
+
+    /// <summary>The server wasn't reached at all (no connection, or it took too long): worth trying again later.</summary>
+    public bool IsOffline => Status == null;
 }
 
 /// <summary>
@@ -103,18 +106,16 @@ public class ApiClient(HttpClient http, AuthSession session)
 
     public Task<StudyQuiz> QuizAsync(int id) => GetAsync<StudyQuiz>($"api/items/quizzes/get/{id}", "Couldn't load this study set.");
 
-    /// <summary>Records a percentage as the set's last score (what the course and the lists show).</summary>
-    public async Task SaveScoreAsync(int quizId, double percent)
-    {
-        try
-        {
-            await SendAsync(HttpMethod.Patch, "api/items/quizzes/update", new { id = quizId, lastScore = Math.Round(percent, 2) }, "");
-        }
-        catch (Exception)
-        {
-            // The score is a nicety; studying goes on without it.
-        }
-    }
+    /// <summary>Records a percentage as the set's last score (what the course and the lists show). Sent by SyncService.</summary>
+    public Task SaveScoreAsync(int quizId, double percent) =>
+        SendAsync(HttpMethod.Patch, "api/items/quizzes/update", new { id = quizId, lastScore = Math.Round(percent, 2) }, "Couldn't save the score.");
+
+    // ---------- Practice history and bests ----------
+
+    public Task<StudyProgressResponse> ProgressAsync() => GetAsync<StudyProgressResponse>("api/study/progress", "Couldn't load your practice history.");
+
+    public Task SaveProgressAsync(IEnumerable<StudyAnswerItem> answers, IEnumerable<StudyBestItem> bests) =>
+        SendAsync(HttpMethod.Post, "api/study/progress", new { answers, bests }, "Couldn't save your practice history.");
 
     public Task DeleteQuizzesAsync(IEnumerable<int> ids) =>
         SendAsync(HttpMethod.Post, "api/items/quizzes/delete", new { ids }, "Couldn't delete it.");

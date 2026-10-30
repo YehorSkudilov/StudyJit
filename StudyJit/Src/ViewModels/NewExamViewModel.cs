@@ -3,11 +3,12 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using StudyJit.Models;
 using StudyJit.Services;
+using StudyJit.Services.Offline;
 
 namespace StudyJit.ViewModels;
 
 /// <summary>A new exam for a course (?course=): its name, the study sets it covers, and anything to focus on.</summary>
-public partial class NewExamViewModel(ApiClient api, DialogService dialogs) : BaseViewModel, IQueryAttributable
+public partial class NewExamViewModel(ApiClient api, StudyData data, DialogService dialogs) : BaseViewModel, IQueryAttributable
 {
     int _courseId;
 
@@ -34,7 +35,7 @@ public partial class NewExamViewModel(ApiClient api, DialogService dialogs) : Ba
             return;
         await LoadAsync(async () =>
         {
-            var quizzes = await api.QuizzesAsync(_courseId);
+            var quizzes = await data.QuizzesAsync(_courseId);
             foreach (var q in quizzes.Where(q => !q.IsExam && q.GenerationStatus == GenerationStatus.Success).OrderBy(q => q.Name))
                 Sets.Add(new(q));
         }, true);

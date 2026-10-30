@@ -1,5 +1,6 @@
 using AppSkeleton;
 using StudyJit.Services;
+using StudyJit.Services.Offline;
 using StudyJit.ViewModels;
 using StudyJit.Views;
 using StudyJit.Views.Study;
@@ -25,6 +26,12 @@ public static class MauiProgram
         builder.Services.AddSingleton<AuthSession>();
         builder.Services.AddSingleton(sp => new ApiClient(ApiConfig.CreateClient(), sp.GetRequiredService<AuthSession>()));
         builder.Services.AddSingleton<DialogService>();
+        // Everything for studying offline, on the device, and kept in step with the server.
+        builder.Services.AddSingleton(_ => new LocalStore(Path.Combine(FileSystem.AppDataDirectory, "studyjit.db")));
+        builder.Services.AddSingleton<ConnectionState>();
+        builder.Services.AddSingleton<StudyData>();
+        builder.Services.AddSingleton<SyncService>();
+        builder.Services.AddSingleton<StudyProgress>();
 
         builder.Services.AddTransient<MainPage>();
         AddPage<HomePage, HomeViewModel>(builder.Services);
@@ -61,7 +68,9 @@ public static class MauiProgram
         builder.Logging.AddDebug();
 #endif
 
-        return builder.Build();
+        var app = builder.Build();
+        app.Services.GetRequiredService<SyncService>().Start();
+        return app;
     }
 
     static void OnButtonPressed(object? sender, EventArgs e)

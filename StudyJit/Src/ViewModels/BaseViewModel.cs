@@ -30,6 +30,22 @@ public abstract partial class BaseViewModel : ObservableObject
     protected static Task GoBack() => Shell.Current.GoToAsync("..");
 
     /// <summary>
+    /// The first time, shows what's saved on the device at once (<paramref name="cached"/>, when there is anything), then
+    /// what the server says (or the saved copy again, offline: see StudyData). The spinner and error only show while
+    /// there's nothing at all to show.
+    /// </summary>
+    protected async Task LoadAsync<T>(Func<T?> cached, Func<Task<T>> fetch, Action<T> show, bool firstTime) where T : class
+    {
+        var shown = false;
+        if (firstTime && cached() is { } saved)
+        {
+            show(saved);
+            shown = true;
+        }
+        await LoadAsync(async () => show(await fetch()), firstTime && !shown);
+    }
+
+    /// <summary>
     /// Runs a load, showing the spinner only while there's nothing yet (<paramref name="firstTime"/>) and the error in
     /// place of the content when it fails with nothing to show.
     /// </summary>

@@ -16,7 +16,8 @@ public class TrueFalseMode : ModeView
     bool _over;
     readonly List<ReviewRow> _misses = [];
 
-    string BestKey => $"truefalse.{Quiz.Id}";
+    // The website's key and scoring, so a best counts wherever it was set.
+    string BestKey => $"tf.{Quiz.Id}";
 
     protected override void Start() => Intro();
 
@@ -24,7 +25,7 @@ public class TrueFalseMode : ModeView
     {
         Host.SetProgress(null);
         Host.SetStat("");
-        var best = StudyHistory.Best(BestKey);
+        var best = Progress.Best(BestKey);
         Show(Ui.Stack(14,
             Ui.Icon("bolt", 56, "Danger"),
             Ui.Text("True or False", 24, bold: true, align: TextAlignment.Center),
@@ -33,7 +34,7 @@ public class TrueFalseMode : ModeView
             Ui.Primary("Start", Begin)));
     }
 
-    void Refill() => _queue = new(StudyHistory.PickFrom(Quiz.Id, Quiz.Statements, StudyItems.StatementKey, Quiz.Statements.Count));
+    void Refill() => _queue = new(Progress.PickFrom(Quiz.Id, Quiz.Statements, StudyItems.StatementKey, Quiz.Statements.Count));
 
     void Begin()
     {
@@ -68,7 +69,7 @@ public class TrueFalseMode : ModeView
         _comboLabel.Text = _combo >= 2 ? $"🔥 Combo ×{Multiplier} · {_points} points" : $"{_points} points";
     }
 
-    int Multiplier => 1 + Math.Min(_combo / 3, 4);
+    int Multiplier => _combo >= 9 ? 4 : _combo >= 6 ? 3 : _combo >= 3 ? 2 : 1;
 
     void Answer(bool said, View card)
     {
@@ -76,7 +77,7 @@ public class TrueFalseMode : ModeView
             return;
         var statement = _queue.Dequeue();
         var right = statement.IsTrue == said;
-        StudyHistory.Record(Quiz.Id, StudyItems.StatementKey(statement), right);
+        Progress.Record(Quiz.Id, StudyItems.StatementKey(statement), right);
         Ui.Buzz(right);
         if (right)
         {
@@ -114,7 +115,7 @@ public class TrueFalseMode : ModeView
             return;
         _over = true;
         Stop();
-        var newBest = StudyHistory.RecordBest(BestKey, _points, lowerIsBetter: false) && _points > 0;
+        var newBest = Progress.RecordBest(BestKey, _points, lowerIsBetter: false) && _points > 0;
         Host.SetStat($"{_points} pts");
         var stack = Ui.Stack(14,
             Ui.Icon(newBest ? "emoji_events" : "bolt", 56, newBest ? "Warning" : "Danger"),

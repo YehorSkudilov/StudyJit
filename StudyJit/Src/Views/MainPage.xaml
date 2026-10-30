@@ -52,6 +52,24 @@
                 VerticalOptions="Center"
                 VerticalTextAlignment="Center" />
         </skeleton:AcrylicView>
+        <!--  Offline: everything saved on the device still works, and what's studied goes up once back online.  -->
+        <skeleton:AcrylicView
+            x:Name="OfflineBar"
+            Margin="0,0,0,10"
+            BorderColor="Transparent"
+            CornerRadius="17"
+            EffectStyle="Custom"
+            HorizontalOptions="Center"
+            IsVisible="False"
+            TintColor="{StaticResource GlassTint}"
+            TintOpacity="{StaticResource GlassTintOpacity}"
+            VerticalOptions="End">
+            <HorizontalStackLayout Padding="14,8" BackgroundColor="Transparent" Spacing="8">
+                <Label FontFamily="OutlinedIcons" FontSize="16" Text="cloud_off" TextColor="{StaticResource Warning}" VerticalOptions="Center" />
+                <Label x:Name="OfflineText" FontFamily="OpenSansSemibold" FontSize="13" TextColor="{StaticResource TextPrimary}" VerticalOptions="Center" />
+            </HorizontalStackLayout>
+        </skeleton:AcrylicView>
+
         <skeleton:CNavBar
             x:Name="NavBar"
             Grid.Row="1"

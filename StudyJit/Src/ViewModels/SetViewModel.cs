@@ -3,6 +3,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using StudyJit.Models;
 using StudyJit.Services;
+using StudyJit.Services.Offline;
 
 namespace StudyJit.ViewModels;
 
@@ -10,7 +11,7 @@ namespace StudyJit.ViewModels;
 /// A study set or exam (?id=): what's in it, the last score, and the ways to study it; or, while the AI writes it, how
 /// far it has got.
 /// </summary>
-public partial class SetViewModel(ApiClient api, DialogService dialogs) : BaseViewModel, IQueryAttributable
+public partial class SetViewModel(ApiClient api, StudyData data, DialogService dialogs) : BaseViewModel, IQueryAttributable
 {
     int _id;
     bool _loaded;
@@ -74,12 +75,13 @@ public partial class SetViewModel(ApiClient api, DialogService dialogs) : BaseVi
     {
         if (_id == 0)
             return;
-        await LoadAsync(LoadCoreAsync, !_loaded);
+        await LoadAsync(() => data.CachedQuiz(_id), () => data.QuizAsync(_id), Show, !_loaded);
     }
 
-    async Task LoadCoreAsync()
+    Task LoadCoreAsync() => LoadAsync(() => data.CachedQuiz(_id), () => data.QuizAsync(_id), Show, false);
+
+    void Show(StudyQuiz quiz)
     {
-        var quiz = await api.QuizAsync(_id);
         _loaded = true;
         Name = quiz.Name;
         Description = quiz.Description ?? "";
@@ -142,7 +144,7 @@ public partial class SetViewModel(ApiClient api, DialogService dialogs) : BaseVi
             return;
         _poll = Application.Current!.Dispatcher.CreateTimer();
         _poll.Interval = TimeSpan.FromSeconds(3);
-        _poll.Tick += async (_, _) => await LoadAsync(LoadCoreAsync, false);
+        _poll.Tick += async (_, _) => await LoadCoreAsync();
         _poll.Start();
     }
 
@@ -177,7 +179,7 @@ public partial class SetViewModel(ApiClient api, DialogService dialogs) : BaseVi
         {
             await dialogs.Error(e, "Couldn't start regenerating");
         }
-        await LoadAsync(LoadCoreAsync, false);
+        await LoadCoreAsync();
     }
 
     [RelayCommand]

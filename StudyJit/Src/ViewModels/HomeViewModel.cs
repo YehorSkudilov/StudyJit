@@ -3,6 +3,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using StudyJit.Models;
 using StudyJit.Services;
+using StudyJit.Services.Offline;
 
 namespace StudyJit.ViewModels;
 
@@ -10,7 +11,7 @@ namespace StudyJit.ViewModels;
 /// The first tab: a greeting, how studying is going (courses, sets ready, average score), what's being generated now,
 /// and the study sets to pick up again.
 /// </summary>
-public partial class HomeViewModel(ApiClient api, AuthSession session) : BaseViewModel
+public partial class HomeViewModel(StudyData data, AuthSession session) : BaseViewModel
 {
     bool _loaded;
     IDispatcherTimer? _poll;
@@ -47,15 +48,12 @@ public partial class HomeViewModel(ApiClient api, AuthSession session) : BaseVie
         Greeting = GreetingFor(DateTime.Now, session.Name);
         if (!session.IsSignedIn)
             return;
-        await LoadAsync(LoadCoreAsync, !_loaded);
+        await LoadAsync(() => CoursesAndSets.Cached(data), () => CoursesAndSets.FetchAsync(data), Show, !_loaded);
     }
 
-    async Task LoadCoreAsync()
+    void Show(CoursesAndSets snapshot)
     {
-        var coursesTask = api.CoursesAsync();
-        var quizzesTask = api.QuizzesAsync(null);
-        var courses = await coursesTask;
-        var quizzes = await quizzesTask;
+        var (courses, quizzes) = snapshot;
         _loaded = true;
         var byId = courses.ToDictionary(c => c.Id);
         QuizItem Item(QuizSummary q)
@@ -95,7 +93,7 @@ public partial class HomeViewModel(ApiClient api, AuthSession session) : BaseVie
             return;
         _poll = Application.Current!.Dispatcher.CreateTimer();
         _poll.Interval = TimeSpan.FromSeconds(4);
-        _poll.Tick += async (_, _) => await LoadAsync(LoadCoreAsync, false);
+        _poll.Tick += async (_, _) => await LoadAsync(() => CoursesAndSets.Cached(data), () => CoursesAndSets.FetchAsync(data), Show, false);
         _poll.Start();
     }
 

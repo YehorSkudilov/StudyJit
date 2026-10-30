@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using AppSkeleton;
+using StudyJit.Services.Offline;
 
 namespace StudyJit.Views;
 
@@ -12,12 +13,16 @@ public partial class MainPage : ContentPage
     static WeakReference<MainPage>? _instance;
 
     readonly ObservableCollection<CNavItem> _tabs;
+    readonly SyncService _sync;
+    readonly ConnectionState _connection;
     CNavItem? _current;
     bool _visible;
 
-    public MainPage(HomePage home, CoursesPage courses, LibraryPage library, ProfilePage profile)
+    public MainPage(SyncService sync, ConnectionState connection, HomePage home, CoursesPage courses, LibraryPage library, ProfilePage profile)
     {
         InitializeComponent();
+        _sync = sync;
+        _connection = connection;
 
         var color = (Color)Application.Current!.Resources["TextPrimary"];
         // In AppTab order. Icons with a solid body, so the filled version (selected) looks different from the outline one.
@@ -57,12 +62,16 @@ public partial class MainPage : ContentPage
     static readonly TimeSpan MinRefreshTime = TimeSpan.FromMilliseconds(600);
     bool _refreshing, _spinning;
 
-    /// <summary>The tab on screen fetches everything again. A failure leaves the tab as it was; the indicator always goes.</summary>
+    /// <summary>
+    /// A sync (what was studied offline goes up, everything new comes down), then the tab on screen fetches again. A
+    /// failure leaves the tab as it was; the indicator always goes.
+    /// </summary>
     async Task RefreshCurrentAsync()
     {
         var started = DateTime.UtcNow;
         try
         {
+            await _sync.SyncNowAsync();
             if (_current?.Page is TabView tab)
                 await tab.RefreshAsync();
         }
@@ -193,10 +202,32 @@ public partial class MainPage : ContentPage
         base.OnAppearing();
         _visible = true;
         _loadAfterSlide = null;
-        foreach (var tab in _tabs)
-            ((TabView)tab.Page).BottomInset = 20;
         _current?.Page.Load();
         PreloadTabs();
+        _connection.Changed += OnConnectionChanged;
+        _sync.Synced += OnSynced;
+        UpdateOfflineBar();
+    }
+
+    // ---------- Offline ----------
+
+    void OnConnectionChanged(object? sender, EventArgs e) => UpdateOfflineBar();
+
+    // Downloaded or sent something: the tab shows it (scores sent, new sets ready), and the pill its count.
+    void OnSynced(object? sender, EventArgs e)
+    {
+        UpdateOfflineBar();
+        if (_visible && !_refreshing)
+            _current?.Page.Load();
+    }
+
+    void UpdateOfflineBar()
+    {
+        OfflineBar.IsVisible = _connection.IsOffline;
+        var pending = _sync.Pending;
+        OfflineText.Text = pending > 0 ? $"Offline · {pending} to sync" : "Offline · studying from this device";
+        foreach (var tab in _tabs)
+            ((TabView)tab.Page).BottomInset = _connection.IsOffline ? 70 : 20;
     }
 
     bool _preloaded;
@@ -225,5 +256,7 @@ public partial class MainPage : ContentPage
         base.OnDisappearing();
         _visible = false;
         _current?.Page.Unload();
+        _connection.Changed -= OnConnectionChanged;
+        _sync.Synced -= OnSynced;
     }
 }

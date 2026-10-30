@@ -2,11 +2,12 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using StudyJit.Models;
 using StudyJit.Services;
+using StudyJit.Services.Offline;
 
 namespace StudyJit.ViewModels;
 
 /// <summary>Profile › Account: name, email and bio, and changing the password (which signs out other devices).</summary>
-public partial class AccountViewModel(ApiClient api, AuthSession session, DialogService dialogs) : BaseViewModel
+public partial class AccountViewModel(ApiClient api, StudyData data, AuthSession session, DialogService dialogs) : BaseViewModel
 {
     bool _loaded;
 
@@ -34,7 +35,7 @@ public partial class AccountViewModel(ApiClient api, AuthSession session, Dialog
             return;
         await LoadAsync(async () =>
         {
-            var profile = await api.ProfileAsync();
+            var profile = await data.ProfileAsync();
             (Name, Email, Bio) = (profile.Name, profile.Email, profile.Bio ?? "");
             _loaded = true;
         }, true);

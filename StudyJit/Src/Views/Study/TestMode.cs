@@ -26,10 +26,10 @@ public class TestMode : ModeView
     /// <summary>Each question type's own pool, new and missed first.</summary>
     List<StudyItem> Pool(ItemKind kind) => kind switch
     {
-        ItemKind.Choice => StudyHistory.PickQuestions(Quiz, Quiz.Questions.Count).Select(StudyItems.Choice).ToList(),
-        ItemKind.TrueFalse => StudyHistory.PickFrom(Quiz.Id, Quiz.Statements, StudyItems.StatementKey, Quiz.Statements.Count).Select(StudyItems.TrueFalse).ToList(),
+        ItemKind.Choice => Progress.PickQuestions(Quiz, Quiz.Questions.Count).Select(StudyItems.Choice).ToList(),
+        ItemKind.TrueFalse => Progress.PickFrom(Quiz.Id, Quiz.Statements, StudyItems.StatementKey, Quiz.Statements.Count).Select(StudyItems.TrueFalse).ToList(),
         _ => Quiz.ShortAnswers.Count > 0
-            ? StudyHistory.PickFrom(Quiz.Id, Quiz.ShortAnswers, StudyItems.ShortAnswerKey, Quiz.ShortAnswers.Count).Select(StudyItems.Written).ToList()
+            ? Progress.PickFrom(Quiz.Id, Quiz.ShortAnswers, StudyItems.ShortAnswerKey, Quiz.ShortAnswers.Count).Select(StudyItems.Written).ToList()
             : StudyItems.Shuffle(Quiz.Terms).Select(StudyItems.WrittenFromTerm).ToList(),
     };
 
@@ -162,8 +162,8 @@ public class TestMode : ModeView
         var right = review.Count(r => r.Correct);
         foreach (var (item, row) in _items.Zip(review))
             if (item.HistoryKey != null)
-                StudyHistory.Record(Quiz.Id, item.HistoryKey, row.Correct);
-        _ = Api.SaveScoreAsync(Quiz.Id, 100.0 * right / _items.Count);
+                Progress.Record(Quiz.Id, item.HistoryKey, row.Correct);
+        Progress.SaveScore(Quiz.Id, 100.0 * right / _items.Count);
         Host.SetProgress(1);
         Host.SetStat(StudyItems.FormatTime(DateTime.UtcNow - _startedAt));
         Show(new ResultsView(right, _items.Count, review,

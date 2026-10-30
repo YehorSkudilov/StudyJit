@@ -58,6 +58,16 @@ public class AnswersMode : ModeView
                 mark.IsVisible = skip.IsVisible = false;
                 result.Children.Add(Graded(q, grade));
             }
+            catch (ApiException e) when (e.IsOffline)
+            {
+                // Marking is the AI's, on the server: offline, the model answer to compare with instead.
+                _scores.Add(0);
+                editor.IsReadOnly = true;
+                mark.IsVisible = skip.IsVisible = false;
+                result.Children.Add(Ui.Card(Ui.Caption("You're offline, so the AI can't mark this now. Compare your answer with the model answer."), 14, "WarningSoft"));
+                result.Children.Add(ModelAnswer(q));
+                result.Children.Add(ContinueButton());
+            }
             catch (Exception e)
             {
                 mark.IsEnabled = true;

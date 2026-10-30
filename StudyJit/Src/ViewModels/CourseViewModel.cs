@@ -3,6 +3,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using StudyJit.Models;
 using StudyJit.Services;
+using StudyJit.Services.Offline;
 
 namespace StudyJit.ViewModels;
 
@@ -10,7 +11,7 @@ namespace StudyJit.ViewModels;
 /// A course (?id=): its study sets (one per folder of files, made automatically), its exams, and its files by folder,
 /// with uploading, YouTube videos, the AI's folder sorting, and editing or deleting the course.
 /// </summary>
-public partial class CourseViewModel(ApiClient api, DialogService dialogs) : BaseViewModel, IQueryAttributable
+public partial class CourseViewModel(ApiClient api, StudyData data, DialogService dialogs) : BaseViewModel, IQueryAttributable
 {
     int _id;
     bool _loaded;
@@ -84,19 +85,30 @@ public partial class CourseViewModel(ApiClient api, DialogService dialogs) : Bas
     {
         if (_id == 0)
             return;
-        await LoadAsync(LoadCoreAsync, !_loaded);
+        await LoadAsync(Cached, FetchAsync, Show, !_loaded);
     }
 
-    async Task LoadCoreAsync()
+    record Snapshot(Course Course, List<QuizSummary> Quizzes, List<CourseFile> Files, List<CourseFolder> Folders);
+
+    Snapshot? Cached() => data.CachedCourse(_id) is { } course
+        ? new(course, data.CachedQuizzes(_id) ?? [], data.CachedFiles(_id) ?? [], data.CachedFolders(_id) ?? [])
+        : null;
+
+    async Task<Snapshot> FetchAsync()
     {
-        var courseTask = api.CourseAsync(_id);
-        var quizzesTask = api.QuizzesAsync(_id);
-        var filesTask = api.FilesAsync(_id);
-        var foldersTask = api.FoldersAsync(_id);
-        var course = await courseTask;
-        var quizzes = await quizzesTask;
-        var files = await filesTask;
-        _folders = await foldersTask;
+        var courseTask = data.CourseAsync(_id);
+        var quizzesTask = data.QuizzesAsync(_id);
+        var filesTask = data.FilesAsync(_id);
+        var foldersTask = data.FoldersAsync(_id);
+        return new(await courseTask, await quizzesTask, await filesTask, await foldersTask);
+    }
+
+    Task LoadCoreAsync() => LoadAsync(Cached, FetchAsync, Show, false);
+
+    void Show(Snapshot snapshot)
+    {
+        var (course, quizzes, files, folders) = snapshot;
+        _folders = folders;
         _course = course;
         _loaded = true;
 
@@ -143,7 +155,7 @@ public partial class CourseViewModel(ApiClient api, DialogService dialogs) : Bas
             return;
         _poll = Application.Current!.Dispatcher.CreateTimer();
         _poll.Interval = TimeSpan.FromSeconds(4);
-        _poll.Tick += async (_, _) => await LoadAsync(LoadCoreAsync, false);
+        _poll.Tick += async (_, _) => await LoadCoreAsync();
         _poll.Start();
     }
 
@@ -172,7 +184,7 @@ public partial class CourseViewModel(ApiClient api, DialogService dialogs) : Bas
         {
             IsWorking = false;
         }
-        await LoadAsync(LoadCoreAsync, false);
+        await LoadCoreAsync();
     }
 
     // ---------- The course ----------

@@ -205,3 +205,29 @@ public class ServerSetting
     public string Value { get; set; } = "";
     public DateTimeOffset UpdatedAt { get; set; }
 }
+
+/// <summary>
+/// One answer given while studying (in the app or on the website), so what came up and how it went follows the user
+/// between devices. Its id is made where it was answered, so an answer sent twice (the app retrying after a lost
+/// connection) is kept once.
+/// </summary>
+public class StudyAnswer
+{
+    public Guid Id { get; set; }
+    public string UserId { get; set; } = "";
+    public int QuizId { get; set; }
+    /// <summary>Which question, as the study modes key them: q{id}, s{id} or a{id}.</summary>
+    public string Key { get; set; } = "";
+    public bool Correct { get; set; }
+    public DateTimeOffset AnsweredAt { get; set; }
+}
+
+/// <summary>A personal best in a timed mode, e.g. "match.12" (a time in ms, lower is better) or "tf.12" (points).</summary>
+public class StudyBest
+{
+    public string UserId { get; set; } = "";
+    public string Key { get; set; } = "";
+    public double Value { get; set; }
+    public bool LowerIsBetter { get; set; }
+    public DateTimeOffset UpdatedAt { get; set; }
+}

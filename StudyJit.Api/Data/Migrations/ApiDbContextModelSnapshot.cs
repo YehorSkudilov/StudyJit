@@ -688,6 +688,62 @@ namespace StudyJit.Api.Data.Migrations
                     b.ToTable("StoredFiles", (string)null);
                 });
 
+            modelBuilder.Entity("StudyJit.Api.Data.StudyAnswer", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("AnsweredAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("Correct")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Key")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<int>("QuizId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("QuizId");
+
+                    b.HasIndex("UserId", "QuizId");
+
+                    b.ToTable("StudyAnswers");
+                });
+
+            modelBuilder.Entity("StudyJit.Api.Data.StudyBest", b =>
+                {
+                    b.Property<string>("UserId")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Key")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<bool>("LowerIsBetter")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<double>("Value")
+                        .HasColumnType("double precision");
+
+                    b.HasKey("UserId", "Key");
+
+                    b.ToTable("StudyBests");
+                });
+
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRoleClaim<string>", b =>
                 {
                     b.HasOne("Microsoft.AspNetCore.Identity.IdentityRole", null)
@@ -867,6 +923,30 @@ namespace StudyJit.Api.Data.Migrations
                         .HasForeignKey("FolderId")
                         .OnDelete(DeleteBehavior.SetNull);
 
+                    b.HasOne("StudyJit.Api.Data.AppUser", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("StudyJit.Api.Data.StudyAnswer", b =>
+                {
+                    b.HasOne("StudyJit.Api.Data.Quiz", null)
+                        .WithMany()
+                        .HasForeignKey("QuizId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("StudyJit.Api.Data.AppUser", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("StudyJit.Api.Data.StudyBest", b =>
+                {
                     b.HasOne("StudyJit.Api.Data.AppUser", null)
                         .WithMany()
                         .HasForeignKey("UserId")

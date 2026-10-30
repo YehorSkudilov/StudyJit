@@ -155,6 +155,25 @@ public class StudyQuiz
     public GenerationProgressInfo? Progress { get; set; }
 }
 
+/// <summary>One answer given while studying, as POST api/study/progress takes it; its id makes a resend harmless.</summary>
+public record StudyAnswerItem(
+    Guid Id,
+    [property: JsonPropertyName("quiz_id")] int QuizId,
+    string Key,
+    bool Correct,
+    [property: JsonPropertyName("answered_at")] DateTimeOffset AnsweredAt);
+
+/// <summary>A personal best ("match.12" a time in ms, "tf.12" points).</summary>
+public record StudyBestItem(string Key, double Value, [property: JsonPropertyName("lower_is_better")] bool LowerIsBetter);
+
+/// <summary>A score to record as a set's last score, waiting in the outbox.</summary>
+public record ScoreItem([property: JsonPropertyName("quiz_id")] int QuizId, double Percent);
+
+public record QuestionHistory([property: JsonPropertyName("quiz_id")] int QuizId, string Key, DateTimeOffset Seen, int Right, int Wrong);
+
+/// <summary>GET api/study/progress: how every question has gone, and every best, across the account's devices.</summary>
+public record StudyProgressResponse(List<QuestionHistory> History, List<StudyBestItem> Bests);
+
 public class CourseFolder
 {
     public int Id { get; set; }

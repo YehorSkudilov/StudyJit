@@ -22,9 +22,9 @@ public class LearnMode : ModeView
 
     List<Learnable> Build()
     {
-        var fromQuestions = StudyHistory.PickQuestions(Quiz, Questions)
+        var fromQuestions = Progress.PickQuestions(Quiz, Questions)
             .Select(q => new Learnable($"q{q.Id}", () => StudyItems.Choice(q), () => StudyItems.Choice(q)));
-        var fromShort = StudyHistory.PickFrom(Quiz.Id, Quiz.ShortAnswers, StudyItems.ShortAnswerKey, ShortAnswers)
+        var fromShort = Progress.PickFrom(Quiz.Id, Quiz.ShortAnswers, StudyItems.ShortAnswerKey, ShortAnswers)
             .Select(s => new Learnable($"a{s.Id}", () => StudyItems.Written(s), () => StudyItems.Written(s)));
         var terms = Quiz.Terms;
         var fromTerms = terms.Count >= 4
@@ -73,7 +73,7 @@ public class LearnMode : ModeView
         card.Answered += (_, right) =>
         {
             if (item.HistoryKey != null)
-                StudyHistory.Record(Quiz.Id, item.HistoryKey, right);
+                Progress.Record(Quiz.Id, item.HistoryKey, right);
             _level[l.Id] = right ? Math.Min(2, Level(l) + 1) : Math.Max(0, Level(l) - 1);
             if (right)
                 _roundCorrect++;

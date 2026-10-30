@@ -3,11 +3,12 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using StudyJit.Models;
 using StudyJit.Services;
+using StudyJit.Services.Offline;
 
 namespace StudyJit.ViewModels;
 
 /// <summary>The Library tab: every study set and exam across the courses, searchable, newest first.</summary>
-public partial class LibraryViewModel(ApiClient api, AuthSession session) : BaseViewModel
+public partial class LibraryViewModel(StudyData data, AuthSession session) : BaseViewModel
 {
     bool _loaded;
     List<QuizItem> _all = [];
@@ -43,19 +44,20 @@ public partial class LibraryViewModel(ApiClient api, AuthSession session) : Base
     {
         if (!session.IsSignedIn)
             return;
-        await LoadAsync(async () =>
+        await LoadAsync(() => CoursesAndSets.Cached(data), () => CoursesAndSets.FetchAsync(data), Show, !_loaded);
+    }
+
+    void Show(CoursesAndSets snapshot)
+    {
+        var (courseList, quizzes) = snapshot;
+        var courses = courseList.ToDictionary(c => c.Id);
+        _loaded = true;
+        _all = quizzes.Select(q =>
         {
-            var coursesTask = api.CoursesAsync();
-            var quizzes = await api.QuizzesAsync(null);
-            var courses = (await coursesTask).ToDictionary(c => c.Id);
-            _loaded = true;
-            _all = quizzes.Select(q =>
-            {
-                var course = q.CourseId is { } id ? courses.GetValueOrDefault(id) : null;
-                return new QuizItem(q, course?.Title, course?.Color, new AsyncRelayCommand(() => GoTo($"{Routes.Set}?id={q.Id}")));
-            }).ToList();
-            Apply();
-        }, !_loaded);
+            var course = q.CourseId is { } id ? courses.GetValueOrDefault(id) : null;
+            return new QuizItem(q, course?.Title, course?.Color, new AsyncRelayCommand(() => GoTo($"{Routes.Set}?id={q.Id}")));
+        }).ToList();
+        Apply();
     }
 
     void Apply()

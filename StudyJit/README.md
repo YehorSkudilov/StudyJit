@@ -14,6 +14,21 @@ the API (`../StudyJit.Api`) with the signed-in user's token (`Src/Services/ApiCl
   (`StudyHistory`), so new and missed questions come first.
 - **Profile**: name, email, password, links to the website, signing out.
 
+## Offline
+
+Everything is kept in a database on the device (SQLite, `Src/Services/Offline`), so courses, study sets and every
+study mode work without a connection:
+
+- `StudyData` shows what the server says and saves it as it arrives; offline it shows the saved copy. `SyncService`
+  downloads ahead every course, its files and folders, and the full content of every ready set (again only when a set
+  changed) when the app opens, comes back, gets its connection back, after signing in and on pull to refresh.
+- `StudyProgress` saves every answer, personal best and score on the device first and queues it; `SyncService` sends
+  the queue when the server can be reached (answers carry their own id, so a resend is harmless) and then takes the
+  account's history and bests back (`GET/POST api/study/progress`), which the website uses too.
+- Needs a connection: signing in, uploading, creating or changing courses, folders and exams, generating sets, the AI's
+  course reading and file sorting, and marking Exam answers (offline it shows the model answer to compare with).
+- Signing out clears the device; anything not sent yet is sent first, or the app asks before losing it.
+
 ## Running it
 
 AppSkeleton is referenced as `../../AppSkeleton`, so clone it next to this repository:

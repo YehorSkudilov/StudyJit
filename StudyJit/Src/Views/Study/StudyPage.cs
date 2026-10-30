@@ -1,5 +1,6 @@
 using StudyJit.Models;
 using StudyJit.Services;
+using StudyJit.Services.Offline;
 
 namespace StudyJit.Views.Study;
 
@@ -12,6 +13,8 @@ public abstract class ModeView : ContentView
     protected StudyPage Host { get; private set; } = null!;
     protected StudyQuiz Quiz => Host.Quiz;
     protected ApiClient Api => Host.Api;
+    /// <summary>Answers, bests and scores: saved on the device, sent when online.</summary>
+    protected StudyProgress Progress => Host.Progress;
     protected DialogService Dialogs => Host.Dialogs;
 
     internal void Attach(StudyPage host)
@@ -49,9 +52,11 @@ public class StudyPage : ContentPage, IQueryAttributable
     StudyMode _which;
     ModeView? _view;
 
-    public StudyPage(ApiClient api, DialogService dialogs)
+    public StudyPage(ApiClient api, StudyData data, StudyProgress progress, DialogService dialogs)
     {
         Api = api;
+        Data = data;
+        Progress = progress;
         Dialogs = dialogs;
         Shell.SetNavBarIsVisible(this, false);
         BackgroundColor = Ui.Color("Bg");
@@ -82,6 +87,8 @@ public class StudyPage : ContentPage, IQueryAttributable
     }
 
     internal ApiClient Api { get; }
+    internal StudyData Data { get; }
+    internal StudyProgress Progress { get; }
     internal DialogService Dialogs { get; }
     internal StudyQuiz Quiz { get; private set; } = new();
 
@@ -103,7 +110,8 @@ public class StudyPage : ContentPage, IQueryAttributable
         _body.Content = new ActivityIndicator { IsRunning = true, Margin = new(0, 60) };
         try
         {
-            Quiz = await Api.QuizAsync(_id);
+            // The saved copy when offline, so every mode works without a connection (but Exam answers' AI marking).
+            Quiz = await Data.QuizAsync(_id);
         }
         catch (Exception e)
         {

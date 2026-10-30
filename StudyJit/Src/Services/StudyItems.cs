@@ -9,7 +9,7 @@ public enum ItemKind { Choice, TrueFalse, Written }
 
 /// <summary>
 /// One thing to answer in a study mode (the website's lib/study.ts Item). <see cref="HistoryKey"/> keys its history
-/// (see <see cref="StudyHistory"/>); key terms have none. A true-or-false answer is "True" or "False".
+/// (see <see cref="StudyProgress"/>); key terms have none. A true-or-false answer is "True" or "False".
 /// </summary>
 public record StudyItem(ItemKind Kind, string Key, string Prompt, string Answer)
 {

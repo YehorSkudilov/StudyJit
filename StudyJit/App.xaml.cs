@@ -1,4 +1,5 @@
 using StudyJit.Services;
+using StudyJit.Services.Offline;
 using StudyJit.Views;
 
 namespace StudyJit;
@@ -38,8 +39,12 @@ public partial class App : Application
             // Still loading: the sign-in sheet comes once the app is up (ShowAppAsync), not over the loading screen.
             if (window.Page is LoadingPage)
                 return;
+            // Back after a while: what was studied offline goes up, and anything new comes down.
+            _services.GetRequiredService<SyncService>().Schedule(TimeSpan.FromSeconds(1), download: true);
             _ = SignInGate.ShowIfNeededAsync(_services);
         };
+        // Anything not sent yet is sent before the app can be closed in the background.
+        window.Stopped += (_, _) => _services.GetRequiredService<SyncService>().Schedule(TimeSpan.Zero);
         return window;
     }
 
@@ -61,6 +66,8 @@ public partial class App : Application
             window.Page = shell;
         }
         _ = SignInGate.ShowIfNeededAsync(_services);
+        // What was studied offline goes up, and everything for studying offline comes down.
+        _services.GetRequiredService<SyncService>().Schedule(TimeSpan.Zero, download: true);
     }
 
     /// <summary>True while the loading screen is up: nothing goes on top of it, and nothing replaces it but the app.</summary>

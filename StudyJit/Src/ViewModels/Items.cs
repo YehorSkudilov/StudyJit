@@ -4,6 +4,20 @@ using StudyJit.Services;
 
 namespace StudyJit.ViewModels;
 
+/// <summary>The courses and every study set, as Home and Library show them.</summary>
+public record CoursesAndSets(List<Course> Courses, List<QuizSummary> Quizzes)
+{
+    public static CoursesAndSets? Cached(StudyJit.Services.Offline.StudyData data) =>
+        data.CachedCourses() is { } courses && data.CachedQuizzes(null) is { } quizzes ? new(courses, quizzes) : null;
+
+    public static async Task<CoursesAndSets> FetchAsync(StudyJit.Services.Offline.StudyData data)
+    {
+        var courses = data.CoursesAsync();
+        var quizzes = await data.QuizzesAsync(null);
+        return new(await courses, quizzes);
+    }
+}
+
 /// <summary>A course as its card shows it: the colour, the title, what's in it.</summary>
 public class CourseItem(Course course, ICommand open)
 {
