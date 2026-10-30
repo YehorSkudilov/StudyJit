@@ -11,7 +11,7 @@ the API (`../StudyJit.Api`) with the signed-in user's token (`Src/Services/ApiCl
 - **Library**: every study set and exam, searchable.
 - **Study modes** (`Src/Views/Study`): Learn, Flashcards, Practice, Test, Match, True or False, Write, Exam answers
   (marked by the AI), Study guide and Cheat sheet, as on the website. What came up and how it went is kept on the device
-  (`StudyHistory`), so new and missed questions come first.
+  (`StudyProgress`) and synced with the account, so new and missed questions come first.
 - **Profile**: name, email, password, links to the website, signing out.
 
 ## Offline
