@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!--
+    The first screen while the app is built behind it (App.CreateWindow), like Gym Book's: the owl settling in and
+    bobbing, the name, and three dots breathing in turn. It sits on the app's own background (Bg), as does the system splash
+    (MauiSplashScreen in the csproj), so splash, loading and app blend into one.
+-->
+<ContentPage
+    x:Class="StudyJit.Views.LoadingPage"
+    xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+    BackgroundColor="{StaticResource Bg}"
+    Shell.NavBarIsVisible="False">
+    <Grid x:Name="Root">
+        <VerticalStackLayout Margin="0,-50,0,0" VerticalOptions="Center" HorizontalOptions="Center">
+            <Image x:Name="Logo" Source="logo.png" HeightRequest="150" Opacity="0" Scale="0.9" />
+
+            <Label x:Name="AppName" Text="StudyJit" Margin="0,22,0,0" Opacity="0" FontFamily="OpenSansSemibold" FontSize="28"
+                   TextColor="White" HorizontalOptions="Center" />
+
+            <!-- Three dots breathing in turn, in place of the platform spinner -->
+            <HorizontalStackLayout x:Name="Dots" Margin="0,26,0,0" HorizontalOptions="Center" Spacing="10">
+                <BoxView Color="White" CornerRadius="5" HeightRequest="10" WidthRequest="10" Opacity="0.3" />
+                <BoxView Color="White" CornerRadius="5" HeightRequest="10" WidthRequest="10" Opacity="0.3" />
+                <BoxView Color="White" CornerRadius="5" HeightRequest="10" WidthRequest="10" Opacity="0.3" />
+            </HorizontalStackLayout>
+        </VerticalStackLayout>
+    </Grid>
+</ContentPage>

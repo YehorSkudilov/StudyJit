@@ -1,0 +1,120 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+	<PropertyGroup>
+		<TargetFrameworks>net10.0-android</TargetFrameworks>
+		<TargetFrameworks Condition="!$([MSBuild]::IsOSPlatform('linux'))">$(TargetFrameworks);net10.0-ios;net10.0-maccatalyst</TargetFrameworks>
+		<TargetFrameworks Condition="$([MSBuild]::IsOSPlatform('windows'))">$(TargetFrameworks);net10.0-windows10.0.19041.0</TargetFrameworks>
+
+		<!-- Mac Catalyst's Release builds both maccatalyst-x64 and maccatalyst-arm64, which the Mac App Store requires. -->
+
+		<OutputType>Exe</OutputType>
+		<RootNamespace>StudyJit</RootNamespace>
+		<UseMaui>true</UseMaui>
+		<SingleProject>true</SingleProject>
+		<ImplicitUsings>enable</ImplicitUsings>
+		<Nullable>enable</Nullable>
+		<NoWarn>$(NoWarn);MVVMTK0045</NoWarn>
+
+		<!-- C# made from the XAML at build time, as in Gym Book: faster to start and binding mistakes fail the build. -->
+		<MauiXamlInflator>SourceGen</MauiXamlInflator>
+
+		<!-- Display name -->
+		<ApplicationTitle>StudyJit</ApplicationTitle>
+
+		<!-- App Identifier -->
+		<ApplicationId>com.yehorskudilov.studyjit</ApplicationId>
+
+		<!-- Versions: PublishApp.yml bumps both (version code = major * 1,000,000 + minor * 1,000 + patch). -->
+		<ApplicationDisplayVersion>1.0.0</ApplicationDisplayVersion>
+		<ApplicationVersion>1000000</ApplicationVersion>
+		<!-- Pin Version for every TFM, or MAUI sets it per platform and NuGet restore fails with NU1105. -->
+		<Version>$(ApplicationDisplayVersion)</Version>
+
+		<!-- Local Windows builds run unpackaged; CI packages an MSIX for the Microsoft Store (PublishApp.yml). -->
+		<WindowsPackageType>None</WindowsPackageType>
+
+		<SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'ios'">15.0</SupportedOSPlatformVersion>
+		<SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'maccatalyst'">15.0</SupportedOSPlatformVersion>
+		<SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'android'">26.0</SupportedOSPlatformVersion>
+		<SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'windows'">10.0.17763.0</SupportedOSPlatformVersion>
+		<TargetPlatformMinVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'windows'">10.0.17763.0</TargetPlatformMinVersion>
+	</PropertyGroup>
+
+	<!-- iOS can't JIT; "-all" still AOT-compiles everything and only falls back to the interpreter where AOT can't
+	     (System.Text.Json's reflection, as in Gym Book). -->
+	<PropertyGroup Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'ios'">
+		<MtouchInterpreter>-all</MtouchInterpreter>
+	</PropertyGroup>
+
+	<ItemGroup Condition="'$(TargetPlatformIdentifier)' == 'android'">
+		<MauiIcon Include="Resources\AppIcon\appicon.svg" ForegroundFile="Resources\AppIcon\appiconfg.png" ForegroundScale="0.6" />
+	</ItemGroup>
+	<!-- iOS -->
+	<ItemGroup Condition="'$(TargetPlatformIdentifier)' == 'ios'">
+		<!-- The App Store rejects icons with transparency, so the background is filled in. -->
+		<MauiIcon Include="Resources\AppIcon\appicon.svg" ForegroundFile="Resources\AppIcon\appiconfg.png" ForegroundScale="0.75" Color="#FFFFFF" />
+	</ItemGroup>
+	<!-- macOS (MacCatalyst) -->
+	<ItemGroup Condition="'$(TargetPlatformIdentifier)' == 'maccatalyst'">
+		<!-- The Mac App Store rejects icons with transparency too. -->
+		<MauiIcon Include="Resources\AppIcon\appicon.svg" ForegroundFile="Resources\AppIcon\appiconfg.png" ForegroundScale="0.8" Color="#FFFFFF" />
+	</ItemGroup>
+	<!-- WINDOWS (no scaling, no adaptive layers) -->
+	<ItemGroup Condition="'$(TargetPlatformIdentifier)' == 'windows'">
+		<MauiIcon Include="Resources\AppIcon\appicon.svg" ForegroundFile="Resources\AppIcon\appiconfg.png" ForegroundScale="0.9" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<!-- Splash Screen: on the app's background (Bg in Colors.xaml), as the loading page is, so the two hand over without a
+		     jump. Android 12+ masks it to a circle two thirds of its size, so splash.png pads the owl into that circle. -->
+		<MauiSplashScreen Include="Resources\Splash\splash.png" Color="#0A0F1C" BaseSize="400,400" />
+
+		<!-- Images -->
+		<MauiImage Include="Resources\Images\*" />
+
+		<!-- Custom Fonts -->
+		<MauiFont Include="Resources\Fonts\*" />
+
+		<!-- Raw Assets (also remove the "Resources\Raw" prefix) -->
+		<MauiAsset Include="Resources\Raw\**" LogicalName="%(RecursiveDir)%(Filename)%(Extension)" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<PackageReference Include="Microsoft.Maui.Controls" Version="10.0.110" />
+		<PackageReference Include="Microsoft.Extensions.Logging.Debug" Version="10.0.13" />
+		<PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
+		<!-- The study guide and cheat sheet are Markdown, shown as HTML (Src/Services/MarkdownHtml.cs). -->
+		<PackageReference Include="Markdig" Version="1.4.0" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<ProjectReference Include="..\..\AppSkeleton\AppSkeleton\AppSkeleton.csproj" />
+	</ItemGroup>
+
+	<!-- The API the app talks to, in every configuration (see Src/Services/ApiConfig.cs). Pass it with
+	     -p:ApiBaseUrl=https://..., an API_BASE_URL environment variable, or API_BASE_URL in StudyJit/.env
+	     (see .env.example), in that order; CI sets it from the API_BASE_URL variable. -->
+	<PropertyGroup>
+		<ApiBaseUrl Condition="'$(ApiBaseUrl)' == ''">$(API_BASE_URL)</ApiBaseUrl>
+		<_EnvFile>$(MSBuildProjectDirectory)\.env</_EnvFile>
+		<_EnvFileContent Condition="Exists('$(_EnvFile)')">$([System.IO.File]::ReadAllText('$(_EnvFile)'))</_EnvFileContent>
+		<ApiBaseUrl Condition="'$(ApiBaseUrl)' == '' and '$(_EnvFileContent)' != ''">$([System.Text.RegularExpressions.Regex]::Match('$(_EnvFileContent)', '(?m)^API_BASE_URL=(.*?)\r?$').Groups[1].Value)</ApiBaseUrl>
+	</PropertyGroup>
+
+	<!-- The website (StudyJit.Web), for the links to the privacy policy, terms and the full course tools. Found the same
+	     ways (-p:WebBaseUrl, WEB_BASE_URL, StudyJit/.env). Optional: without it those links are hidden. -->
+	<PropertyGroup>
+		<WebBaseUrl Condition="'$(WebBaseUrl)' == ''">$(WEB_BASE_URL)</WebBaseUrl>
+		<WebBaseUrl Condition="'$(WebBaseUrl)' == '' and '$(_EnvFileContent)' != ''">$([System.Text.RegularExpressions.Regex]::Match('$(_EnvFileContent)', '(?m)^WEB_BASE_URL=(.*?)\r?$').Groups[1].Value)</WebBaseUrl>
+	</PropertyGroup>
+
+	<Target Name="ValidateApiBaseUrl" BeforeTargets="BeforeBuild;CoreCompile">
+		<Error Condition="'$(ApiBaseUrl)' == ''" Text="ApiBaseUrl is not set. Set it via -p:ApiBaseUrl=https://..., an API_BASE_URL environment variable, or StudyJit/.env (see .env.example)." />
+	</Target>
+
+	<ItemGroup>
+		<AssemblyMetadata Include="ApiBaseUrl" Value="$(ApiBaseUrl)" />
+		<AssemblyMetadata Include="WebBaseUrl" Value="$(WebBaseUrl)" />
+	</ItemGroup>
+
+</Project>

@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<views:BasePage
+    x:Class="StudyJit.Views.AccountPage"
+    xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+    xmlns:views="clr-namespace:StudyJit.Views"
+    xmlns:vm="clr-namespace:StudyJit.ViewModels"
+    x:DataType="vm:AccountViewModel"
+    Title="Account">
+
+    <Grid RowDefinitions="*,Auto">
+        <ScrollView>
+            <VerticalStackLayout Padding="10,8,10,24" Spacing="10">
+                <ActivityIndicator IsRunning="{Binding IsLoading}" IsVisible="{Binding IsLoading}" />
+                <Label Text="{Binding Error}" IsVisible="{Binding HasError}" Style="{StaticResource Caption}" />
+
+                <Label Text="NAME" Style="{StaticResource Overline}" />
+                <Border Style="{StaticResource InputBox}" HeightRequest="48" Padding="10,0">
+                    <Entry Text="{Binding Name}" />
+                </Border>
+                <Label Text="EMAIL" Style="{StaticResource Overline}" />
+                <Border Style="{StaticResource InputBox}" HeightRequest="48" Padding="10,0">
+                    <Entry Text="{Binding Email}" Keyboard="Email" />
+                </Border>
+                <Label Text="ABOUT YOU" Style="{StaticResource Overline}" />
+                <Border Style="{StaticResource InputBox}" HeightRequest="100" Padding="8,4">
+                    <Editor Text="{Binding Bio}" Placeholder="Optional" AutoSize="Disabled" />
+                </Border>
+
+                <Label Text="CHANGE PASSWORD" Style="{StaticResource Overline}" Margin="0,14,0,0" />
+                <Border Style="{StaticResource InputBox}" HeightRequest="48" Padding="10,0">
+                    <Entry Text="{Binding CurrentPassword}" IsPassword="True" Placeholder="Current password" />
+                </Border>
+                <Border Style="{StaticResource InputBox}" HeightRequest="48" Padding="10,0">
+                    <Entry Text="{Binding NewPassword}" IsPassword="True" Placeholder="New password" />
+                </Border>
+                <Label Text="Leave these empty to keep your password. A new one signs out your other devices." Style="{StaticResource Caption}" />
+            </VerticalStackLayout>
+        </ScrollView>
+        <Button Grid.Row="1" Text="Save" Style="{StaticResource PrimaryButton}" Margin="10,8,10,16"
+                Command="{Binding SaveCommand}" IsEnabled="{Binding IsSaving, Converter={StaticResource Not}}" />
+    </Grid>
+</views:BasePage>

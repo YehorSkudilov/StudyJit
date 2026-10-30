@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<ResourceDictionary
+    xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml">
+
+    <!-- The website's dark theme (StudyJit.Web's globals.css), dark-only like Gym Book. -->
+    <Color x:Key="Bg">#0A0F1C</Color>
+    <Color x:Key="Surface">#121A2B</Color>
+    <Color x:Key="Surface2">#1A2438</Color>
+    <Color x:Key="Surface3">#233049</Color>
+    <Color x:Key="Stroke">#233049</Color>
+
+    <Color x:Key="TextPrimary">#E8EDF6</Color>
+    <Color x:Key="TextSecondary">#8B98B0</Color>
+    <Color x:Key="TextTertiary">#5B6780</Color>
+
+    <Color x:Key="Accent">#4C95F5</Color>
+    <Color x:Key="AccentSoft">#16284A</Color>
+    <Color x:Key="Accent2">#2FD4E6</Color>
+    <Color x:Key="Success">#2ED47A</Color>
+    <Color x:Key="SuccessSoft">#133526</Color>
+    <Color x:Key="Warning">#FFB020</Color>
+    <Color x:Key="WarningSoft">#3A2C10</Color>
+    <Color x:Key="Danger">#FF4D5E</Color>
+    <Color x:Key="DangerSoft">#3A1419</Color>
+
+    <Color x:Key="White">#FFFFFF</Color>
+    <Color x:Key="Black">#000000</Color>
+
+    <!-- The brand's blue to cyan, as on the website's buttons and banners. -->
+    <LinearGradientBrush x:Key="AccentGradient" StartPoint="0,0" EndPoint="1,1">
+        <GradientStop Color="#1D6FD8" Offset="0" />
+        <GradientStop Color="#22C3D6" Offset="1" />
+    </LinearGradientBrush>
+
+    <!-- Shared glass look (AppSkeleton's AcrylicView) for the nav bar and the pull-to-refresh arrow. App-wide, not on
+         MainPage: a tab's XAML looks up StaticResources before it's placed in the page, so a page-level one isn't found. -->
+    <Color x:Key="GlassTint">#233049</Color>
+    <!-- How much of the tint colour covers the blur: lower is more see-through. -->
+    <x:Double x:Key="GlassTintOpacity">0.5</x:Double>
+    <!-- A clear edge, so the glass doesn't melt into what's behind it. -->
+    <Color x:Key="GlassBorder">#3DFFFFFF</Color>
+</ResourceDictionary>

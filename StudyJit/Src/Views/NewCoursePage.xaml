@@ -1,0 +1,83 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<views:BasePage
+    x:Class="StudyJit.Views.NewCoursePage"
+    xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+    xmlns:views="clr-namespace:StudyJit.Views"
+    xmlns:vm="clr-namespace:StudyJit.ViewModels"
+    x:DataType="vm:NewCourseViewModel"
+    Title="Add courses">
+
+    <ScrollView>
+        <VerticalStackLayout Padding="10,8,10,24" Spacing="14">
+            <!-- Type one in / Paste a list -->
+            <Border Style="{StaticResource Pill}" Padding="4">
+                <Grid ColumnDefinitions="*,*" ColumnSpacing="4">
+                    <Button Text="Type one in" Command="{Binding ShowModeCommand}" CommandParameter="manual" Style="{StaticResource SegmentButton}">
+                        <Button.Triggers>
+                            <DataTrigger TargetType="Button" Binding="{Binding IsManual}" Value="True">
+                                <Setter Property="BackgroundColor" Value="{StaticResource Accent}" />
+                            </DataTrigger>
+                        </Button.Triggers>
+                    </Button>
+                    <Button Grid.Column="1" Text="Paste a list" Command="{Binding ShowModeCommand}" CommandParameter="paste" Style="{StaticResource SegmentButton}">
+                        <Button.Triggers>
+                            <DataTrigger TargetType="Button" Binding="{Binding IsPaste}" Value="True">
+                                <Setter Property="BackgroundColor" Value="{StaticResource Accent}" />
+                            </DataTrigger>
+                        </Button.Triggers>
+                    </Button>
+                </Grid>
+            </Border>
+
+            <!-- One course, typed in -->
+            <VerticalStackLayout Spacing="10" IsVisible="{Binding IsManual}">
+                <Label Text="COURSE NAME" Style="{StaticResource Overline}" />
+                <Border Style="{StaticResource InputBox}" HeightRequest="48" Padding="10,0">
+                    <Entry Text="{Binding Name}" Placeholder="E.g. Introduction to Psychology" />
+                </Border>
+                <Label Text="CODE" Style="{StaticResource Overline}" />
+                <Border Style="{StaticResource InputBox}" HeightRequest="48" Padding="10,0">
+                    <Entry Text="{Binding Code}" Placeholder="Optional, e.g. PSYC 101" />
+                </Border>
+                <Label Text="TERM" Style="{StaticResource Overline}" />
+                <Border Style="{StaticResource InputBox}" HeightRequest="48" Padding="10,0">
+                    <Entry Text="{Binding Term}" Placeholder="Optional, e.g. Fall 2026" />
+                </Border>
+                <Button Text="Add course" Style="{StaticResource PrimaryButton}" Margin="0,8,0,0" Command="{Binding CreateOneCommand}"
+                        IsEnabled="{Binding IsSaving, Converter={StaticResource Not}}" />
+            </VerticalStackLayout>
+
+            <!-- Several, read by the AI from a pasted course list -->
+            <VerticalStackLayout Spacing="10" IsVisible="{Binding IsPaste}">
+                <Label Text="Copy the list of your courses from your school's website (your timetable or dashboard) and paste it here. The AI finds each course's code, name and term."
+                       Style="{StaticResource Caption}" />
+                <Border Style="{StaticResource InputBox}" HeightRequest="160" Padding="8,4">
+                    <Editor Text="{Binding Pasted}" Placeholder="Paste your courses" AutoSize="Disabled" />
+                </Border>
+                <Button Text="Find my courses" Command="{Binding ReadCommand}" IsEnabled="{Binding IsSaving, Converter={StaticResource Not}}" />
+
+                <Label Text="FOUND" Style="{StaticResource Overline}" IsVisible="{Binding HasDrafts}" Margin="0,8,0,0" />
+                <Border Style="{StaticResource Card}" Padding="4" IsVisible="{Binding HasDrafts}">
+                    <VerticalStackLayout BindableLayout.ItemsSource="{Binding Drafts}">
+                        <BindableLayout.ItemTemplate>
+                            <DataTemplate x:DataType="vm:DraftItem">
+                                <Grid ColumnDefinitions="Auto,*" ColumnSpacing="6" Padding="6,4">
+                                    <CheckBox IsChecked="{Binding IsPicked}" VerticalOptions="Center" />
+                                    <VerticalStackLayout Grid.Column="1" VerticalOptions="Center">
+                                        <Label Text="{Binding Title}" />
+                                        <Label Text="{Binding Term}" Style="{StaticResource Caption}" IsVisible="{Binding HasTerm}" />
+                                    </VerticalStackLayout>
+                                </Grid>
+                            </DataTemplate>
+                        </BindableLayout.ItemTemplate>
+                    </VerticalStackLayout>
+                </Border>
+                <Button Text="Add these courses" Style="{StaticResource PrimaryButton}" IsVisible="{Binding HasDrafts}" Command="{Binding CreateAllCommand}"
+                        IsEnabled="{Binding IsSaving, Converter={StaticResource Not}}" />
+            </VerticalStackLayout>
+
+            <ActivityIndicator IsRunning="{Binding IsSaving}" IsVisible="{Binding IsSaving}" />
+        </VerticalStackLayout>
+    </ScrollView>
+</views:BasePage>

@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!-- The sign-in sheet (SignInGate puts it up whenever there's no session). It can't be closed without signing in. -->
+<ContentPage
+    x:Class="StudyJit.Views.SignInPage"
+    xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+    xmlns:vm="clr-namespace:StudyJit.ViewModels"
+    x:DataType="vm:SignInViewModel"
+    BackgroundColor="{StaticResource Bg}"
+    Shell.NavBarIsVisible="False">
+
+    <ScrollView>
+        <VerticalStackLayout Padding="24,48,24,24" Spacing="14" MaximumWidthRequest="460">
+            <Image Source="logo.png" HeightRequest="110" HorizontalOptions="Center" />
+            <Label Text="StudyJit" FontFamily="OpenSansSemibold" FontSize="30" HorizontalOptions="Center" />
+            <Label Text="{Binding Heading}" Style="{StaticResource Caption}" FontSize="15" HorizontalOptions="Center" Margin="0,0,0,12" />
+
+            <Border Style="{StaticResource InputBox}" HeightRequest="52" Padding="12,0" IsVisible="{Binding IsRegister}">
+                <Entry Text="{Binding Name}" Placeholder="Your name" />
+            </Border>
+            <Border Style="{StaticResource InputBox}" HeightRequest="52" Padding="12,0">
+                <Entry Text="{Binding Email}" Placeholder="Email" Keyboard="Email" />
+            </Border>
+            <Border Style="{StaticResource InputBox}" HeightRequest="52" Padding="12,0">
+                <Entry Text="{Binding Password}" Placeholder="Password" IsPassword="True" ReturnCommand="{Binding SubmitCommand}" />
+            </Border>
+
+            <Label Text="{Binding Message}" IsVisible="{Binding HasMessage}" TextColor="{StaticResource Danger}" FontSize="14" HorizontalTextAlignment="Center" />
+
+            <Button Text="{Binding ActionText}" Style="{StaticResource PrimaryButton}" Command="{Binding SubmitCommand}" Margin="0,6,0,0"
+                    IsEnabled="{Binding IsBusy, Converter={StaticResource Not}}" />
+            <ActivityIndicator IsRunning="{Binding IsBusy}" IsVisible="{Binding IsBusy}" />
+            <Button Text="{Binding SwitchText}" Style="{StaticResource GhostButton}" Command="{Binding SwitchCommand}" IsVisible="{Binding SignUpEnabled}" />
+        </VerticalStackLayout>
+    </ScrollView>
+</ContentPage>

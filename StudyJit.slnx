@@ -1,0 +1,7 @@
+<Solution>
+  <Project Path="../AppSkeleton/AppSkeleton/AppSkeleton.csproj" />
+  <Project Path="StudyJit.Api/StudyJit.Api.csproj" />
+  <Project Path="StudyJit/StudyJit.csproj">
+    <Deploy Solution="Debug|*" />
+  </Project>
+</Solution>

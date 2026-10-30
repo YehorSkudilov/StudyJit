@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<views:TabView
+    x:Class="StudyJit.Views.ProfilePage"
+    xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+    xmlns:views="clr-namespace:StudyJit.Views"
+    xmlns:vm="clr-namespace:StudyJit.ViewModels"
+    x:DataType="vm:ProfileViewModel">
+
+    <VerticalStackLayout Spacing="16">
+        <Label Text="Profile" Style="{StaticResource Title}" />
+
+        <!-- The account -->
+        <Border Style="{StaticResource Card}">
+            <Border.GestureRecognizers>
+                <TapGestureRecognizer Command="{Binding EditAccountCommand}" />
+            </Border.GestureRecognizers>
+            <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="14">
+                <Border WidthRequest="56" HeightRequest="56" StrokeShape="RoundRectangle 28" Background="{StaticResource AccentGradient}">
+                    <Label Text="{Binding Initials}" FontFamily="OpenSansSemibold" FontSize="20" TextColor="White"
+                           HorizontalOptions="Center" VerticalOptions="Center" />
+                </Border>
+                <VerticalStackLayout Grid.Column="1" VerticalOptions="Center" Spacing="2">
+                    <Label Text="{Binding Name}" Style="{StaticResource H3}" />
+                    <Label Text="{Binding Email}" Style="{StaticResource Caption}" />
+                </VerticalStackLayout>
+                <Image Grid.Column="2" Style="{StaticResource Chevron}" />
+            </Grid>
+        </Border>
+
+        <Label Text="ACCOUNT" Style="{StaticResource Overline}" Margin="4,0" />
+        <Border Style="{StaticResource Card}" Padding="0">
+            <VerticalStackLayout>
+                <Grid Style="{StaticResource Row}">
+                    <Grid.GestureRecognizers>
+                        <TapGestureRecognizer Command="{Binding EditAccountCommand}" />
+                    </Grid.GestureRecognizers>
+                    <Label Text="Name, email and password" VerticalOptions="Center" />
+                    <Image Grid.Column="2" Style="{StaticResource Chevron}" />
+                </Grid>
+            </VerticalStackLayout>
+        </Border>
+
+        <Label Text="STUDYJIT" Style="{StaticResource Overline}" Margin="4,0" IsVisible="{Binding HasWebsite}" />
+        <Border Style="{StaticResource Card}" Padding="0" IsVisible="{Binding HasWebsite}">
+            <VerticalStackLayout>
+                <Grid Style="{StaticResource Row}">
+                    <Grid.GestureRecognizers>
+                        <TapGestureRecognizer Command="{Binding OpenWebsiteCommand}" CommandParameter="about" />
+                    </Grid.GestureRecognizers>
+                    <Label Text="About StudyJit" VerticalOptions="Center" />
+                    <Image Grid.Column="2" Style="{StaticResource Chevron}" />
+                </Grid>
+                <BoxView Style="{StaticResource Divider}" />
+                <Grid Style="{StaticResource Row}">
+                    <Grid.GestureRecognizers>
+                        <TapGestureRecognizer Command="{Binding OpenWebsiteCommand}" CommandParameter="contact" />
+                    </Grid.GestureRecognizers>
+                    <Label Text="Contact us" VerticalOptions="Center" />
+                    <Image Grid.Column="2" Style="{StaticResource Chevron}" />
+                </Grid>
+                <BoxView Style="{StaticResource Divider}" />
+                <Grid Style="{StaticResource Row}">
+                    <Grid.GestureRecognizers>
+                        <TapGestureRecognizer Command="{Binding OpenWebsiteCommand}" CommandParameter="courses" />
+                    </Grid.GestureRecognizers>
+                    <VerticalStackLayout VerticalOptions="Center">
+                        <Label Text="StudyJit on the web" />
+                        <Label Text="Your courses on a bigger screen" Style="{StaticResource Caption}" />
+                    </VerticalStackLayout>
+                    <Image Grid.Column="2" Style="{StaticResource Chevron}" />
+                </Grid>
+            </VerticalStackLayout>
+        </Border>
+
+        <Button Text="Sign out" Style="{StaticResource DangerButton}" Command="{Binding SignOutCommand}" Margin="0,8,0,0" />
+        <Label Text="{Binding Version}" Style="{StaticResource Caption}" HorizontalTextAlignment="Center" />
+    </VerticalStackLayout>
+</views:TabView>

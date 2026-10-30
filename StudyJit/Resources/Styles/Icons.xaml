@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!--
+    App icons, drawn from AppSkeleton's Material Icons font (registered by fonts.AddCIcons()) rather than image files:
+    each Glyph is the icon's ligature name from MaterialIconsOutlined-Regular.codepoints. Use them as
+    Source="{StaticResource IconMore}" on an Image or ImageButton; the Image's size sets how big it draws.
+-->
+<ResourceDictionary xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml">
+
+    <FontImageSource x:Key="IconMore" FontFamily="OutlinedIcons" Glyph="more_horiz" Color="{StaticResource TextSecondary}" Size="32" />
+    <FontImageSource x:Key="IconChevronRight" FontFamily="OutlinedIcons" Glyph="chevron_right" Color="{StaticResource TextSecondary}" Size="32" />
+    <FontImageSource x:Key="IconBack" FontFamily="OutlinedIcons" Glyph="arrow_back" Color="{StaticResource TextPrimary}" Size="32" />
+    <FontImageSource x:Key="IconClose" FontFamily="OutlinedIcons" Glyph="close" Color="{StaticResource TextPrimary}" Size="32" />
+    <FontImageSource x:Key="IconPlus" FontFamily="OutlinedIcons" Glyph="add" Color="{StaticResource Accent}" Size="32" />
+    <FontImageSource x:Key="IconSearch" FontFamily="OutlinedIcons" Glyph="search" Color="{StaticResource TextSecondary}" Size="32" />
+    <FontImageSource x:Key="IconRefresh" FontFamily="OutlinedIcons" Glyph="autorenew" Color="{StaticResource TextPrimary}" Size="32" />
+    <FontImageSource x:Key="IconTrash" FontFamily="OutlinedIcons" Glyph="delete" Color="{StaticResource TextSecondary}" Size="32" />
+    <FontImageSource x:Key="IconFile" FontFamily="OutlinedIcons" Glyph="description" Color="{StaticResource Accent}" Size="32" />
+    <FontImageSource x:Key="IconFolder" FontFamily="OutlinedIcons" Glyph="folder" Color="{StaticResource Warning}" Size="32" />
+    <FontImageSource x:Key="IconUpload" FontFamily="OutlinedIcons" Glyph="upload_file" Color="{StaticResource TextPrimary}" Size="32" />
+    <FontImageSource x:Key="IconVideo" FontFamily="OutlinedIcons" Glyph="smart_display" Color="{StaticResource Danger}" Size="32" />
+    <FontImageSource x:Key="IconSparkle" FontFamily="OutlinedIcons" Glyph="auto_awesome" Color="{StaticResource Accent2}" Size="32" />
+    <FontImageSource x:Key="IconTrophy" FontFamily="OutlinedIcons" Glyph="emoji_events" Color="{StaticResource Warning}" Size="48" />
+    <FontImageSource x:Key="IconSchool" FontFamily="OutlinedIcons" Glyph="school" Color="{StaticResource Accent}" Size="48" />
+
+</ResourceDictionary>

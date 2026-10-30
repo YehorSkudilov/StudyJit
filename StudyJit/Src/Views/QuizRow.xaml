@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!-- A study set or exam in a list: its course colour, name, where it's at (or the generation's progress), and the last score. -->
+<ContentView
+    x:Class="StudyJit.Views.QuizRow"
+    xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+    xmlns:vm="clr-namespace:StudyJit.ViewModels"
+    x:DataType="vm:QuizItem">
+    <Border Style="{StaticResource Card}" Padding="12">
+        <Border.GestureRecognizers>
+            <TapGestureRecognizer Command="{Binding OpenCommand}" />
+        </Border.GestureRecognizers>
+        <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="12">
+            <Border WidthRequest="42" HeightRequest="42" StrokeShape="RoundRectangle 12" Background="{Binding Gradient}" VerticalOptions="Center">
+                <Label Text="{Binding Glyph}" FontFamily="OutlinedIcons" FontSize="22" TextColor="White"
+                       HorizontalOptions="Center" VerticalOptions="Center" />
+            </Border>
+            <VerticalStackLayout Grid.Column="1" Spacing="2" VerticalOptions="Center">
+                <Label Text="{Binding Name}" FontFamily="OpenSansSemibold" LineBreakMode="TailTruncation" />
+                <Label Text="{Binding CourseTitle}" Style="{StaticResource Caption}" IsVisible="{Binding HasCourse}" LineBreakMode="TailTruncation" />
+                <Label Text="{Binding Status}" FontSize="12" TextColor="{Binding StatusColor}" />
+                <ProgressBar Progress="{Binding ProgressValue}" IsVisible="{Binding IsRunning}" ProgressColor="{StaticResource Accent2}" Margin="0,4,0,0" />
+            </VerticalStackLayout>
+            <Label Grid.Column="2" Text="{Binding Score}" IsVisible="{Binding HasScore}" FontFamily="OpenSansSemibold" FontSize="16"
+                   TextColor="{Binding ScoreColor}" VerticalOptions="Center" />
+        </Grid>
+    </Border>
+</ContentView>

@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<views:TabView
+    x:Class="StudyJit.Views.CoursesPage"
+    xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+    xmlns:views="clr-namespace:StudyJit.Views"
+    xmlns:vm="clr-namespace:StudyJit.ViewModels"
+    x:DataType="vm:CoursesViewModel">
+
+    <VerticalStackLayout Spacing="16">
+        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+            <Label Text="Courses" Style="{StaticResource Title}" VerticalOptions="Center" />
+            <ImageButton Grid.Column="1" Source="{StaticResource IconPlus}" WidthRequest="40" HeightRequest="40" Padding="8"
+                         BackgroundColor="{StaticResource Surface2}" CornerRadius="20" Command="{Binding AddCommand}" />
+        </Grid>
+
+        <ActivityIndicator IsRunning="{Binding IsLoading}" IsVisible="{Binding IsLoading}" Margin="0,40" />
+        <Label Text="{Binding Error}" IsVisible="{Binding HasError}" Style="{StaticResource Caption}" HorizontalTextAlignment="Center" Margin="0,40" />
+
+        <Border Style="{StaticResource Card}" Padding="20" IsVisible="{Binding IsEmpty}">
+            <VerticalStackLayout Spacing="12">
+                <Image Source="{StaticResource IconSchool}" HeightRequest="48" HorizontalOptions="Center" />
+                <Label Text="No courses yet" Style="{StaticResource H3}" HorizontalTextAlignment="Center" />
+                <Label Text="Type one in, or paste the list of your courses from your school's website and let the AI add them all."
+                       Style="{StaticResource Caption}" HorizontalTextAlignment="Center" />
+                <Button Text="Add courses" Style="{StaticResource PrimaryButton}" Command="{Binding AddCommand}" />
+            </VerticalStackLayout>
+        </Border>
+
+        <VerticalStackLayout BindableLayout.ItemsSource="{Binding Courses}" Spacing="12">
+            <BindableLayout.ItemTemplate>
+                <DataTemplate x:DataType="vm:CourseItem">
+                    <Border Style="{StaticResource Card}" Padding="0">
+                        <Border.GestureRecognizers>
+                            <TapGestureRecognizer Command="{Binding OpenCommand}" />
+                        </Border.GestureRecognizers>
+                        <Grid ColumnDefinitions="Auto,*,Auto">
+                            <!-- The course's colour down the side, with its code -->
+                            <Border WidthRequest="76" Background="{Binding Gradient}" StrokeShape="RoundRectangle 20,0,20,0">
+                                <Label Text="{Binding Code}" FontFamily="OpenSansSemibold" FontSize="13" TextColor="White" Margin="6"
+                                       HorizontalTextAlignment="Center" VerticalOptions="Center" MaxLines="3" LineBreakMode="WordWrap" />
+                            </Border>
+                            <VerticalStackLayout Grid.Column="1" Padding="14,14,8,14" Spacing="4" VerticalOptions="Center">
+                                <Label Text="{Binding Title}" Style="{StaticResource H3}" MaxLines="2" LineBreakMode="TailTruncation" />
+                                <Label Text="{Binding Details}" Style="{StaticResource Caption}" />
+                                <Label Text="{Binding Generating}" IsVisible="{Binding IsGenerating}" FontSize="12" TextColor="{StaticResource Accent2}" />
+                            </VerticalStackLayout>
+                            <Label Grid.Column="2" Text="{Binding Score}" IsVisible="{Binding HasScore}" Margin="0,0,16,0"
+                                   FontFamily="OpenSansSemibold" FontSize="17" TextColor="{Binding Tint}" VerticalOptions="Center" />
+                        </Grid>
+                    </Border>
+                </DataTemplate>
+            </BindableLayout.ItemTemplate>
+        </VerticalStackLayout>
+    </VerticalStackLayout>
+</views:TabView>
